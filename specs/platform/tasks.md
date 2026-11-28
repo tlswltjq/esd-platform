@@ -324,7 +324,7 @@
   - 방법: 스크립트 하나에 PR 하나. 테스트가 `LocalStack`으로 스택을 띄우고, 단계(`phase`)로 나뉜 메서드와 증거 파일은 재시작·장애를 직접 부르는 한 흐름으로 합친다. 옮긴 뒤 그 스크립트와 `ports.py`의 자리, 작업 표의 `phase`·`props`를 지운다. 스크립트가 단계 사이에 하던 제어(검증 전용 장애 설정으로 띄우기, 릴레이 정지, DB 권한 회수, Kafka 주입)는 필요한 만큼 `LocalStack`에 더한다. PR마다 운영 코드를 망가뜨린 실행(결정 102)과 `measure_guard`를 남긴다.
   - 순서(작은 것부터, 뒤 여정이 앞 여정의 앱 구성을 포함한다):
     - [x] `verify-studio.py` → `studioE2eTest` — PR #281
-    - [ ] `verify-catalog.py` → `catalogE2eTest`·`withdrawalE2eTest`
+    - [x] `verify-catalog.py` → `catalogE2eTest`·`withdrawalE2eTest` — PR #282. 브로커 장애는 컨테이너 일시 정지로 만든다(`LocalStack.pauseKafka`). 같은 키의 앞 이벤트(Store로 가는 공개 알림)만 유실되는 경우는 이 스택에 소비자가 없어 잡지 못한다 — `verify-store.py`를 옮길 때 본다.
     - [ ] `verify-store.py` → `storeE2eTest`
     - [ ] `verify-order.py` → `orderE2eTest`
     - [ ] `verify-payment.py` → `paymentE2eTest`

@@ -3,23 +3,31 @@ package com.stove.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 
-/** Catalog is restarted between the two phases; only its automatic worker is paused initially. */
+/** 테스트가 Catalog를 직접 재시작한다. 처음에는 자동 공개 작업자만 꺼 둔다. */
 @Tag("withdrawal")
+@ExtendWith(LocalStackExtension.class)
+@LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY, StackApp.REVIEW, StackApp.CATALOG})
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class WithdrawalFlowTest {
     private static final String JOBS = "/api/v1/admin/catalog-release-jobs/";
 
     @Test
-    void prepareQueuedRelease() throws Exception {
+    @Order(1)
+    void withdrawnRequestsStayWithdrawnAndOnlyTheSurvivingReleaseIsPublishedAfterARestart(LocalStack stack)
+            throws Exception {
+        // 자동 공개 작업자를 끈 Catalog: 출시 요청이 대기열에 남아 있는 동안 철회를 넣는다.
+        stack.restart(StackApp.CATALOG, "--stove.catalog.publication.worker-enabled=false");
         ReviewJourney.Account creator = ReviewJourney.account(true);
         ReviewJourney.Account other = ReviewJourney.account(true);
         ReviewJourney.Account reviewer = ReviewJourney.login(ReviewJourney.REVIEWER_EMAIL, ReviewJourney.REVIEWER_PASSWORD);
@@ -80,22 +88,11 @@ class WithdrawalFlowTest {
         assertThat(ReviewJourney.data(project, creator).path("activeReleaseRequest").path("id").asLong()).isEqualTo(nextRelease);
         assertThat(Stove.gateway.post(path + "/release-requests", ReviewJourney.submission(path, creator.headers()), creator.headers()).status())
                 .isEqualTo(409);
-        Path evidence = evidence();
-        Files.createFile(evidence, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-        Files.writeString(evidence, ReviewJourney.JSON.writeValueAsString(Map.of(
-                "email", creator.email(), "project", project, "code", code, "review", approved,
-                "withdrawnRelease", firstRelease, "queuedRelease", nextRelease, "firstIntent", firstIntent, "nextReview", nextReview)));
-    }
 
-    @Test
-    void publishesOnlyTheSurvivingRequestAfterRestart() throws Exception {
-        JsonNode saved = ReviewJourney.JSON.readTree(Files.readString(evidence()));
-        ReviewJourney.Account creator = ReviewJourney.login(saved.path("email").asText(), "creator-password-1234");
-        ReviewJourney.Account admin = ReviewJourney.login(ReviewJourney.ADMIN_EMAIL, ReviewJourney.ADMIN_PASSWORD);
-        long project = saved.path("project").asLong();
-        long withdrawn = saved.path("withdrawnRelease").asLong();
-        long surviving = saved.path("queuedRelease").asLong();
-        String path = ReviewJourney.path(project);
+        stack.restart(StackApp.CATALOG);
+
+        long withdrawn = firstRelease;
+        long surviving = nextRelease;
         Awaitility.await().atMost(Duration.ofSeconds(45)).untilAsserted(() -> {
             assertThat(Stove.gateway.get(JOBS + surviving, admin.headers()).data().path("state").asText()).isEqualTo("COMPLETED");
             assertThat(ReviewJourney.data(project, creator).path("activeReleaseRequest").isNull()).isTrue();
@@ -105,11 +102,11 @@ class WithdrawalFlowTest {
             assertThat(item.path("id").asLong()).isEqualTo(withdrawn);
             assertThat(item.path("status").asText()).isEqualTo("WITHDRAWN");
         });
-        JsonNode published = Stove.gateway.get("/api/v1/products/by-code/" + saved.path("code").asText()).data();
+        JsonNode published = Stove.gateway.get("/api/v1/products/by-code/" + code).data();
         assertThat(published.path("title").asText()).isEqualTo("Reviewed title");
         assertThat(published.path("price").asLong()).isEqualTo(2000);
-        assertThat(ReviewJourney.data(project, creator).path("currentReviewRequest").path("id").asLong()).isEqualTo(saved.path("nextReview").asLong());
-        assertThat(submit(path + "/release-requests", saved.path("firstIntent"), creator)).isEqualTo(withdrawn);
+        assertThat(ReviewJourney.data(project, creator).path("currentReviewRequest").path("id").asLong()).isEqualTo(nextReview);
+        assertThat(submit(path + "/release-requests", firstIntent, creator)).isEqualTo(withdrawn);
         assertThat(Stove.gateway.post(path + "/release-requests/" + surviving + "/withdrawals",
                 Map.of("requestId", UUID.randomUUID().toString()), creator.headers()).status()).isEqualTo(409);
         assertThat(Stove.gateway.get(JOBS + withdrawn, admin.headers()).data().path("state").asText()).isEqualTo("COMPLETED");
@@ -117,7 +114,7 @@ class WithdrawalFlowTest {
         assertThat(update).isNotEqualTo(surviving);
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             assertThat(ReviewJourney.data(project, creator).path("currentReleaseRequest").path("status").asText()).isEqualTo("COMPLETED");
-            assertThat(Stove.gateway.get("/api/v1/products/by-code/" + saved.path("code").asText()).data().path("title").asText()).isEqualTo("Next update");
+            assertThat(Stove.gateway.get("/api/v1/products/by-code/" + code).data().path("title").asText()).isEqualTo("Next update");
         });
     }
 
@@ -145,5 +142,10 @@ class WithdrawalFlowTest {
         });
     }
 
-    private Path evidence() { return Path.of(System.getProperty("stove.e2e.withdrawal-evidence")); }
+    /** 철회를 겪은 스택에서도 공개 여정이 그대로 도는지 본다(예전 실행기가 같은 스택에서 이어 돌리던 회귀 확인). */
+    @Test
+    @Order(2)
+    void publicationStillWorksAfterWithdrawals() throws Exception {
+        new CatalogPublicationFlowTest().publishesOnlyApprovedRequestedSnapshotsAndReplacesAfterNewReview();
+    }
 }
