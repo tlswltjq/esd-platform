@@ -2539,7 +2539,7 @@
 - 내 의견: "A"
 - 선택: A — 추천을 받아들였다. `git mv .kiro/specs specs`로 옮기고 상대 링크를 새 위치로 다시 계산했다. `review_packet.py`의 모듈 경로와 요구사항 경로도 `specs/`로 바꿨다. EARS 수용 기준과 `requirements`·`design`·`tasks` 세 파일 구조는 Kiro와 무관한 SDD 형식이라 그대로 둔다.
 - 구분: 추천 수용
-- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
 
 <a id="history-links-only"></a>
 ## 지난 기록의 `.kiro` 경로는 링크 대상만 고치고, 본문 문장·인용은 당시 그대로 둔다
@@ -2548,7 +2548,7 @@
 - 내 의견: "A"
 - 선택: A — 추천을 받아들였다. 마크다운 링크의 대상만 기계적으로 바꿨다. 링크가 아닌 문장 속 `.kiro/specs/...`(결정 81·151 등), 고정 커밋 URL, 실험 원본 JSON의 실행 호스트 경로는 당시 기록으로 남긴다. 현재 규칙을 말하는 문장(AGENTS·README·결정 기록 머리말·로드맵·PR 템플릿·현재 스펙)은 새 경로로 고쳤다.
 - 구분: 추천 수용
-- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
 
 <a id="verification-output-root"></a>
 ## 실제 스택 검증 산출물은 저장소 `runs/`에 두고, `ESD_SCRATCH`가 있을 때만 그 위치를 쓴다
@@ -2557,7 +2557,7 @@
 - 내 의견: "B"
 - 선택: B — 추천을 받아들였다. 위치는 `tools/verification/support/output_root.py` 한 곳에서 정하고 세 스크립트가 쓴다. 비용: worktree를 지우면 그 안의 `runs/`도 사라지고, 큰 산출물이 저장소 디스크에 쌓인다. 오래 보관할 회차는 `ESD_SCRATCH`로 밖에 둔다.
 - 구분: 추천 수용
-- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
 
 <a id="runbooks-folder"></a>
 ## 운영 절차서는 `docs/runbooks/`에 모은다
@@ -2566,7 +2566,7 @@
 - 내 의견: "A"
 - 선택: A — 추천을 받아들였다. 경보 주석과 경보 테스트의 기대 문구를 같은 경로로 바꿨다. `runbooks/license-db-loss.md`(현재 적용하지 않는 참고 기록)는 그대로 둔다.
 - 구분: 추천 수용
-- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
 
 <a id="decision-name-ids"></a>
 ## 새 결정은 번호 대신 영문 kebab 식별자로 부르고, 착수 때 예약하지 않는다
@@ -2580,7 +2580,7 @@
   - CI `decision_numbers.py`는 번호 결정의 중복·순서, 기준 판에 없거나 238보다 큰 새 번호, 식별자 형식·앵커 하나, 앵커 중복, 링크 문구와 앵커 일치를 검사한다. 결정 194의 상한은 새 번호가 없어져 의미를 잃는다. `review_packet.py`는 `결정 <식별자>` 언급으로도 이 PR의 결정 원문을 찾는다.
   - 비용: 번호보다 부르기 길고, 1~238의 번호 체계와 섞인다. 식별자로는 결정의 순서가 보이지 않는다(파일 순서가 기록 순서다).
 - 구분: 추천과 다른 선택
-- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+- 결과: [PR #259](https://github.com/tlswltjq/esd-platform/pull/259), 근거 색인 2026-11-28 Kiro 제거·결정 식별자 행
 
 ---
 
