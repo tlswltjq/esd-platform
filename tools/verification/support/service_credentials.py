@@ -1,36 +1,20 @@
-"""Select project credentials for one verification process."""
+"""Select project credentials for one verification process.
 
+The allow-list lives in service_credentials.json next to this file. The e2e LocalStack
+(ServiceCredentials.java) reads the same file, so the two launch paths cannot drift.
+"""
+import json
+from pathlib import Path
 
-_DB = {'DB_PASSWORD'}
-_BFF = {'BFF_CLIENT_SECRET'}
-_CATALOG_KEYS = {'CATALOG_STORE_SERVICE_KEY', 'CATALOG_ORDER_SERVICE_KEY',
-                 'CATALOG_DOWNLOAD_SERVICE_KEY', 'CATALOG_SETTLEMENT_SERVICE_KEY'}
-_READER = {'DOWNLOAD_STORAGE_ACCESS_KEY', 'DOWNLOAD_STORAGE_SECRET_KEY'}
-_ALLOWED = {
-    'auth': _DB | _BFF | {'AUTH_ADMIN_PASSWORD', 'AUTH_REVIEWER_PASSWORD'},
-    # The web BFF holds the OAuth client; the internal API gateway only validates relayed bearer tokens.
-    'web-bff': _BFF,
-    'gateway': set(),
-    'studio': _DB | {'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY'},
-    'review': _DB | {'REVIEW_STORAGE_ACCESS_KEY', 'REVIEW_STORAGE_SECRET_KEY'},
-    # Catalog verifies tagged objects through a separate reader client.
-    'catalog': _DB | _CATALOG_KEYS | _READER | {'CATALOG_DOWNLOAD_STORAGE_ACCESS_KEY',
-                                             'CATALOG_DOWNLOAD_STORAGE_SECRET_KEY'},
-    'store': _DB | {'CATALOG_STORE_SERVICE_KEY'},
-    'order': _DB | {'CATALOG_ORDER_SERVICE_KEY', 'PAYMENT_ORDER_SERVICE_KEY'},
-    'payment': _DB | {'PAYMENT_ORDER_SERVICE_KEY', 'PAYMENT_APPROVAL_PAYLOAD_KEY'},
-    'license': _DB,
-    'download': _READER | {'CATALOG_DOWNLOAD_SERVICE_KEY'},
-    'settlement': _DB | {'CATALOG_SETTLEMENT_SERVICE_KEY'},
-}
+_RULES = json.loads(Path(__file__).with_name('service_credentials.json').read_text(encoding='utf-8'))
+_ALLOWED = {app: set(names) for app, names in _RULES['allowed'].items()}
 # The PG prefixes stay although no app is allowed them: a leftover PG secret in the shell must not reach any app (결정 remove-pg-adapters).
-_PREFIXES = ('CATALOG_', 'PAYMENT_', 'MOCK_PG_', 'PORTONE_', 'SETTLEMENT_PORTONE_', 'TOSSPAY_', 'AUTH_', 'BFF_',
-             'STORAGE_', 'REVIEW_STORAGE_', 'DOWNLOAD_STORAGE_')
+_PREFIXES = tuple(_RULES['prefixes'])
+_SUFFIXES = tuple(_RULES['suffixes'])
 
 
 def _project_credential(name):
-    return name == 'DB_PASSWORD' or (name.startswith(_PREFIXES)
-                                    and name.endswith(('_KEY', '_SECRET', '_PASSWORD')))
+    return name == 'DB_PASSWORD' or (name.startswith(_PREFIXES) and name.endswith(_SUFFIXES))
 
 
 def service_environment(app, inherited):

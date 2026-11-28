@@ -82,6 +82,7 @@ final class LocalStack implements AutoCloseable {
     private final Map<String, String> environment = new LinkedHashMap<>();
     private final Set<StackApp> apps;
     private final Map<String, String> overrides;
+    private final ServiceCredentials credentials;
     private final Map<StackApp, Process> processes = new EnumMap<>(StackApp.class);
     private final Map<String, Set<String>> credentialRecipients = new TreeMap<>();
     private final String settlementServiceKey = secret();
@@ -92,6 +93,7 @@ final class LocalStack implements AutoCloseable {
     private LocalStack(Path repository, Path directory, int offset, Set<StackApp> apps, Map<String, String> overrides) {
         this.apps = apps;
         this.overrides = Map.copyOf(overrides);
+        this.credentials = ServiceCredentials.load(repository);
         this.repository = repository;
         this.directory = directory;
         this.offset = offset;
@@ -571,11 +573,11 @@ final class LocalStack implements AutoCloseable {
     }
 
     private void launch(StackApp app, List<String> entry, String... arguments) {
-        Map<String, String> selected = new LinkedHashMap<>(ServiceCredentials.environmentFor(app, environment));
+        Map<String, String> selected = new LinkedHashMap<>(credentials.environmentFor(app, environment));
         if (app == StackApp.CATALOG || app == StackApp.SETTLEMENT) {
             selected.put("CATALOG_SETTLEMENT_SERVICE_KEY", settlementServiceKey);
         }
-        credentialRecipients.put(app.module(), ServiceCredentials.credentialNames(selected));
+        credentialRecipients.put(app.module(), credentials.credentialNames(selected));
         List<String> command = new ArrayList<>(List.of(
                 Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-Xmx256m"));
         command.addAll(entry);

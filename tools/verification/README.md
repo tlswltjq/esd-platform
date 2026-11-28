@@ -13,12 +13,12 @@ python3 tools/verification/verify-jib.py --help
 
 | 위치 | 책임 |
 |---|---|
-| `verify-*.py` | 모듈별 격리 스택 및 Jib 이미지 검증 |
+| `verify-jib.py` · `verify-tracing.py` | Jib 이미지 스택 검증(구매 여정·추적·백업 복구·Prometheus·측정). 모듈별 여정은 `:e2e`의 태스크가 스택을 직접 띄운다([testing.md](../../docs/testing.md#scope-index)) |
 | `verify-tracing.py` · `support/tracing_verification.py` | `--foundation-only`로 공통 기반을 먼저 검증하고, 기본 실행으로 Payment 재시작·장애·추적 복원을 검증 |
 | `verify-jib.py --backup-restore` · `support/backup_restore_verification.py` | 구매 전 전체 백업과 binlog·빌드 연속 복사 뒤 MySQL·MinIO를 데이터째 삭제하고 `tools/operations/backup.py`로 복구. 테이블 체크섬·객체 해시 비교 후 새 구매·다운로드를 이어서 검증. [절차](../../docs/backup-restore.md) |
 | `verify-jib.py --prometheus-only` · `support/prometheus_verification.py` | 실제 Prometheus로 11개 수집 대상·필수 지표·운영 경보 로드 검증 |
 | `auth-bff.py` | 실행 중인 스택의 Auth/BFF 검증. [필수 설정](../../docs/auth-bff.md) 필요 |
-| `support/service_credentials.py` · `test_service_credentials.py` | 격리 스택 실행기의 앱별 비밀 선택(`:e2e`의 `ServiceCredentials`가 같은 규칙을 쓴다)과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [수신자 계약](../../docs/security.md#서비스-접근키-수신자와-경계)·[재실행](../../docs/testing.md#구조보안-경계-검사-실행) |
+| `support/service_credentials.py`·`.json` · `test_service_credentials.py` | 앱별 비밀 허용 목록(`support/service_credentials.json` 하나를 이 모듈과 `:e2e`의 `ServiceCredentials`가 함께 읽는다)과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [수신자 계약](../../docs/security.md#서비스-접근키-수신자와-경계)·[재실행](../../docs/testing.md#구조보안-경계-검사-실행) |
 | `support/boot_jars.py` · `test_boot_jars.py` | plain·test-fixtures를 제외한 실행 JAR 선택. 누락·복수 후보는 실패 |
 | `support/ports.py` · `test_ports.py` | 도구별 앱 포트 간격(1000 간격, 모두 32768 아래). 시작 전 사용 중·임시 포트 범위를 확인하고 실패하면 바로 멈춤. 기존 `*_PORT_OFFSET` 환경 변수로 바꿀 수 있음. [결정 105](../../docs/decisions.md#verification-tool-ports) |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
