@@ -1,5 +1,4 @@
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 
@@ -36,16 +35,21 @@ class PullRequestRuleTest(unittest.TestCase):
 
     def test_another_prs_fragment_and_fragment_removal_are_refused(self):
         errors = evidence_fragments.check_pr(7, [('added', 'docs/evidence.d/8.md'), ('removed', 'docs/evidence.d/6.md')])
-        self.assertTrue(any('삭제는 접기 PR만' in e for e in errors))
+        self.assertTrue(any('조각은 지우지 않는다' in e for e in errors))
         self.assertTrue(any('조각은 docs/evidence.d/7.md 하나' in e for e in errors))
 
-    def test_only_a_fold_pr_edits_the_index(self):
+    def test_the_index_is_frozen(self):
+        # 결정 evidence-fragments-permanent: docs/evidence.md는 고정이고, 접기 PR도 없다.
         fold = [('modified', 'docs/evidence.md'), ('removed', 'docs/evidence.d/5.md'), ('removed', 'docs/evidence.d/6.md')]
-        self.assertEqual([], evidence_fragments.check_pr(9, fold))
-        self.assertEqual([], evidence_fragments.check_pr(9, [('modified', 'docs/evidence.md')]))
-        mixed = evidence_fragments.check_pr(9, [('modified', 'docs/evidence.md'), ('modified', 'apps/x/A.java')])
-        self.assertIn('접기 PR만', mixed[0])
-        self.assertIn('apps/x/A.java', mixed[0])
+        errors = evidence_fragments.check_pr(9, fold)
+        self.assertTrue(any('docs/evidence.md는 고정' in e for e in errors))
+        self.assertTrue(any('조각은 지우지 않는다' in e for e in errors))
+        self.assertTrue(evidence_fragments.check_pr(9, [('modified', 'docs/evidence.md')]))
+
+    def test_fold_command_is_gone(self):
+        self.assertFalse(hasattr(evidence_fragments, 'fold'))
+        with self.assertRaises(SystemExit):
+            evidence_fragments.main(['fold'])
 
 
 class RepositoryTest(unittest.TestCase):
@@ -69,31 +73,13 @@ class RepositoryTest(unittest.TestCase):
         errors = evidence_fragments.check(self.root)
         self.assertEqual(2, len(errors))
 
-    def test_fold_appends_rows_by_date_then_pr_and_removes_fragments(self):
-        self.fragment('12.md', '| 2026-11-09 | b | 열둘 | 통과 | PR #12 |\n')
-        self.fragment('9.md', '| 2026-11-09 | a | 아홉 | 통과 | PR #9 |\n| 2026-11-08 | a | 아홉 앞 | 통과 | PR #9 |\n')
-        errors, count = evidence_fragments.fold(self.root)
-        self.assertEqual(([], 3), (errors, count))
-        tail = (self.root / 'docs/evidence.md').read_text(encoding='utf-8').split('\n')[-4:-1]
-        self.assertEqual(['아홉 앞', '아홉', '열둘'], [evidence_fragments.cells(line)[2] for line in tail])
-        self.assertEqual([], list((self.root / 'docs/evidence.d').iterdir()))
-
-    def test_fold_changes_nothing_when_a_fragment_is_invalid(self):
-        self.fragment('9.md', '| 2026-11-09 | a | 아홉 | 통과 | PR #9 |\n')
-        self.fragment('10.md', '깨진 행\n')
-        errors, count = evidence_fragments.fold(self.root)
-        self.assertTrue(errors)
-        self.assertEqual(0, count)
-        self.assertEqual(INDEX, (self.root / 'docs/evidence.md').read_text(encoding='utf-8'))
-        self.assertEqual(2, len(list((self.root / 'docs/evidence.d').iterdir())))
-
     def test_a_rename_is_a_removal_and_an_addition(self):
         # 리뷰 1: 다른 PR의 조각을 자기 번호로 옮기면 그 조각 삭제로 걸린다.
         changes = self.root / 'changes.txt'
         changes.write_text('modified\tapps/x/A.java\nrenamed\tdocs/evidence.d/7.md\tdocs/evidence.d/5.md\n', encoding='utf-8')
         parsed = evidence_fragments.read_changes(changes)
         self.assertEqual([('modified', 'apps/x/A.java'), ('removed', 'docs/evidence.d/5.md'), ('added', 'docs/evidence.d/7.md')], parsed)
-        self.assertTrue(any('삭제는 접기 PR만' in e for e in evidence_fragments.check_pr(7, parsed)))
+        self.assertTrue(any('조각은 지우지 않는다' in e for e in evidence_fragments.check_pr(7, parsed)))
         moved = evidence_fragments.read_changes(self.write_changes('renamed\tdocs/old.md\tdocs/evidence.md\n'))
         self.assertIn(('removed', 'docs/evidence.md'), moved)
 
@@ -108,38 +94,6 @@ class RepositoryTest(unittest.TestCase):
         self.assertEqual(0, evidence_fragments.main(['pr', '--number', '7', '--changes', str(changes)]))
         self.assertEqual(1, evidence_fragments.main(['pr', '--number', '8', '--changes', str(changes)]))
 
-
-    def commit_base(self):
-        git = ['git', '-C', str(self.root), '-c', 'user.name=t', '-c', 'user.email=t@t']
-        subprocess.run(git[:3] + ['init', '-q'], check=True)
-        subprocess.run(git + ['add', '-A'], check=True)
-        subprocess.run(git + ['commit', '-q', '-m', 'base'], check=True)
-
-    def test_r4_a_fold_pr_must_move_every_removed_row_into_the_index(self):
-        """PR #232 R4: 조각을 지우기만 하고 행을 옮기지 않은 접기 PR을 잡는다."""
-        self.fragment('5.md', '| 2026-11-09 | a | 다섯 | 통과 | PR #5 |\n')
-        self.fragment('6.md', '| 2026-11-09 | b | 여섯 | 통과 | PR #6 |\n')
-        self.commit_base()
-        changes = [('modified', 'docs/evidence.md'), ('removed', 'docs/evidence.d/5.md'), ('removed', 'docs/evidence.d/6.md')]
-        evidence_fragments.fold(self.root)
-        self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', changes))
-        (self.root / 'docs/evidence.md').write_text(INDEX + '| 2026-11-09 | a | 다섯 | 통과 | PR #5 |\n', encoding='utf-8')
-        errors = evidence_fragments.lost_rows(self.root, 'HEAD', changes)
-        self.assertEqual(1, len(errors))
-        self.assertIn('docs/evidence.d/6.md', errors[0])
-        # PR #232 재리뷰 R2: 칸 경계의 공백만 다르게 옮긴 행은 보존된 것이다.
-        (self.root / 'docs/evidence.md').write_text(INDEX + '| 2026-11-09 | a | 다섯 | 통과 | PR #5 |\n'
-                                                   '|2026-11-09|b|여섯|통과|PR #6|\n', encoding='utf-8')
-        self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', changes))
-        self.assertIn('읽지 못해', evidence_fragments.lost_rows(self.root, 'missing', changes)[0])
-        self.assertEqual([], evidence_fragments.lost_rows(self.root, 'HEAD', [('modified', 'apps/x/A.java')]))
-        listed = self.write_changes('modified\tdocs/evidence.md\nremoved\tdocs/evidence.d/5.md\nremoved\tdocs/evidence.d/6.md\n')
-        self.assertEqual(0, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed),
-                                                     '--root', str(self.root), '--base-ref', 'HEAD']))
-        (self.root / 'docs/evidence.md').write_text(INDEX, encoding='utf-8')
-        self.assertEqual(1, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed),
-                                                     '--root', str(self.root), '--base-ref', 'HEAD']))
-        self.assertEqual(0, evidence_fragments.main(['pr', '--number', '9', '--changes', str(listed)]))
 
 
 if __name__ == '__main__':

@@ -10,6 +10,8 @@
   번호·식별자는 PR 본문(HTML 주석 제외)·커밋 메시지(병합 커밋 제외)·diff의 추가/삭제 줄에서만 센다.
   5. 이전 리뷰 지적(재리뷰일 때)
   6. diff — 운영 코드·이행 파일 → 테스트 → 그 밖 → 문서 순
+  결정 packet-size-cap: 묶음이 SIZE_CAP(300KB)을 넘으면 문서(`*.md`) diff를 파일 목록(바뀐 줄 수)으로 바꾸고,
+  문서 diff의 결정·R 번호는 세지 않은 채 다시 만든다. 그 사실을 묶음 머리에 적는다.
 
 구현한 쪽의 설명이나 결론은 넣지 않는다(결정 112의 독립 문맥). 모으는 규칙은 기계적이다.
 """
@@ -37,6 +39,7 @@ DECISION_ID_REF = re.compile(r'결정\s+`?([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`?')
 # decision_numbers.py의 ANCHOR와 같은 모양(따옴표 두 종류·공백)을 받는다(PR #259 R2).
 NAMED_ANCHOR = re.compile(r'^\s*<a\s+id=["\']([a-z][a-z0-9]*(?:-[a-z0-9]+)*)["\']\s*>\s*</a>\s*$')
 REQUIREMENT_REF = re.compile(r'(?<![A-Za-z0-9_])R(\d+)(?:[.\-]\d+)?(?![A-Za-z0-9_])')
+SIZE_CAP = 300 * 1000
 MODULE_PATH = re.compile(r'^(?:apps|specs)/([a-z0-9-]+)/')
 
 
@@ -192,19 +195,39 @@ def group(path):
     return 2
 
 
-def build(root, base, head, since=None, pr_body='', previous=''):
+def counts(block):
+    lines = block.split('\n')
+    added = sum(1 for line in lines if line.startswith('+') and not line.startswith('+++'))
+    removed = sum(1 for line in lines if line.startswith('-') and not line.startswith('---'))
+    return added, removed
+
+
+def build(root, base, head, since=None, pr_body='', previous='', size_cap=SIZE_CAP):
+    packet, files, own = compose(root, base, head, since, pr_body, previous, list_docs=False)
+    if len(packet.encode('utf-8')) <= size_cap:
+        return packet, files, own
+    return compose(root, base, head, since, pr_body, previous, list_docs=True)
+
+
+def compose(root, base, head, since, pr_body, previous, list_docs):
     rng = '%s..%s' % (since, head) if since else '%s...%s' % (base, head)
     full_diff = git(root, 'diff', '-M', rng)
     blocks = file_blocks(full_diff)
     files = [path for path, _ in blocks]
-    diff_text = changed_lines(full_diff)
+    shown = [(path, block) for path, block in blocks if not (list_docs and path.endswith('.md'))]
+    listed = [(path, block) for path, block in blocks if list_docs and path.endswith('.md')]
+    diff_text = changed_lines('\n'.join(block for _, block in shown))
     log_text = git(root, 'log', '--no-merges', '--format=%B', rng.replace('...', '..'))
     subjects = git(root, 'log', '--no-merges', '--format=%s', rng.replace('...', '..'))
     pr_body = without_comments(pr_body)
     decisions = read_at(root, head, 'docs/decisions.md')
     agents = read_at(root, head, 'AGENTS.md')
 
-    out = [INSTRUCTIONS, '## AGENTS.md 3절\n', section(agents, '## 3. ')]
+    out = [INSTRUCTIONS]
+    if listed:
+        out.append('## 크기 상한(결정 packet-size-cap)\n\n묶음이 %dKB를 넘어 문서 diff %d개를 아래 목록으로 바꿨다. '
+                   '문서 diff의 결정·R 번호는 세지 않았다. 필요하면 저장소에서 연다.\n' % (SIZE_CAP // 1000, len(listed)))
+    out.extend(['## AGENTS.md 3절\n', section(agents, '## 3. ')])
     numbers = decision_keys(decisions, pr_body, log_text, diff_text)
     own = own_decisions(pr_body, subjects, decisions)
     out.append('## 이 PR의 결정(원문): %s\n' % (', '.join(map(str, own)) or '없음'))
@@ -230,8 +253,11 @@ def build(root, base, head, since=None, pr_body='', previous=''):
         out.append('## 이전 리뷰 지적 (%s 이후 차분만 본다)\n' % since)
         out.append(previous.rstrip() + '\n')
     out.append('## diff (%s)\n' % rng)
-    for _, block in sorted(blocks, key=lambda b: (group(b[0]), b[0])):
+    for _, block in sorted(shown, key=lambda b: (group(b[0]), b[0])):
         out.append('```diff\n' + block + '\n```\n')
+    if listed:
+        out.append('## 목록으로 바꾼 문서 diff\n')
+        out.append('\n'.join('- %s (+%d -%d)' % ((path,) + counts(block)) for path, block in sorted(listed)) + '\n')
     return '\n'.join(out), files, own
 
 

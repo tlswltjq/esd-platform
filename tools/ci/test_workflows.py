@@ -1,9 +1,9 @@
-"""결정 137: draft PR에서는 CI build를 건너뛰되, ready로 바꾸거나 push하면 반드시 다시 돈다.
+"""결정 build-on-draft: PR CI build는 draft에서도 push마다 돈다. 건너뛰는 분기를 두지 않는다.
 
-job 수준 `if`로 건너뛴 작업은 필수 검사에서 성공으로 보고된다. 그래서 draft 건너뛰기만 두고
-`ready_for_review`(또는 기본 이벤트 opened·synchronize·reopened)를 빠뜨리면 ready PR이 build 없이 병합될 수 있다.
-draft 실행이 같은 concurrency 그룹에서 실제 build를 취소해도 같은 일이 생기므로 그룹을 나눈다.
-밤·수동 스택 실행도 main push와 그룹을 나눈다(PR #232 R5: 서로 기다리거나 대기 실행이 밀려 사라진다).
+job 수준 `if`로 건너뛴 작업은 필수 검사에서 성공으로 보고된다. 그래서 PR에서 build를 건너뛰는 조건(draft 등)을
+다시 넣지 못하게 조건식 전체를 비교하고, 파일 어디에도 `pull_request.draft`를 쓰지 않게 한다.
+ready는 build를 다시 돌리지 않는다(`ready_for_review`를 트리거에서 뺀다) — 같은 head의 결과를 쓴다.
+밤·수동 스택 실행은 push·PR build와 concurrency 그룹을 나눈다(PR #232 R5: 서로 기다리거나 대기 실행이 밀려 사라진다).
 결정 217: build는 plan → gradle(matrix) → build(결과 모음)로 나뉜다. 결과를 모으는 build는 always()로 돌아야 한다 —
 조각이 실패해 build가 건너뛰어지면 필수 검사가 성공으로 보고되기 때문이다.
 조건식은 부분 문자열이 아니라 전체를 비교한다(`&& false`처럼 모든 build를 끄는 변경을 잡는다).
@@ -15,10 +15,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 CI = ROOT / '.github/workflows/ci.yml'
-REQUIRED_TYPES = ('opened', 'synchronize', 'reopened', 'ready_for_review')
-BUILD_CONDITION = "github.event_name != 'schedule' && github.event.pull_request.draft != true"
+REQUIRED_TYPES = ('opened', 'synchronize', 'reopened')
+BUILD_CONDITION = "github.event_name != 'schedule'"
 AGGREGATE_CONDITION = 'always() && ' + BUILD_CONDITION
-CONCURRENCY_GROUP = "ci-${{ github.ref }}-${{ github.event.pull_request.draft == true && 'draft' || (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'stack' || 'build' }}"
+CONCURRENCY_GROUP = "ci-${{ github.ref }}-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'stack' || 'build' }}"
 REQUIRED_NAME = 'build (unit · architecture · integration · migration)'
 
 
@@ -45,14 +45,16 @@ def concurrency_group(text):
     return None if match is None else match.group(1)
 
 
-def draft_skip_problems(text):
+def build_trigger_problems(text):
     problems = []
     if job_condition(text, 'plan') != BUILD_CONDITION:
         problems.append('plan 작업의 if가 `' + BUILD_CONDITION + '`가 아니다')
     if job_condition(text, 'build') != AGGREGATE_CONDITION:
         problems.append('build 작업의 if가 `' + AGGREGATE_CONDITION + '`가 아니다')
     if concurrency_group(text) != CONCURRENCY_GROUP:
-        problems.append('concurrency 그룹이 draft·스택(밤·수동)·build 실행을 나누지 않는다')
+        problems.append('concurrency 그룹이 스택(밤·수동)과 build 실행을 나누지 않는다')
+    if 'pull_request.draft' in text:
+        problems.append('ci.yml이 draft를 조건으로 쓴다(결정 build-on-draft)')
     types = pull_request_types(text)
     if types is None:
         problems.append('pull_request에 types 목록이 없다')
@@ -60,49 +62,48 @@ def draft_skip_problems(text):
         for name in REQUIRED_TYPES:
             if name not in types:
                 problems.append('pull_request types에 ' + name + '가 없다')
+        if 'ready_for_review' in types:
+            problems.append('ready_for_review가 같은 head의 build를 다시 돌린다')
     return problems
 
 
-class DraftSkipContractTest(unittest.TestCase):
+class BuildTriggerContractTest(unittest.TestCase):
     def setUp(self):
         self.text = CI.read_text(encoding='utf-8')
 
     def mutate(self, old, new):
         mutant = self.text.replace(old, new, 1)
         self.assertNotEqual(self.text, mutant)
-        return draft_skip_problems(mutant)
+        return build_trigger_problems(mutant)
 
-    def test_ci_skips_drafts_and_runs_again_when_ready(self):
-        self.assertEqual([], draft_skip_problems(self.text))
-
-    def test_dropping_ready_for_review_is_caught(self):
-        self.assertEqual(['pull_request types에 ready_for_review가 없다'],
-                         self.mutate(', ready_for_review]', ']'))
+    def test_ci_builds_every_pull_request_push_including_drafts(self):
+        self.assertEqual([], build_trigger_problems(self.text))
 
     def test_dropping_synchronize_is_caught(self):
         self.assertEqual(['pull_request types에 synchronize가 없다'], self.mutate('synchronize, ', ''))
 
-    def test_dropping_draft_skip_is_caught(self):
-        self.assertEqual(['plan 작업의 if가 `' + BUILD_CONDITION + '`가 아니다'],
-                         self.mutate(' && github.event.pull_request.draft != true', ''))
+    def test_rerunning_on_ready_is_caught(self):
+        self.assertEqual(['ready_for_review가 같은 head의 build를 다시 돌린다'],
+                         self.mutate('reopened]', 'reopened, ready_for_review]'))
+
+    def test_bringing_back_the_draft_skip_is_caught(self):
+        problems = self.mutate('    if: ' + BUILD_CONDITION + '\n',
+                               '    if: ' + BUILD_CONDITION + ' && github.event.pull_request.draft != true\n')
+        self.assertIn('plan 작업의 if가 `' + BUILD_CONDITION + '`가 아니다', problems)
+        self.assertIn('ci.yml이 draft를 조건으로 쓴다(결정 build-on-draft)', problems)
 
     def test_disabling_every_build_is_caught(self):
         self.assertEqual(['plan 작업의 if가 `' + BUILD_CONDITION + '`가 아니다'],
-                         self.mutate('draft != true\n', 'draft != true && false\n'))
+                         self.mutate('    if: ' + BUILD_CONDITION + '\n', '    if: ' + BUILD_CONDITION + ' && false\n'))
 
     def test_aggregate_without_always_is_caught(self):
         # 결정 217: always()가 없으면 조각 실패 때 build가 건너뛰어지고, 건너뛴 필수 검사는 성공으로 보고된다.
         self.assertEqual(['build 작업의 if가 `' + AGGREGATE_CONDITION + '`가 아니다'],
                          self.mutate('    if: ' + AGGREGATE_CONDITION + '\n', '    if: ' + BUILD_CONDITION + '\n'))
 
-    def test_shared_concurrency_group_is_caught(self):
-        self.assertEqual(['concurrency 그룹이 draft·스택(밤·수동)·build 실행을 나누지 않는다'],
+    def test_r5_a_stack_run_sharing_the_build_group_is_caught(self):
+        self.assertEqual(['concurrency 그룹이 스택(밤·수동)과 build 실행을 나누지 않는다'],
                          self.mutate(CONCURRENCY_GROUP, 'ci-${{ github.ref }}'))
-
-    def test_r5_a_stack_run_sharing_the_main_push_group_is_caught(self):
-        shared = "ci-${{ github.ref }}-${{ github.event.pull_request.draft == true && 'draft' || 'build' }}"
-        self.assertEqual(['concurrency 그룹이 draft·스택(밤·수동)·build 실행을 나누지 않는다'],
-                         self.mutate(CONCURRENCY_GROUP, shared))
 
 
 class BuildScopeWiringTest(unittest.TestCase):

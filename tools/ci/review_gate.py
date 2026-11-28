@@ -1,10 +1,13 @@
 """결정 109: 결정 108의 교차 리뷰가 PR 본문 `리뷰 판정` 표에 적혔는지 확인한다.
 
 변경 파일이 모두 *.md인 PR은 검사하지 않는다. 그 밖의 PR은 `## 리뷰 판정` 절에 표가 있어야 하고,
-지적마다 판정 칸이 채택·부분 반영·기각 중 하나로 시작해야 한다. 지적이 없으면
+지적마다 판정 칸이 채택·부분 반영·기각·할 일로 이관 중 하나로 시작해야 한다. 지적이 없으면
 `| 지적 없음 (리뷰어: …) |`처럼 리뷰어를 함께 적는다.
-결정 112: 부분 반영·기각, 심각도 high, 정책을 바꾸는 지적은 판정 칸에 `사용자 확정: "원문"`이 있어야 한다
+결정 112·ai-judges-adopted-high: 부분 반영·기각, 정책을 바꾸는 지적, 채택하지 않은 high는 판정 칸에
+`사용자 확정: "원문"`이 있어야 한다. AI가 채택해 고치는 high는 `채택 (AI 판정)`이면 된다
 (병합 도구 pr_finish.py도 이 함수를 쓴다).
+결정 rereview-cap-two: 재리뷰 2회차 이후의 medium·low(지적 칸에 `재리뷰 N`, N ≥ 2)는 `할 일로 이관`과 옮긴 위치(`tasks.md`·`D-NNN`)를 적는다.
+high는 이관하지 않는다.
 
 변경 파일 목록은 줄마다 `경로` 또는 `경로<TAB>이전 경로`다. 이름 변경은 이전 경로도 리뷰 대상 판단에 넣는다
 (코드 파일을 *.md로 옮겨도 코드 삭제이므로 리뷰 대상이다). 줄 수가 PR의 변경 파일 수다.
@@ -23,7 +26,12 @@ import sys
 
 CHECK_NAME = 'review-gate'
 SECTION_TITLE = '리뷰 판정'
-VERDICTS = ('채택', '부분 반영', '기각')
+ADOPTED = '채택'
+MOVED = '할 일로 이관'
+VERDICTS = (ADOPTED, '부분 반영', '기각', MOVED)
+MOVED_TO = re.compile(r'tasks\.md|\bD-\d{3}\b')
+REREVIEW = re.compile(r'재리뷰\s*(\d+)')
+MOVE_FROM_REREVIEW = 2
 NO_FINDINGS = '지적 없음'
 COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
 SECTION_START = re.compile(r'^ {0,3}## +' + SECTION_TITLE + r'\s*$')
@@ -129,7 +137,10 @@ def pending_user_verdicts(body):
         verdict = row[1].lstrip('*_ ') if len(row) > 1 else ''
         if NO_FINDINGS in finding:
             continue
-        needs_user = verdict.startswith(USER_JUDGED) or bool(HIGH.search(finding)) or POLICY in text
+        high = bool(HIGH.search(finding))
+        needs_user = verdict.startswith(USER_JUDGED) or POLICY in text \
+            or (high and not verdict.startswith((ADOPTED, MOVED))) \
+            or '사용자 확정' in verdict
         if needs_user and not USER_CONFIRMED.search(verdict):
             pending.append(finding[:80])
     return pending
@@ -166,10 +177,18 @@ def check(body, files, expected_files=None, entries=None):
         elif not finding:
             errors.append('지적 칸이 빈 행이 있다: ' + ' | '.join(row))
         elif not has_verdict(verdict):
-            errors.append('판정(채택·부분 반영·기각)이 없는 지적: ' + finding[:80])
+            errors.append('판정(채택·부분 반영·기각·할 일로 이관)이 없는 지적: ' + finding[:80])
+        elif verdict.lstrip('*_ ').startswith(MOVED):
+            if HIGH.search(finding):
+                errors.append('high는 이관하지 않는다(결정 rereview-cap-two). 이 PR에서 고친다: ' + finding[:80])
+            elif max([int(n) for n in REREVIEW.findall(finding)] or [0]) < MOVE_FROM_REREVIEW:
+                # PR #261 R3: 이관은 재리뷰 2회차(그 뒤 재리뷰를 하지 않는) 지적만 한다. 지적 칸에 `재리뷰 N`을 적는다.
+                errors.append('`할 일로 이관`은 재리뷰 2회차 이후의 지적만 한다(지적 칸에 `재리뷰 N`): ' + finding[:80])
+            elif not MOVED_TO.search(' | '.join(row)):
+                errors.append('`할 일로 이관`에 옮긴 위치(`tasks.md` 또는 `D-NNN`)가 없다: ' + finding[:80])
     for finding in pending_user_verdicts(body):
-        errors.append('사용자 판정이 남은 지적(결정 112: 부분 반영·기각·high·정책은 판정 칸에 '
-                      '`사용자 확정: "원문"`): ' + finding)
+        errors.append('사용자 판정이 남은 지적(결정 112·ai-judges-adopted-high: 부분 반영·기각·정책, '
+                      '채택하지 않은 high는 판정 칸에 `사용자 확정: "원문"`): ' + finding)
     return errors
 
 
