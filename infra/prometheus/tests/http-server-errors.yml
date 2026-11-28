@@ -1,0 +1,40 @@
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 1m
+
+# 결정 error-observability: 요청의 5% 넘게 5xx 인 상태가 5분 이어지면 알린다.
+# order 는 분당 60건 중 6건(10%)이 500 이다. catalog 는 60건 중 1건(약 1.6%)이라 울리지 않는다.
+# studio 는 업무 요청은 모두 성공하고 /actuator/health 만 503 이다 — 헬스 체크는 이 경보의 대상이 아니다.
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="order", uri="/api/v1/orders", status="200", error_code="none"}'
+        values: '0+54x20'
+      - series: 'http_server_requests_seconds_count{application="order", uri="/api/v1/orders", status="500", error_code="INTERNAL_ERROR"}'
+        values: '0+6x20'
+      - series: 'http_server_requests_seconds_count{application="catalog", uri="/api/v1/products", status="200", error_code="none"}'
+        values: '0+59x20'
+      - series: 'http_server_requests_seconds_count{application="catalog", uri="/api/v1/products", status="500", error_code="INTERNAL_ERROR"}'
+        values: '0+1x20'
+      - series: 'http_server_requests_seconds_count{application="studio", uri="/api/v1/projects", status="200", error_code="none"}'
+        values: '0+60x20'
+      - series: 'http_server_requests_seconds_count{application="studio", uri="/actuator/health", status="503", error_code="none"}'
+        values: '0+60x20'
+    alert_rule_test:
+      # 비율은 처음부터 10% 지만 5분을 채우기 전에는 울리지 않는다.
+      - eval_time: 4m
+        alertname: HttpServerErrorRateHigh
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: HttpServerErrorRateHigh
+        exp_alerts:
+          - exp_labels:
+              application: order
+              severity: warning
+            exp_annotations:
+              summary: "order: 요청의 10% 가 5xx 로 실패한다"
+              description: >-
+                최근 5분 요청 중 5xx 비율이 5% 를 넘은 채 5분이 지났다.
+                sum by (uri, status, error_code) (rate(http_server_requests_seconds_count{application="order", status=~"5.."}[5m]))
+                로 어느 API 의 어떤 오류인지 보고, 응답의 X-Correlation-Id(traceId)로 그 요청의 로그와 트레이스를 찾는다.

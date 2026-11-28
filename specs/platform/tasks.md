@@ -315,6 +315,17 @@
   - 어디서: `tools/verification/support/gateway_ownership.py`가 `stove_license.product_license`에 `status='ACTIVE'`를 넣는다. License V10(2026-11-06, `chk_product_license_status`)은 `STORED`·`REGISTERED`·`SUSPENDED`·`REFUNDED`만 받는다.
   - 확인: 2026-11-28 PR #268 로컬 실행에서 `ERROR 3819 ... Check constraint 'chk_product_license_status' is violated`. PG 제거와 무관하다(License와 이 픽스처는 바꾸지 않았다).
   - 할 일: 픽스처 상태를 현재 스키마 값으로 고치고 스크립트를 끝까지 통과시킨다. [로드맵 0절](../../docs/roadmap.md#scope-freeze)의 "가입·로그인, 역할별 진입" 확인 경로다.
+- [ ] **T45. HTTP 오류 관측: 구조화 로그와 로그 수집** ([결정 error-observability](../../docs/decisions.md#error-observability) 3·4)
+  - 앞 단계: 1(경보 `HttpServerErrorRateHigh`)·2(`http_server_requests`의 `error_code` 태그)는 PR #273.
+  - 할 일 3: 앱 12개의 콘솔 로그를 구조화(JSON) 형식으로 낸다. Spring Boot 3.5의 `logging.structured.format.console`로 켤 수 있다. 값 안의 개행이 이스케이프되므로 `GlobalExceptionHandler`의 `malformed request` 로그에 요청 값이 실려 로그 줄을 위조할 수 있는 경로([결정 remove-unknown-property-net](../../docs/decisions.md#remove-unknown-property-net)의 선택지 C)가 함께 닫히는지 확인한다. 정할 것: 형식(ecs·logstash 등), 컨테이너 배포에서만 켤지 로컬 `bootRun`·테스트에서도 켤지. 로그를 읽는 검증 도구(`tools/verification`)가 평문 형식에 기대는지 먼저 확인한다.
+  - 할 일 4: `docker-compose.yml`에 Loki와 수집기를 더하고 Grafana 데이터 소스를 등록한다(`infra/grafana/provisioning/datasources/datasources.yml`의 "로그 수집기(Loki)는 스택에 없다" 주석, Tempo의 트레이스→로그 연결). 정할 것: 수집 방식(수집기가 Docker 소켓으로 컨테이너 로그를 읽는 방식은 소켓 마운트가 필요하다 — `test_protected_compose.py`·`common/test`의 배포 계약 테스트와 맞는지 확인), 이미지 버전 고정, 보존 기간.
+  - 검증: 격리 스택(`verify-jib.py`)에서 traceId로 로그가 검색되는지 본다.
+- [ ] **T46. "봉투"라는 용어를 걷어낸다** [결정 필요]
+  - 사용자 지시(2026-11-28): "봉투 라는 용어 걷어낼 것". PR #271·#273에서 새로 쓴 글에는 쓰지 않았다. 기존 코드·문서에는 153곳(2026-11-28 `grep` 기준)이 남아 있다: `AGENTS.md` 3절, ArchUnit 규칙 이름 `core_는_이벤트_봉투를_모른다`, `docs/common-modules.md`, specs 10여 개, Java 주석.
+  - 정할 것: 대체어(두 개념에 쓰인다 — 응답 `ApiResponse`와 이벤트 `EventEnvelope`. AI 추천은 "공통 응답 형식"·"이벤트 헤더"), 클래스 이름 `EventEnvelope`까지 바꿀지.
+- [ ] **T47. Studio `UploadExceptionHandler`가 413을 `INVALID_REQUEST` 코드로 답한다** [결정 필요]
+  - 어디서: `apps/studio/.../api/controller/UploadExceptionHandler.java`. 상태(413)와 코드가 어긋난다. `ErrorCode.PAYLOAD_TOO_LARGE`가 PR #271로 생겼다.
+  - 정할 것: Studio 응답 계약의 `error.code`를 `PAYLOAD_TOO_LARGE`로 바꿀지(클라이언트가 보는 값이 바뀐다).
 
 
 ## CI·PR 도구

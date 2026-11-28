@@ -5,9 +5,11 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.server.observation.ServerRequestObservationConvention;
 
 /**
  * common:web 을 의존하면 예외 핸들러/추적 ID 응답 필터가 자동 등록된다.
@@ -21,6 +23,22 @@ public class CommonWebAutoConfiguration {
     @Bean
     public GlobalExceptionHandler globalExceptionHandler() {
         return new GlobalExceptionHandler();
+    }
+
+    /** 실패 응답의 오류 코드를 요청에 남긴다. {@link #apiErrorObservationConvention} 이 지표 태그로 싣는다. */
+    @Bean
+    public ApiErrorCodeAdvice apiErrorCodeAdvice() {
+        return new ApiErrorCodeAdvice();
+    }
+
+    /**
+     * HTTP 요청 지표에 {@code error.code} 태그를 더한다(결정 error-observability). Boot 의 MVC 관측 필터가 이 빈을 쓴다.
+     * 앱이 자기 규약을 두면 그쪽이 이긴다.
+     */
+    @Bean
+    @ConditionalOnMissingBean(ServerRequestObservationConvention.class)
+    public ApiErrorObservationConvention apiErrorObservationConvention() {
+        return new ApiErrorObservationConvention();
     }
 
     /**
