@@ -101,7 +101,7 @@
   - 영향: **돈** — 재투입 전 마감되면 판매자 월에 매출만 남고 환불 조정이 빠짐(과지급).
   - 재현: Settlement를 멈춘 채 결제 → 자동 환불 금융 완료 → Settlement가 `stove.payment.v1`을 먼저 소비하도록 재시작 → 지금 재시도 뒤 `consumer_quarantine` 보관·키 정지(PR #209 뒤 공통 동작, 이 시나리오 자체는 재현 전), 목표 대기 후 반영.
 
-- [ ] **T9. U4 — 결제 공급자가 환불 근거를 줄 수 없는 환경에서 Settlement가 환불 확인을 거절한다** ([결정 162](../../docs/decisions.md#single-reference-simulator))
+- [ ] **T9. U4 — 결제 공급자가 환불 근거를 줄 수 없는 환경에서 Settlement가 환불 확인을 거절한다** ([결정 162](../../docs/decisions.md#single-reference-simulator)) [외부 대기]
   - 어디서: `settlement:adapter/UnavailablePgRefunds.java:12`(`SIMULATED`면 `UPSTREAM_UNAVAILABLE`).
   - 목표: P4.3-2·P3.26-5. 결정 162: `simulators/mock-pg`·`SIMULATED` 분기·`SimulatedPgHttpGateway`·`UnavailablePgRefunds`를 없애고 개발·여정·실험·통합 테스트를 PortOne 어댑터 + 기준 시뮬레이터로 옮긴다(기본 공급자 설정 포함). 옛 `SIMULATED` 값 읽기는 결정 104 호환 테스트로 유지. 결정 140 중립화와 같은 작업 묶음. 범위: 운영 코드 Payment 3·Settlement 10개 파일, 테스트 21개 파일, Compose·검증 스크립트.
   - 영향: **돈(검증 환경)** — 판매자 월 환불 합계가 빠져 순액이 크게 남는다.
@@ -126,7 +126,7 @@
   - 영향: **돈** — 기한 정책을 바꾸면(예: 40분) `OrderExpired`가 DLT로 가 접수 전 시도가 만료를 모르고 결정 126의 만료 전 PG 재조회도 멈춘다. 결제창이 Order와 다른 시각에 닫힌다. 두 호스트 시계가 어긋나면 기한 안인데 결제창이 닫힌다.
   - 재현: 아키텍처 테스트 — Payment 소스에 결제 기한 계산(`ofMinutes(30)` 등) 0건. 통합 — Order 기한 설정을 바꿔 만료 → Payment가 받아들이는지. 단위 — Payment `Clock`을 1분 앞당겨 29분 30초 주문의 결제창이 거절되면 Red.
 
-- [ ] **T13. 모의 PG 경로가 승인 진행 접수 없이 결과를 확정한다(원칙 ⑦)** — 결정 162로 그 경로 자체를 없앤다(T9와 함께)
+- [ ] **T13. 모의 PG 경로가 승인 진행 접수 없이 결과를 확정한다(원칙 ⑦)** — 결정 162로 그 경로 자체를 없앤다(T9와 함께) [외부 대기]
   - 어디서: `payment:core/service/ResolvePayment.java:99-126`(`gateway.charge`), `payment:adapter/pg/SimulatedPgHttpGateway.java`, Order 설계 상태×이벤트 표의 `PENDING → PAID` 전이.
   - 목표: P3.11-2·I15. 공급자와 무관하게 접수 뒤에만 확정, 모의 PG도 같은 시도·접수 경로. Order 상태 모델에서 `PENDING → PAID`를 없앤다.
   - 영향: **돈·보유권(모의 환경)** — 기한 지난 `PENDING` 주문이 `PAID`(T1과 겹침), 만료된 주문에 성공이 와 DLT. 테스트 공급자 때문에 운영 계약이 넓어졌다.
@@ -298,6 +298,24 @@
 - [ ] **T40. (동결 뒤 백로그) T39에서 재지 않은 Kafka 기준선 항목** ([결정 238](../../docs/decisions.md#kafka-baseline-closure)) — M에 필요할 때만 꺼낸다. 미측정 사유는 [E13 결과](../../docs/experiments.md#kafka-baseline-results) "측정하지 못하는 것"에 있다.
   - [ ] 층 2 시험 앱 프로세스 kill 단계(시나리오 5·6 층 2)와 격리 뒤 `quarantine/replay` 재투입 시간 측정 — 선행: `bench_messaging.py`에 시험 앱 종료·재기동 단계, 회차 절차에 관리자 인증 ops API 호출을 넣는다. 그때까지 층 2 kill은 층 1 kill 결과로 대신한다.
   - [ ] 별도 시나리오(결정 235 범위 밖): DLT 저장 성공 직후 원본 offset 커밋 실패로 생기는 DLT 중복.
+
+- [ ] **T41. PG를 되살린다** [외부 대기] ([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)·[결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)·[결정 settlement-consumption-off](../../docs/decisions.md#settlement-consumption-off))
+  - [ ] payment의 `PgGateway` 등 PG 포트 구현을 다시 넣고 `ImmediateApprovalPgGateway`를 지운다.
+  - [ ] settlement의 PG 포트 구현을 넣고 `SETTLEMENT_CONSUMPTION_ENABLED`를 켠다.
+  - [ ] 결제 실패·환불 여정과 야간 검증을 되살린다.
+
+- [ ] **T42. 층 1 smoke의 정산 소비자 재시작 장애가 흔적을 남기지 않는다** ([결정 settlement-consumption-off](../../docs/decisions.md#settlement-consumption-off))
+  - 어디서: `tools/measurement/e2e_baseline.py`의 `SMOKE_FAULTS` 중 `kill:...service=settlement`(정산 소비자 재시작).
+  - 목표: settlement가 소비하지 않는 동안 이 장애는 흔적을 남기지 않으므로 다른 소비 앱으로 바꾸거나 뺀다.
+
+- [ ] **T43. `e2e`의 옛 `e2eTest` 여정이 지금 없는 API를 부른다** ([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters))
+  - 어디서: `TrackBCommerceFlowTest`·`TrackCFulfillmentFlowTest`·`PaymentFailurePathTest`(`/api/v1/payments/callback`, 앞의 둘은 `/api/v1/settlements/orders/*`도), `PaymentSimulatorE2eTest`·`PromotionOperationsE2eTest`(`/api/v1/payments/simulator/*`, 뒤쪽은 `/payments/{orderNo}/prepare`·`/settlements/orders/*`도). payment·settlement 컨트롤러에 이 경로가 없다.
+  - 목표: 지금 API로 옮길 수 없는 여정은 지우고 `e2eTest` 태스크·`testing.md` L6 행(건수)을 맞춘다. `E2eClient`의 콜백 서명(`PG_CALLBACK_SECRET`)도 함께 정리한다.
+- [ ] **T44. `verify-gateway-ownership.py`의 구매 픽스처가 License 제약에 걸려 실패한다**
+  - 어디서: `tools/verification/support/gateway_ownership.py`가 `stove_license.product_license`에 `status='ACTIVE'`를 넣는다. License V10(2026-11-06, `chk_product_license_status`)은 `STORED`·`REGISTERED`·`SUSPENDED`·`REFUNDED`만 받는다.
+  - 확인: 2026-11-28 PR #268 로컬 실행에서 `ERROR 3819 ... Check constraint 'chk_product_license_status' is violated`. PG 제거와 무관하다(License와 이 픽스처는 바꾸지 않았다).
+  - 할 일: 픽스처 상태를 현재 스키마 값으로 고치고 스크립트를 끝까지 통과시킨다. [로드맵 0절](../../docs/roadmap.md#scope-freeze)의 "가입·로그인, 역할별 진입" 확인 경로다.
+
 
 ## CI·PR 도구
 

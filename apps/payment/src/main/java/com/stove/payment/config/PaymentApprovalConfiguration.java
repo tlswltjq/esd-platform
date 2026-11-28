@@ -3,8 +3,6 @@ package com.stove.payment.config;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.payment.adapter.crypto.AesGcmApprovalPayloadProtection;
 import com.stove.payment.adapter.order.HttpOrderPaymentAdmissions;
-import com.stove.payment.adapter.pg.AdmittedPortOnePgGateway;
-import com.stove.payment.adapter.pg.PortOnePaymentApprovalGateway;
 import com.stove.payment.core.domain.ApprovalClosureRepository;
 import com.stove.payment.core.domain.ApprovalReviewRequeryInterval;
 import com.stove.payment.core.domain.PaymentApprovalRepository;
@@ -12,7 +10,6 @@ import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
 import com.stove.payment.core.port.ApprovalPayloadProtection;
 import com.stove.payment.core.port.OrderPaymentAdmissions;
-import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.core.port.PgPaymentApprovalGateway;
 import com.stove.payment.core.service.CloseApprovalReview;
 import com.stove.payment.core.service.RequestPaymentApproval;
@@ -45,17 +42,7 @@ public class PaymentApprovalConfiguration {
         return new HttpOrderPaymentAdmissions(builder.clone().baseUrl(properties.orderBaseUrl().toString())
                 .defaultHeader("X-Payment-Service-Key",properties.orderServiceKey()).requestFactory(factory).build());
     }
-    @Bean PgPaymentApprovalGateway pgPaymentApprovalGateway(PortOneProperties properties,RestClient.Builder builder,Clock refundReceptionClock) {
-        properties.requireConfigured();
-        SimpleClientHttpRequestFactory factory=new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(properties.connectTimeout()); factory.setReadTimeout(properties.readTimeout());
-        RestClient client=builder.clone().baseUrl(properties.baseUrl().toString()).defaultHeader("Authorization","PortOne "+properties.apiSecret())
-                .requestFactory(factory).build();
-        return new PortOnePaymentApprovalGateway(client,properties.storeId(),properties.channelKey(),refundReceptionClock);
-    }
-    @Bean PgGateway admittedPortOnePgGateway(PaymentApprovalRepository approvals,PgPaymentApprovalGateway gateway) {
-        return new AdmittedPortOnePgGateway(approvals,gateway);
-    }
+    // 결정 remove-pg-adapters: PgPaymentApprovalGateway 포트와 PORTONE_TEST의 PgGateway 포트는 운영 구현이 없다.
     @Bean ReadPaymentApproval readPaymentApproval(ReadPayment payments,PaymentApprovalRepository approvals) {
         return new ReadPaymentApproval(payments,approvals);
     }

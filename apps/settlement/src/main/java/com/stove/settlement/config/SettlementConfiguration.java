@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.settlement.adapter.CatalogOwnerHttpClient;
-import com.stove.settlement.adapter.SimulatedPgPaymentHttpClient;
-import com.stove.settlement.adapter.SimulatedPgSettlementHttpClient;
+import com.stove.settlement.adapter.UnavailablePgPayments;
 import com.stove.settlement.adapter.UnavailablePgRefunds;
+import com.stove.settlement.adapter.UnavailablePgSettlements;
 import com.stove.settlement.core.domain.PgReceiptRepository;
 import com.stove.settlement.core.domain.PgTransactionRepository;
 import com.stove.settlement.core.domain.PgFeeRepository;
@@ -34,7 +34,6 @@ import com.stove.settlement.core.service.RecordPaidSale;
 import java.net.URI;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -47,19 +46,13 @@ public class SettlementConfiguration {
     @Bean PlatformFeePolicy platformFeePolicy() { return new PlatformFeePolicy("PLATFORM_MVP_V1",1000); }
     @Bean FullRefundAllocationPolicy fullRefundAllocationPolicy() { return new ReverseOriginalFullRefundPolicy(); }
     @Bean RefundSettlementMonthPolicy refundSettlementMonthPolicy() { return new UseConfirmedRefundMonthPolicy(); }
-    @Bean @ConditionalOnProperty(name="stove.settlement.pg-provider",havingValue="SIMULATED",matchIfMissing=true)
-    PgPayments pgPayments(SettlementHttpProperties p, RestClient.Builder builder) {
-        return new SimulatedPgPaymentHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p,builder));
-    }
-    @Bean @ConditionalOnProperty(name="stove.settlement.pg-provider",havingValue="SIMULATED",matchIfMissing=true)
-    PgSettlements pgSettlements(SettlementHttpProperties p, RestClient.Builder builder) {
-        return new SimulatedPgSettlementHttpClient(client(p.pgBaseUrl(),"X-Pg-Api-Key",p.pgApiKey(),p,builder));
-    }
+    // PG 연동을 미룬 동안 PG 포트는 "제공 안 함" 어댑터로 채운다(결정 remove-pg-adapters·in-process-pg-approval).
+    @Bean PgPayments pgPayments() { return new UnavailablePgPayments(); }
+    @Bean PgSettlements pgSettlements() { return new UnavailablePgSettlements(); }
+    @Bean PgRefunds pgRefunds() { return new UnavailablePgRefunds(); }
     @Bean CatalogOwners catalogOwners(SettlementHttpProperties p, RestClient.Builder builder) {
         return new CatalogOwnerHttpClient(client(p.catalogBaseUrl(),"X-Settlement-Service-Key",p.catalogKey(),p,builder));
     }
-    @Bean @ConditionalOnProperty(name="stove.settlement.pg-provider",havingValue="SIMULATED",matchIfMissing=true)
-    PgRefunds pgRefunds() { return new UnavailablePgRefunds(); }
     @Bean RecordConfirmedRefund recordConfirmedRefund(SettlementRefundRepository refunds,SettlementSaleRepository sales,
             SellerMonthlySettlementRepository months,PgTransactionRepository records,PgRefunds supplier,ProcessedEventGuard inbox,
             FullRefundAllocationPolicy allocation,RefundSettlementMonthPolicy policy,Clock clock,PlatformTransactionManager manager,SellerLockRepository sellers) {

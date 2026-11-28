@@ -71,7 +71,7 @@ BFF 쪽 불변식(GW-I3~I9)은 [웹 BFF design](../web-bff/design.md#모듈-안-
 - 지금 흐름: 공개 HTTPS edge가 Payment로 직접 보낸다(`docs/security.md:48`·`:97-115`). 게이트웨이는 결정 224로 내부망에만 있으므로, 통지를 Gateway 계층으로 받는다면 공개 입구(웹 BFF 또는 별도 입구)부터 정해야 한다. 어느 쪽이 목표인지는 [결정 필요 M-GW-1].
 - Gateway를 지나게 될 때 Gateway가 지킬 것(R7.2): 본문 바이트 그대로(Payment가 원문으로 서명을 검증한다), 서명 헤더 그대로, `POST` 하나, 쿠키·CSRF·역할 없음.
 
-> adapter 메모(공급자 이름은 여기만): 지금 통지 경로는 `/api/v1/payments/webhooks/portone`(`payment:api/controller/PortOneWebhookController.java:28`)이고 공급자 이름을 담아 결정 140·플랫폼 T28 중립화 대상이다. 서명은 Standard Webhooks 방식 헤더 `webhook-id`·`webhook-timestamp`·`webhook-signature`(HMAC-SHA256)를 Payment `HmacPortOneWebhookVerifier`가 원문으로 검증하고, 본문 상한 64 KiB도 Payment가 지킨다(Payment R6.1). 통지 주소 결정 기록은 결정 29 하위 "웹훅 수신 주소: 인스턴스 공개 IP + IP 인증서"다. 실제 PortOne 공개 수신 확인은 G7(결정 140).
+> adapter 메모(공급자 이름은 여기만): 지금 통지 경로는 `/api/v1/payments/webhooks/portone`(`payment:api/controller/PortOneWebhookController.java:28`)이고 공급자 이름을 담아 결정 140·플랫폼 T28 중립화 대상이다. 서명은 Standard Webhooks 방식 헤더 `webhook-id`·`webhook-timestamp`·`webhook-signature`(HMAC-SHA256)를 Payment adapter가 원문으로 검증하고, 본문 상한 64 KiB도 Payment가 지킨다(Payment R6.1). 그 검증 adapter는 걷어내 지금 이 경로는 조립되지 않는다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)). 통지 주소 결정 기록은 결정 29 하위 "웹훅 수신 주소: 인스턴스 공개 IP + IP 인증서"다. 실제 PortOne 공개 수신 확인은 G7(결정 140).
 
 ## 설정
 

@@ -29,8 +29,8 @@ class RefundLookupConfigurationTest {
             .withBean(Clock.class, Clock::systemUTC)
             .withBean(RefundExecutionTraceContexts.class, () -> mock(RefundExecutionTraceContexts.class))
             .withBean(PaymentTracing.class, () -> (parent, paymentId, work) -> work.run())
-            .withBean(PortOneProperties.class, () -> new PortOneProperties(URI.create("http://127.0.0.1"), "fixture",
-                    "store-fixture", "channel-fixture", "fixture", Duration.ofSeconds(2), Duration.ofSeconds(65),
+            .withBean(PortOneProperties.class, () -> new PortOneProperties(
+                    "store-fixture", "channel-fixture", Duration.ofSeconds(2), Duration.ofSeconds(65),
                     URI.create("https://fixture.example/webhook")));
 
     @Test void enabledLookupUsesABoundedExecutorAndADifferentSchedulerFromPurchaseProcessing() {

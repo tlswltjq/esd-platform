@@ -89,7 +89,7 @@ def suites = [
      props: ['kafka-brokers', 'order-evidence'],
      phase: [test: 'OrderPurchaseFlowTest', property: 'order-phase', first: 'preparesOrdersWithRelayPaused'],
      expected: 1, failure: 'Order verification requires one executed check without skips'],
-    // 여덟 앱. 실제 Payment 작업자와 독립 모의 PG
+    // 여덟 앱. 실제 Payment 작업자
     [task: 'paymentE2eTest', tag: 'payment',
      description: '주문·결제·결과 반영과 응답 유실·재시작·발행 복구를 검증한다',
      props: ['kafka-brokers', 'payment-evidence'],
@@ -118,12 +118,11 @@ def suites = [
      optional: ['tempo-base-url', 'tracing-evidence', 'tracing-scenario', 'tracing-sampled', 'tracing-expected-state'],
      phase: [test: 'TracePropagationE2eTest', property: 'tracing-phase', first: 'prepareTwoDurableReceipts'],
      expected: 1, failure: 'Tracing verification requires one executed check without skips'],
-    // 업무 앱 열하나와 독립 실행 HTTP 결제 공급자
-    [task: 'settlementE2eTest', tag: 'settlement',
-     description: '실제 구매·판매자 배분·PG 지급 명세·대사·외부 장애와 원본 재전달을 검증한다',
-     props: ['kafka-brokers', 'settlement-evidence'],
-     phase: [test: 'SettlementPurchaseFlowTest', property: 'settlement-phase', first: 'initialPurchasesAndDownloads'],
-     expected: 1, failure: 'Settlement verification requires one executed check without skips'],
+    // 열두 앱 전체 스택(verify-jib.py). 결제는 프로세스 안 승인 어댑터가 확정한다(결정 in-process-pg-approval)
+    [task: 'purchaseE2eTest', tag: 'purchase',
+     description: '실제 구매·지급·다운로드와 소비를 끈 Settlement의 조회 경계를 검증한다',
+     phase: [test: 'PurchaseDownloadFlowTest', property: 'purchase-phase', first: 'purchasesAndDownloads'],
+     expected: 1, failure: 'Purchase verification requires one executed check without skips'],
 ]
 
 // `chaos` 는 아래 chaosTest 가 맡는다. `api-demo` 는 태스크 없이 빼 두는 태그다.

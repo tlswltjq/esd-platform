@@ -54,7 +54,7 @@
   - 영향: **판매자 돈(월 귀속)** — 월말 승인이 다음 달 매출이 되어 PG 정산 자료(G7)와 월이 어긋나고 마감 월이 바뀐다.
   - 재현: 승인 확정 10-31 23:59:50 KST·`OrderPaid.occurredAt` 11-01 00:00:20 → `saleMonth=2026-10`. 칸 없는 옛 본문 견본 → `occurredAt` 월(P2.7-3 호환 테스트). 같은 주문 옛 행에 새 칸 있는 재전달 → 무변화인지 충돌인지 고정.
 
-- [ ] **SE-T2. 시뮬레이터 전용 공급자 경로가 운영 코드에 있다(U4)** (결정 162, 플랫폼 T9·T13)
+- [ ] **SE-T2. 시뮬레이터 전용 공급자 경로가 운영 코드에 있다(U4)** (결정 162, 플랫폼 T9·T13) [외부 대기]
   - 어디서: `S/adapter/UnavailablePgRefunds.java:12`(SIMULATED면 `UPSTREAM_UNAVAILABLE`), `SimulatedPgPaymentHttpClient`·`SimulatedPgSettlementHttpClient`·`UnavailablePgSettlements`, `S/core/domain/PgEvidence.java:7`·`PgCost.java:28`·`PgSettlement.java:12`·`PgRefundCancellation.java:20`, `S/core/service/ReceivePgSettlement.java:33-47`·`ReconcilePgReceipt.java:30`·`ReadPgReceipts.java:21`, `application.yml` `pg-provider: ${SETTLEMENT_PG_PROVIDER:SIMULATED}`·`MOCK_PG_URI`.
   - 목표: R4.6·R5. 승인·취소 adapter 하나(기준 시뮬레이터는 주소만), `pg-provider`·`MOCK_PG_*` 설정 제거, `POST /pg-receipts`·`/reconcile` 제거, `GET /pg-receipts`는 옛 행 읽기 전용. 옛 `SIMULATED` 행 읽기는 결정 104 호환 테스트.
   - 영향: **판매자 돈** — 시뮬레이터 환경에서 전액 환불이 월 환불 합계에 들어가지 않아 판매자 순액이 크게 남는다.
@@ -126,7 +126,7 @@
 - [ ] [외부 대기] 정산 자료 수집을 실제 스택에서 켜고 런타임 검증 — G7. 가맹점 키와 거래 키 대응 검증이 있어야 한다. 정산 자료 흉내 서버는 없고 HTTP 계약은 `TossPayStatementHttpTest`의 루프백 응답 서버로만 확인
 - [ ] [외부 대기] 승인·취소 읽기 adapter를 실제 PG에 연결해 확인 — G7(결정 110·111 후속)
 - [ ] [외부 대기] 실제 PG 지급 수령 확인: 지급 보고 ≠ 은행 실입금을 구분한 별도 수령 계약 — G7
-- [ ] G3 종료 여정([결정 142](../../docs/decisions.md#g3-exit-current-contract)): SE-T1·SE-T2를 마친 코드로 기준 시뮬레이터 실제 스택 여정 — 원매출·환불 조정·판매자/플랫폼 순액·마감 전후 반영, 비용·지급 미확정 표시(`pgFeeAmount`·`platformNetAmount` NULL, 빈 TEST 결과를 0원으로 보지 않음). 목표에서는 PORTONE 지급 명세 503 확인 대신 지급 명세 접수 경로가 없음을 확인한다(SE-T2)
+- [ ] [외부 대기] G3 종료 여정([결정 142](../../docs/decisions.md#g3-exit-current-contract)): SE-T1·SE-T2를 마친 코드로 기준 시뮬레이터 실제 스택 여정 — 원매출·환불 조정·판매자/플랫폼 순액·마감 전후 반영, 비용·지급 미확정 표시(`pgFeeAmount`·`platformNetAmount` NULL, 빈 TEST 결과를 0원으로 보지 않음). 목표에서는 PORTONE 지급 명세 503 확인 대신 지급 명세 접수 경로가 없음을 확인한다(SE-T2)
 - [ ] 정방향 응답 쌍 2개(매출·환불 조정)의 경보 기준 시간과 `AWAITING_SALE` 경보 기준 — G6 실험 측정 뒤([결정 159](../../docs/decisions.md#forward-gap-threshold)), G7 완료 조건
 
 ## 범위 밖(후속)
@@ -136,4 +136,4 @@
 - 할인·쿠폰·플랫폼 보조금·복수 상품·다중 통화·판매자별 요율/계약·차지백·수수료 반환·부분 환불·부분/진행 중 취소 원매출의 지연 접수.
 - 일반 정산 API 밖의 카드 차액 정산 등 별도 비용 자료 출처.
 - 플랫폼 수수료(`PlatformFeePolicy`)의 정책 인터페이스화.
-- 공유 스택의 구 내장 PG 원장 실제 이관(도구·전용 DB 검증만 완료), 미산정 비용의 사후 확정, 옛 `pg_receipt` 표 삭제 시점.
+- 공유 스택의 구 내장 PG 원장 실제 이관(이관 대상이던 mock-pg DB와 도구는 없앴다, [결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)), 미산정 비용의 사후 확정, 옛 `pg_receipt` 표 삭제 시점.

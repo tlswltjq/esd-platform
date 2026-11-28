@@ -5,7 +5,7 @@ import com.stove.common.contract.DomainEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.messaging.trace.TraceContextCapture;
-import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
+import com.stove.payment.adapter.pg.ImmediateApprovalPgGateway;
 import com.stove.payment.core.domain.PgResult;
 import com.stove.payment.core.domain.PgUnavailable;
 import com.stove.payment.core.port.PgGateway;
@@ -19,9 +19,13 @@ import org.springframework.transaction.annotation.Transactional;
 /** Explicit local verification source; absent from bootJar and production component scanning. */
 @TestConfiguration(proxyBeanMethods=false)
 public class PaymentFaultConfiguration {
-    @Bean @Primary PgGateway verificationGateway(SimulatedPgHttpGateway supplier,Environment env) {
+    @Bean @Primary PgGateway verificationGateway(ImmediateApprovalPgGateway supplier,Environment env) {
         return request -> {
             PgResult result=supplier.charge(request);
+            // 운영 어댑터는 항상 승인한다(결정 in-process-pg-approval). 거절 결과는 이 검증용 설정으로만 만든다.
+            if(env.getProperty("stove.verification.decline",Boolean.class,false))
+                return new PgResult(result.provider(),result.paymentId(),result.orderNo(),result.amount(),result.currency(),
+                        result.transactionId(),result.occurredAt(),PgResult.Decision.DECLINED,"DECLINED","검증용 거절",null);
             if(env.getProperty("stove.verification.fail-after-provider",Boolean.class,false))
                 throw new PgUnavailable("verification: response lost after supplier commit");
             return result;

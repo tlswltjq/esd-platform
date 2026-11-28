@@ -50,7 +50,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
 /** HTTP/JWT/MySQL verification; financial and suspension evidence use existing domain fixtures. */
-class RefundCancellationAdminApiIntegrationTest extends PaymentIntegrationTestBase {
+class RefundCancellationAdminApiIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     private static final String ROOT = "/api/v1/admin/refund-cancellation-holds";
     private static final Instant BASE = Payment.now();
     @MockitoSpyBean PaymentRepository payments;

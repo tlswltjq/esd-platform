@@ -30,7 +30,7 @@ import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProc
         "management.otlp.tracing.export.enabled=false"})
 @AutoConfigureObservability
 @Import(PaymentTracingIntegrationTest.TracingConfiguration.class)
-class PaymentTracingSchedulerIntegrationTest extends PaymentIntegrationTestBase {
+class PaymentTracingSchedulerIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     @Autowired OrderEventListener listener;
     @Autowired ObjectMapper mapper;
     @Autowired OutboxEventRepository events;

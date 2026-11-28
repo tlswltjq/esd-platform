@@ -59,35 +59,12 @@ spring:
 
 stove:
   settlement:
-    pg-provider: ${SETTLEMENT_PG_PROVIDER:SIMULATED}
-    pg-base-url: ${MOCK_PG_URI:http://localhost:8092}
-    pg-api-key: ${MOCK_PG_SETTLEMENT_KEY:}
+    # 결정 settlement-consumption-off: PG 조회 어댑터가 없는 동안 ORDER_PAID·환불 확정 리스너를 끈다. PG를 되살릴 때 켠다.
+    consumption-enabled: ${SETTLEMENT_CONSUMPTION_ENABLED:false}
     catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
     catalog-key: ${CATALOG_SETTLEMENT_SERVICE_KEY:}
     connect-timeout: 2s
     read-timeout: 5s
-    tosspay:
-      enabled: ${SETTLEMENT_TOSSPAY_ENABLED:false}
-      base-url: ${TOSSPAY_API_BASE_URL:https://pay.toss.im}
-      api-key: ${TOSSPAY_API_KEY:}
-      merchant-id: ${TOSSPAY_MERCHANT_ID:}
-      environment: ${TOSSPAY_ENVIRONMENT:TEST}
-      portone-store-id: ${TOSSPAY_PORTONE_STORE_ID:}
-      portone-channel-key: ${TOSSPAY_PORTONE_CHANNEL_KEY:}
-      identity-mapping-verified: ${TOSSPAY_IDENTITY_MAPPING_VERIFIED:false}
-      max-pages: 100
-      connect-timeout: 2s
-      read-timeout: 10s
-      scheduled-enabled: ${TOSSPAY_SCHEDULED_ENABLED:true}
-      poll-delay: 1h
-      lookback-days: 7
-    portone:
-      base-url: ${PORTONE_API_BASE_URL:https://api.portone.io}
-      api-secret: ${PORTONE_API_SECRET:}
-      store-id: ${PORTONE_STORE_ID:}
-      channel-key: ${PORTONE_CHANNEL_KEY:}
-      connect-timeout: 2s
-      read-timeout: 5s
   messaging:
     ops:
       enabled: false

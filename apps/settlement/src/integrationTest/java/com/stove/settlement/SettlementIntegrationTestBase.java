@@ -23,7 +23,9 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "stove.outbox.relay-enabled=false", "stove.messaging.ops.enabled=false", "spring.kafka.listener.auto-startup=false"})
+        "stove.outbox.relay-enabled=false", "stove.messaging.ops.enabled=false", "spring.kafka.listener.auto-startup=false",
+        // 결정 settlement-consumption-off: 운영 기본은 꺼짐이다. 소비 계약은 여기서 켜고 검증한다.
+        "stove.settlement.consumption-enabled=true"})
 @Import({InfraContainers.MySql.class, InfraContainers.Kafka.class})
 public abstract class SettlementIntegrationTestBase {
     static final String ISSUER = "https://settlement-test.example";
@@ -45,7 +47,6 @@ public abstract class SettlementIntegrationTestBase {
         } catch (Exception e) { throw new ExceptionInInitializerError(e); }
     }
     @DynamicPropertySource static void jwt(DynamicPropertyRegistry p) {
-        p.add("stove.settlement.pg-api-key",() -> "test-settlement-key");
         p.add("stove.settlement.catalog-key",() -> "test-catalog-key");
         p.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> ISSUER);
         p.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", () -> "http://127.0.0.1:" + JWKS.getAddress().getPort() + "/jwks");

@@ -20,7 +20,7 @@ import com.stove.common.contract.EventType;
 import com.stove.common.contract.payload.RefundExecutionRequestedEvent;
 import com.stove.common.messaging.inbox.ProcessedEventGuard;
 import com.stove.common.web.error.BusinessException;
-import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
+import com.stove.payment.adapter.pg.ImmediateApprovalPgGateway;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
@@ -68,7 +68,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-class RefundReceptionIntegrationTest extends PaymentIntegrationTestBase {
+class RefundReceptionIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     private static final Instant RECEIVED_AT = Instant.parse("2026-10-27T01:01:00.123456Z");
     private static final PaymentTraceContext PURCHASE_PARENT = new PaymentTraceContext("00-11111111111111111111111111111111-2222222222222222-01");
     private static final PaymentTraceContext REFUND_PARENT = new PaymentTraceContext("00-33333333333333333333333333333333-4444444444444444-01");
@@ -85,7 +85,7 @@ class RefundReceptionIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired KafkaListenerEndpointRegistry listeners;
     @MockitoBean Clock clock;
     @MockitoSpyBean RefundExecutionTraceContexts contexts;
-    @MockitoSpyBean SimulatedPgHttpGateway gateway;
+    @MockitoSpyBean ImmediateApprovalPgGateway gateway;
 
     @BeforeEach void initialize() { clear(); when(clock.instant()).thenReturn(RECEIVED_AT); }
     @AfterEach void clear() {
@@ -121,18 +121,6 @@ class RefundReceptionIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(unchanged.supplierResult()).isEqualTo(original);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Integer.class)).isZero();
         verifyNoInteractions(gateway);
-    }
-
-    @Test void aStoppedExternalProviderDoesNotPreventDurableReceipt() {
-        Payment paid = paid();
-        RefundExecutionRequest input = execution(paid);
-        try {
-            ExternalPgProcess.stop();
-            receive.execute(input);
-            assertThat(executions.findByAttemptId(input.attemptId()).orElseThrow().getStatus()).isEqualTo(RefundExecutionStatus.PENDING);
-            assertThat(inboxCount()).isEqualTo(1);
-            verifyNoInteractions(gateway);
-        } finally { ExternalPgProcess.restart("APPROVED", 300); }
     }
 
     @Test void failureAfterTraceInsertRollsBackTheReceiptInboxAndParentTogether() {

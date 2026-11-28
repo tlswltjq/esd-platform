@@ -60,9 +60,8 @@ class DeploymentShutdownContractTest {
     @DisplayName("기본 Compose는 사전 생성 이미지를 실행하고 앱 전체의 healthcheck를 제공한다")
     void preparedImagesKeepHealthChecksWithoutImageBuilds() {
         Map<String, Object> services = asMap(loadYaml(repoRoot().resolve(APPS_COMPOSE)).get("services"));
-        List<String> names = new ArrayList<>(appDirectories().stream()
-                .map(path -> path.getFileName().toString()).toList());
-        names.add("mock-pg");
+        List<String> names = appDirectories().stream()
+                .map(path -> path.getFileName().toString()).toList();
 
         for (String name : names) {
             Map<String, Object> service = asMap(services.get(name));

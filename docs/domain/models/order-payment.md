@@ -88,16 +88,16 @@ Order는 결과 이벤트의 원래 요청·구매자·금액을 검증하고 �
 결과와 Outbox 저장이 실패해도 공급자 결정은 남는다. 재시도 후 최종 결과 이벤트는 한 건만 저장한다.
 할인액이 포함된 주문은 `정가 - 할인액 = 청구액`을 확인하고 청구액 그대로 결제한다. 할인 자격은 다시 판정하지 않는다.
 
-## 외부 모의 PG와 HTTP 어댑터
+## PG 어댑터
 
-[SimulatedPgHttpGateway](../../../apps/payment/src/main/java/com/stove/payment/adapter/pg/SimulatedPgHttpGateway.java)가 Payment의 PgGateway를 구현한다.
-외부 공급자는 [독립 앱](../../../simulators/mock-pg/src/main/java/com/stove/mockpg/MockPgApplication.java)과 전용 MySQL에 결정·비용을 보존한다.
+[ImmediateApprovalPgGateway](../../../apps/payment/src/main/java/com/stove/payment/adapter/pg/ImmediateApprovalPgGateway.java)가 Payment의 PgGateway를 구현한다. 외부 호출 없이 모든 결제를 바로 승인한다([결정 in-process-pg-approval](../../decisions.md#in-process-pg-approval)).
+외부 모의 PG 앱과 HTTP 어댑터는 걷어냈다([결정 remove-pg-adapters](../../decisions.md#remove-pg-adapters)). 아래 멱등 규칙은 PgGateway 포트의 계약이다.
 동일 paymentId를 먼저 조회하고 404이면 같은 키로 승인한다. 같은 키의 다른 입력은 거부하고 통신 오류는 PENDING으로 남긴다.
-최종 Payment 결과는 pgFeePolicyId·pgFeeRateBps·pgFeeAmount를 함께 보존한다. 비용 없는 과거 결정은 미산정이며 0원으로 보충하지 않는다.
-기존 simulated_payment_charge는 보존·이관 근거이며 새 결정은 기록하지 않는다. [전환 절차](../../../tools/migrations/README.md)를 따른다.
+새 결제의 pgFeePolicyId·pgFeeRateBps·pgFeeAmount는 비어 있다(미산정이며 0원으로 보충하지 않는다).
+기존 simulated_payment_charge는 보존·이관 근거이며 새 결정은 기록하지 않는다.
 
 PG 비용·지급 명세는 Settlement가 자기 포트로 직접 조회한다. 주문·License 이벤트에 수수료를 중계하지 않는다.
-이 절은 외부 모의 PG의 계약이다. 후속 구현으로 PortOne TEST 결제창·서명 웹훅·전액 환불 실행/조회와 관리자 심사를 제공한다. [현재 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)과 [검증 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md)를 따른다. 실제 운영 자금 이동과 정산 환불 조정은 후속 범위다.
+결제창·서명 웹훅·전액 환불 실행/조회의 PG 어댑터도 걷어내 지금은 조립되지 않는다. 코어 계약은 [현재 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)과 [검증 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md)를 따른다. 실제 운영 자금 이동과 정산 환불 조정은 후속 범위다.
 
 ## 결제 입력과 결과 값
 

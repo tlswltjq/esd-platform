@@ -2,9 +2,7 @@
 # - PR·main push: 결정 번호·식별자와 기준 판 보존 검사를 먼저 돌린 뒤 단위·아키텍처·통합(Testcontainers)·과거 이행 = ./gradlew build
 #   결정 207: PR은 바뀐 범위만 빌드한다(tools/ci/build_scope.py). main push는 항상 전체.
 #   결정 217: 전체 빌드는 통합·이행 테스트를 여러 러너로 나눠 동시에 돌리고(tools/ci/build_shards.py), build가 결과를 모은다.
-# - 밤마다·수동: 실제 앱 스택 E2E + 로컬 fake-PortOne 환불·정산 여정과 승인 보류 종결·실패 시도 재결제·30분 안 재진입 여정,
-#   주문 기한(30분)을 넘기는 승인 여정(31분 대기, 별도 작업) (실제 PortOne·비밀 값 없음)
-# 실제 PortOne 결제·환불은 CI에서 돌리지 않는다(사람 승인 뒤 손으로 실행). 비밀 값을 쓰지 않는다.
+# - 밤마다·수동: 실제 앱 스택 E2E(verify-jib.py). PG 연동은 걷어냈다(결정 remove-pg-adapters). 비밀 값을 쓰지 않는다.
 # 결정 107: main 규칙셋이 build 작업의 name을 필수 검사로 쓴다. name을 바꾸거나 pull_request에
 # paths 조건을 달면 필수 검사가 보고되지 않아 PR이 병합 대기에서 풀리지 않는다. 바꿀 때는 규칙셋도 함께 고친다.
 # 결정 build-on-draft: 착수 표시용 draft PR에서도 push마다 build를 돌린다. job if로 건너뛴 작업은 필수 검사에서
@@ -22,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       stack:
-        description: "실제 앱 스택 E2E와 로컬 fake-PortOne 환불·정산 여정 실행"
+        description: "실제 앱 스택 E2E 실행"
         type: boolean
         default: true
 
@@ -159,74 +157,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: stack-run
-          path: runs/
-          retention-days: 7
-
-  refund-settlement:
-    name: fake PortOne refund settlement
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.stack)
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Prepare cached local dependencies
-        run: |
-          docker pull mysql:8.0
-          docker pull redis:7-alpine
-          docker pull apache/kafka:3.9.0
-      - name: Refund settlement journey
-        run: python3 -B tools/verification/verify-refund-settlement.py
-      # 결정 119·120: 흉내 서버를 넓힌 G1 종료 여정과 30분 안 이탈/재진입 조합. 앞 여정이 실패해도 따로 돌린다.
-      - name: Approval hold closure, failed-attempt retry and re-entry journeys
-        if: success() || failure()
-        run: python3 -B tools/verification/verify-approval-journeys.py
-      - name: Upload run logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: refund-settlement-run
-          path: runs/
-          retention-days: 7
-
-  # 결정 120: 주문 기한을 넘는 승인 조합. 주문을 함께 만들고 31분을 한 번 기다린다. PR CI에는 넣지 않는다.
-  approval-expiry:
-    name: fake PortOne approval expiry (31 min)
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.stack)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Prepare cached local dependencies
-        run: |
-          docker pull mysql:8.0
-          docker pull redis:7-alpine
-          docker pull apache/kafka:3.9.0
-      - name: Approval expiry journey
-        run: python3 -B tools/verification/verify-expiry-journeys.py
-      - name: Upload run logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: approval-expiry-run
           path: runs/
           retention-days: 7

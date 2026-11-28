@@ -2717,6 +2717,44 @@
 - 구분: 추천 수용
 - 결과: [PR #269](https://github.com/tlswltjq/esd-platform/pull/269), 근거 색인 2026-11-28 알 수 없는 속성 안전망 제거 행
 
+<a id="remove-pg-adapters"></a>
+## mock-pg 앱과 PG 어댑터를 걷어내고 payment·settlement 코어는 남긴다
+- 문제: 결제·정산·PG 연동을 나중으로 미루려 하는데 PG 경로가 세 겹(mock-pg 앱과 `Simulated*` 어댑터, PortOne·TossPay 어댑터, 검증용 fake PortOne)으로 남아 다른 코드를 읽는 데 방해가 된다. payment·settlement 코어가 PG 모양이고 동결 여정 5개 중 3개([결정 201](#scope-freeze-verified-journeys))가 PG 경로를 쓴다.
+- 선택지: A mock-pg만 제거하고 PortOne 어댑터는 유지 / B PG 어댑터를 모두 제거하고 payment·settlement 코어는 유지 / C payment·settlement 모듈까지 통째로 제거 / D 코드는 두고 빌드·기본 스택에서만 제외 (추천: C — 결제·정산을 미룬다면 그 책임을 가진 모듈이 없는 상태가 구조와 맞고, B·D는 돌지 않는 코드를 남긴다)
+- 내 의견: "B" (결정 전 발언: "과거에 PG연동을 위해 실제 연결을 하기도 하고 목pg앱을 만들기도했는데 결제, 정산, PG연동은 나중으로 미루려고해서 mock pg와 어뎁터는 걷어내고싶음. 다른 코드 이해에도 방해되고")
+- 선택: B — 이유는 말하지 않았다. 어댑터가 없는 동안 포트를 무엇으로 조립하는지와 결정 201 여정 기준선을 어떻게 고치는지는 따로 정한다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268), 판단 색인 행
+
+<a id="in-process-pg-approval"></a>
+## PG 어댑터가 없는 동안 payment는 프로세스 안 "항상 승인" 어댑터 하나로 결제를 확정한다
+- 문제: [결정 remove-pg-adapters](#remove-pg-adapters)로 PG 어댑터를 모두 지우면 `PgGateway` 구현이 없어 payment가 뜨지 않고, order 확정·license 지급·download를 실제 스택에서 검증할 입력(결제 결과 이벤트)이 사라진다. 현재 단계 M의 회귀 기준선도 구매 여정이다.
+- 선택지: 1 모든 PG 포트를 "제공 안 함" 어댑터로 채운다 / 2 payment·settlement를 스택에서 내린다 / 3 payment 안에 외부 호출 없이 바로 승인으로 답하는 어댑터 하나를 두고 settlement의 PG 포트는 "제공 안 함"으로 채운다 (추천: 3 — 완료된 order·license·download의 실제 스택 검증을 클래스 하나로 지킨다)
+- 내 의견: "3"
+- 선택: 3
+  - [결정 201](#scope-freeze-verified-journeys)의 여정 가운데 결제 실패·이탈→재진입·종료와 자동·수동 환불은 기준선에서 빠지고, 야간 fake PortOne 작업도 없앤다. 구매→지급→다운로드는 유지한다.
+  - 실제 PG를 되살릴 때 이 어댑터를 지운다.
+- 구분: 추천 수용
+- 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268)
+
+<a id="settlement-consumption-off"></a>
+## PG가 없는 동안 settlement는 띄우되 이벤트 소비를 끈다
+- 문제: settlement는 `ORDER_PAID`마다 PG에서 결제 금액·수수료를 조회해 매출을 기록한다(`RecordPaidSale`). [결정 in-process-pg-approval](#in-process-pg-approval)대로 PG 포트를 "제공 안 함"으로 채우면 구매마다 조회가 실패해 4회 시도(7초 대기) 뒤 격리·키 정지가 되고 `ConsumerKeysQuarantined` 경보가 계속 울린다. 환불 확정 리스너도 같다.
+- 선택지: A settlement를 스택에서 내린다(코드·테스트만 유지) / B 앱은 띄우되 `ORDER_PAID`·환불 확정 리스너만 설정으로 끈다 / C 그대로 띄운다 (추천: A — 떠 있지만 아무 일도 하지 않는 앱과 끄는 스위치를 만들지 않는다)
+- 내 의견: "띄우되 소비만 끈다"
+- 선택: B — 이유는 말하지 않았다. 스위치는 `stove.settlement.consumption-enabled`(기본 꺼짐)이고, PG를 되살릴 때 켠다. 꺼져 있는 동안의 이벤트는 소비자 그룹 오프셋이 움직이지 않으므로 Kafka 보존 기간 안의 것만 나중에 따라잡는다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268)
+
+<a id="packet-deleted-files"></a>
+## 리뷰 묶음이 리뷰어 입력 한도를 넘으면 통째로 지운 파일의 diff도 목록으로 바꾼다
+- 문제: [결정 packet-size-cap](#packet-size-cap)은 300KB를 넘으면 문서 diff만 목록으로 바꾼다. PR #268은 통째로 지운 파일 83개(약 16,000줄) 때문에 문서를 줄인 뒤에도 1,226,906자여서 Codex 입력 한도(1,048,576자)에 걸려 교차 리뷰가 거부됐다. 다시 돌려도 같다.
+- 선택지: 1 문서를 목록으로 바꾼 뒤에도 입력 한도를 넘으면 통째로 지운 파일의 diff를 파일 목록(줄 수)으로 바꾼다 / 2 규칙은 두고 PR을 1MB 아래로 나눈다 / 3 리뷰 대기로 둔다 (추천: 1 — 추가·수정된 코드는 전부 리뷰되고, 중간 상태마다 빌드·검증을 다시 맞추는 분할 비용이 없다)
+- 내 의견: "1" (처음에는 "리뷰 대기로 둔다"를 골랐고, "리뷰 재시도"가 같은 이유로 실패한 뒤 바꿨다)
+- 선택: 1 — 한도는 1,000,000자(Codex 한도에서 호출 문구 몫을 뺀 값)다. 목록으로 바꾼 사실과 파일 수를 묶음 머리에 적는다. 리뷰어는 지운 내용 자체를 보지 못한다.
+- 구분: 추천 수용
+- 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268)
+
 ---
 
 ## 검증하며 드러난 것

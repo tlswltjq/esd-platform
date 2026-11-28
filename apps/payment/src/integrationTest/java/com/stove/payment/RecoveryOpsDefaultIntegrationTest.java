@@ -10,10 +10,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.client.RestClient;
 
 /** 기본 설정에서는 ADMIN에게도 공통 운영 API가 존재하지 않는다. */
-@TestPropertySource(properties = {
-        "stove.payment.pg.provider=SIMULATED", "stove.payment.pg.base-url=http://127.0.0.1:1",
-        "stove.payment.pg.api-key=ops-fixture-key", "stove.payment.pg.connect-timeout=PT1S",
-        "stove.payment.pg.read-timeout=PT1S"})
+@TestPropertySource(properties = "stove.payment.pg.provider=SIMULATED")
 class RecoveryOpsDefaultIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     @LocalServerPort int port;
 

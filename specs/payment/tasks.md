@@ -174,7 +174,7 @@
 
 ### 공급자 중립(원칙 ②)·테스트 편의(원칙 ⑦)
 
-- [ ] **PA-T15. 시뮬레이터 전용 공급자 경로가 운영 코드에 있다** ([결정 162](../../docs/decisions.md#single-reference-simulator), 플랫폼 T9·T13)
+- [ ] **PA-T15. 시뮬레이터 전용 공급자 경로가 운영 코드에 있다** ([결정 162](../../docs/decisions.md#single-reference-simulator), 플랫폼 T9·T13) [외부 대기]
   - 어디서: `payment:adapter/pg/SimulatedPgHttpGateway.java`, `payment:config/PaymentConfiguration.java:65·69`(`matchIfMissing=true`로 `SIMULATED` 기본), `application.yml:74-76`(`PAYMENT_PG_PROVIDER:SIMULATED`, `MOCK_PG_*`), `payment:core/service/ResolvePayment.java:99-126`(`gateway.charge`, 접수 없는 확정).
   - 목표: R9.2·R22. PortOne adapter + 흉내 서버 하나, 모든 확정이 시도·접수 경로. 옛 `SIMULATED` 행 읽기(결정 104).
   - 영향: 모의 경로가 접수 없이 결과를 내 결정 153 대조와 어긋난다(T13).
@@ -227,7 +227,7 @@
 - [ ] [외부 대기] 실제 PG로 승인·취소 다시 확인(전용 테스트 가맹점 필요, `PAY_PENDING`의 뜻 포함) — G7([결정 140](../../docs/decisions.md#defer-real-pg)), 반복 검증은 흉내 서버 여정
 - [ ] [외부 대기] 실제 TEST에서 실패 시도 거래 이력 필드 충족 여부 — G7
 - [ ] [외부 대기] 공급자 보장 기한 값(확정 송신·환불 재송신 3시간 근거, 끝난 결제 감시 `watch_until`) 공급자 문서 확인 — G7(결정 154)
-- [ ] 기준 시뮬레이터 확장([결정 141](../../docs/decisions.md#portone-fake-as-reference-simulator)): 흉내 서버에 응답 지연·5xx·연결 끊김·취소 대기 유지와 뒤늦은 확정·통지 중복/역순/누락, 콘솔 승인(MC-P14 재현용)·시계 어긋남(PA-T1 재현용). 운영 코드는 바꾸지 않는다 — G3
+- [ ] [외부 대기] 기준 시뮬레이터 확장([결정 141](../../docs/decisions.md#portone-fake-as-reference-simulator)): 흉내 서버에 응답 지연·5xx·연결 끊김·취소 대기 유지와 뒤늦은 확정·통지 중복/역순/누락, 콘솔 승인(MC-P14 재현용)·시계 어긋남(PA-T1 재현용). 운영 코드는 바꾸지 않는다 — G3
 - [x] (옛 tasks:46 `[결정 필요]` Order 시도의 `reconciliationRequired` 해제) — [결정 164](../../docs/decisions.md#attribution-in-payment)로 닫힘: Order 시도는 귀속을 갖지 않는다. Payment 쪽은 PA-T3·R15.9.
 - [x] (옛 tasks:47 결정 128 "기존 `RefundExecutionFailed`로 잇는다") — 결정 147·148로 전용 이벤트 `RefundFailureClosed`. PA-T12·R18(소급 RC-7, 문서 정정).
 - [x] (옛 tasks:58~61 PG 계약 중립화 4건) — MC-P2·MC-P3·PA-T17·T28로 옮김.

@@ -32,21 +32,15 @@ Compose는 기본 정의 2개와 로컬 오버라이드 2개를 사용한다. �
 | 기본 정의 | 로컬·E2E 오버라이드 |
 |---|---|
 | `docker-compose.yml` — 인프라 | `docker-compose.local.yml` — 인프라 접속 포트 |
-| `docker-compose.apps.yml` — Jib 앱·PG DB | `docker-compose.apps.local.yml` — 앱 접속 포트·OAuth·업로드 주소 |
+| `docker-compose.apps.yml` — Jib 앱 | `docker-compose.apps.local.yml` — 앱 접속 포트·OAuth·업로드 주소 |
 
 `local-stack.sh`와 원격 검증 스크립트는 각 기본 파일에 local 오버라이드 하나를 적용한다. CI의 내부 네트워크 실행은 기본 파일만 사용한다. 적용 순서와 검증 기록은 [Compose 실행 구성](compose-layout.md)을 따른다.
 
-Settlement가 PortOne TEST 원승인·취소를 직접 조회하게 하려면 앱 Compose에 `-f docker-compose.settlement-portone.yml`을 더한다. `SETTLEMENT_PORTONE_API_BASE_URL`·`SETTLEMENT_PORTONE_API_SECRET`(Payment의 `PORTONE_API_SECRET`과 별개)·`PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`를 셸 환경으로 넣어야 하며, 하나라도 없으면 Compose가 멈춘다. 이 파일을 빼면 Settlement는 기본 SIMULATED(모의 PG)로 돈다. 토스페이 정산 수집(`SETTLEMENT_TOSSPAY_ENABLED`)은 켜지 않는다.
+PG 어댑터와 외부 모의 PG는 걷어냈다([결정 remove-pg-adapters](decisions.md#remove-pg-adapters)). Payment는 프로세스 안에서 바로 승인하고, Settlement는 `SETTLEMENT_CONSUMPTION_ENABLED`(기본 `false`)를 켜지 않으면 `ORDER_PAID`·환불 확정을 소비하지 않고 조회만 응답한다([결정 settlement-consumption-off](decisions.md#settlement-consumption-off)).
 
-신규 빈 스택은 외부 모의 PG의 세 역할 키와 전용 DB 비밀번호, Catalog 정산 조회 키를 먼저 설정한다.
-기존 V11 내장 PG 자료가 있으면 [이관 절차](../tools/migrations/README.md)를 거쳐 연결한다.
+신규 빈 스택은 Catalog 정산 조회 키를 먼저 설정한다.
 
 ```bash
-export MOCK_PG_PAYMENT_KEY="$(openssl rand -hex 32)"
-export MOCK_PG_SETTLEMENT_KEY="$(openssl rand -hex 32)"
-export MOCK_PG_CONTROL_KEY="$(openssl rand -hex 32)"
-export MOCK_PG_DB_PASSWORD="$(openssl rand -hex 32)"
-export MOCK_PG_DB_ROOT_PASSWORD="$(openssl rand -hex 32)"
 export CATALOG_SETTLEMENT_SERVICE_KEY="$(openssl rand -hex 32)"
 ```
 
@@ -59,8 +53,8 @@ export CATALOG_SETTLEMENT_SERVICE_KEY="$(openssl rand -hex 32)"
 ./scripts/local-stack.sh down
 ```
 
-`up`은 `jibDockerBuild`로 업무 앱·외부 모의 PG·MinIO 이미지를 생성하고 인프라와 앱을 순서대로 시작한다. 앱은 health 성공을 확인하며 최대 세 개씩 시작하고 Store는 Catalog 다음에 시작한다. `down`은 컨테이너를 종료하고 볼륨은 보존한다.
-현재 구매·다운로드·정산의 격리된 전체 검증은 `python3 tools/verification/verify-settlement.py`를 사용한다. [정산 실행 안내](../tools/verification/README.md)를 따른다.
+`up`은 `jibDockerBuild`로 업무 앱·MinIO 이미지를 생성하고 인프라와 앱을 순서대로 시작한다. 앱은 health 성공을 확인하며 최대 세 개씩 시작하고 Store는 Catalog 다음에 시작한다. `down`은 컨테이너를 종료하고 볼륨은 보존한다.
+현재 구매·지급·다운로드의 격리된 전체 검증은 `python3 tools/verification/verify-jib.py`를 사용한다. [검증 도구 안내](../tools/verification/README.md)를 따른다.
 
 MinIO와 mc는 `:infra:minio:compileMinio`가 고정 커밋의 공식 소스를 Go 컨테이너에서 빌드하고 Jib이 Alpine 이미지에 패키징한다. 호스트에 Go를 설치할 필요는 없다. 첫 실행에는 Go 의존성 다운로드와 컴파일 시간이 추가된다. 파일 업로드용 MinIO 주소는 앱 설정과 같은 `http://127.0.0.1:19000`이다.
 
@@ -100,7 +94,6 @@ python3 tools/verification/verify-tracing.py
 
 Payment는 최초 접수의 부모를 DB에 보존하고 예약·재시도마다 자식 span을 만든다.
 Download URL 발급은 별도 요청이므로 그 응답의 trace ID로 License·Catalog HTTP 호출을 확인한다.
-외부 모의 PG 호출은 Payment·Settlement의 HTTP client span으로 확인한다.
 
 추적이 보이지 않으면 Tempo의 `/ready`, 앱의 `OTLP_ENDPOINT`·`TRACING_SAMPLE_RATE`, Outbox 적재·발행과 부모 보존을 순서대로 확인한다.
 컨테이너 안의 전송 주소는 `http://tempo:4318/v1/traces`, 호스트 JVM의 기본 주소는 `http://localhost:4318/v1/traces`다.

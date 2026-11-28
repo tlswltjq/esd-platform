@@ -38,10 +38,10 @@ class BuildScopeTest(unittest.TestCase):
                          [":apps:order:build", ":apps:payment:build", ":common:test:test"])
 
     def test_shared_code_build_files_and_tooling_build_everything(self):
-        # 공통 모듈·빌드 설정·시뮬레이터(Payment가 mock-pg jar에 기댐)·인프라(Catalog가 MinIO 정책에 기댐)는
+        # 공통 모듈·빌드 설정·인프라(Catalog가 MinIO 정책에 기댐)는
         # 어느 앱이 영향을 받는지 경로로 알 수 없다.
         for path in ["common/messaging/src/main/java/X.java", "build.gradle", "settings.gradle",
-                     "gradle/libs.versions.toml", "simulators/mock-pg/src/main/java/Y.java",
+                     "gradle/libs.versions.toml",
                      "infra/minio/policies/download-reader.json", ".github/workflows/ci.yml",
                      "e2e/build.gradle", "gradle.properties"]:
             self.assertEqual(scope([path, "apps/order/src/main/java/A.java"]), ["build"], path)
@@ -57,7 +57,7 @@ class BuildScopeTest(unittest.TestCase):
 
     def test_paths_gradle_reads_still_build_everything(self):
         # 결정 216 허용 목록에 넣으면 안 되는 Gradle 입력: 이행 SQL(migrationTest), 초기화 스크립트, 인프라 정책.
-        for path in ["tools/migrations/order/order-transition.sql", "tools/migrations/mock-pg/migrate.py",
+        for path in ["tools/migrations/order/order-transition.sql",
                      "tools/verification/verify-test-boundaries.gradle", "infra/minio/policies/download-reader.json",
                      "tools/remote/remote.sh", "tools/observability/collect-lag.sh", "tools/README.md.bak"]:
             self.assertEqual(scope([path]), ["build"], path)

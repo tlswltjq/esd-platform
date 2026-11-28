@@ -1,7 +1,7 @@
 package com.stove.payment.config;
 
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
+import com.stove.payment.adapter.pg.ImmediateApprovalPgGateway;
 import com.stove.payment.adapter.trace.DisabledPaymentTracing;
 import com.stove.payment.adapter.trace.JdbcPaymentTraceContexts;
 import com.stove.payment.adapter.trace.MicrometerPaymentTracing;
@@ -32,10 +32,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
 public class PaymentConfiguration {
@@ -53,7 +51,7 @@ public class PaymentConfiguration {
     @Bean
     ResolvePayment resolvePayment(PaymentRepository payments, PgGateway gateway, OutboxRecorder outbox,
             EntityManager entityManager, PlatformTransactionManager transactions, PaymentProcessingProperties properties,
-            PaymentTraceContexts traceContexts, PaymentTracing tracing, PgHttpProperties pg,
+            PaymentTraceContexts traceContexts, PaymentTracing tracing, PgProperties pg,
             PaymentAttemptLookup attemptLookup, FailedPaymentAttemptRepository failedAttempts, PaymentApprovalRepository approvals,
             Clock refundReceptionClock) {
         return new ResolvePayment(payments, gateway, outbox, entityManager, transactions,
@@ -65,17 +63,15 @@ public class PaymentConfiguration {
     @ConditionalOnProperty(name = "stove.payment.pg.provider", havingValue = "SIMULATED", matchIfMissing = true)
     PaymentAttemptLookup simulatedPaymentAttemptLookup() { return purchase -> List.of(); }
 
+    /** 결정 in-process-pg-approval: PG 어댑터가 없는 동안 외부 호출 없이 승인으로 답한다. 실제 PG를 되살릴 때 지운다. */
     @Bean
     @ConditionalOnProperty(name = "stove.payment.pg.provider", havingValue = "SIMULATED", matchIfMissing = true)
-    SimulatedPgHttpGateway simulatedPgGateway(PgHttpProperties properties, RestClient.Builder builder) {
-        SimpleClientHttpRequestFactory factory=new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(properties.connectTimeout()); factory.setReadTimeout(properties.readTimeout());
-        return new SimulatedPgHttpGateway(builder.clone().baseUrl(properties.baseUrl().toString())
-                .defaultHeader("X-Pg-Api-Key",properties.apiKey()).requestFactory(factory).build());
+    ImmediateApprovalPgGateway immediateApprovalPgGateway(Clock refundReceptionClock) {
+        return new ImmediateApprovalPgGateway(refundReceptionClock);
     }
 
     @Bean
-    ReceiveOrderPayment receiveOrderPayment(PaymentRepository payments, ProcessedEventGuard guard, PgHttpProperties properties,
+    ReceiveOrderPayment receiveOrderPayment(PaymentRepository payments, ProcessedEventGuard guard, PgProperties properties,
             PaymentTraceContexts traceContexts,PaymentOrderLifecycleRepository lifecycle,OrderPaymentLifecycleLocks locks) {
         return new ReceiveOrderPayment(payments,guard,properties.provider(),traceContexts,lifecycle,locks);
     }

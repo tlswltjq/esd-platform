@@ -38,14 +38,12 @@ URL은 만료 전 가진 사람이 반복 GET할 수 있으며 일회용·사용
 
 Payment 목록·상세는 MEMBER와 서명·issuer·audience가 검증된 JWT sub로 제한한다. 타인·없는 결제는 404다.
 목록의 임의 buyerSubject·memberId와 X-Member-Id는 조회 소유자를 바꾸지 않는다.
-본인 PENDING/PORTONE_TEST checkout은 JWT로 보호하고 사용자 환불 요청은 Order로 받는다. 구 콜백·prepare·승인 주입 API와 이전 Gateway의 익명/CSRF 예외는 사용하지 않는다.
+사용자 환불 요청은 Order로 받는다. 본인 checkout API는 `PORTONE_TEST`에서만 조립되는데 그 PG 포트 구현이 없어 지금은 제공하지 않는다([결정 remove-pg-adapters](decisions.md#remove-pg-adapters)). 구 콜백·prepare·승인 주입 API와 이전 Gateway의 익명/CSRF 예외는 사용하지 않는다.
 
 OrderPlaced의 봉투·본문 ID·종류·키, 가격 일관성과 상품·구매자 필드를 저장 전에 검증한다.
 중복 수신에서도 전체 입력을 비교하고 Inbox는 결제 접수와 함께 저장한다.
 PG 키·주문·청구액·통화·공급자가 일치하는 확정 결과만 반영하고 결과·Outbox는 함께 커밋한다.
-외부 모의 PG는 별도 프로세스·DB·키를 사용한다. Payment의 승인·조회 키와 Settlement의 조회 키를 분리하고 제어 키는 업무 앱에 제공하지 않는다.
-
-PortOne TEST 연동에서는 설정된 웹훅 POST만 서명·스토어·재전달을 검증해 접수한다. 공개 edge가 Payment에 직접 전달하며 웹훅은 최종 상태 대신 서버 조회 힌트로 사용한다. 실제 비밀값은 Git에 넣지 않는다. [현재 계약·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md). 카드 정보 저장이나 실제 운영 자금 이동의 검증은 포함하지 않는다.
+외부 PG 경계는 지금 없다. Payment는 외부 호출 없이 프로세스 안에서 승인하며 PG 키를 받지 않는다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 실제 비밀값은 Git에 넣지 않는다. 카드 정보 저장이나 실제 운영 자금 이동의 검증은 포함하지 않는다.
 과거 HMAC 콜백과 PG_CALLBACK_SECRET은 현재 Payment의 실행 계약이 아니다.
 
 ## 감사와 검증
@@ -53,16 +51,15 @@ PortOne TEST 연동에서는 설정된 웹훅 POST만 서명·스토어·재전�
 Auth의 role_audit_log는 가입·부트스트랩 권한 부여를 남긴다.
 Payment는 원래 주문 입력, 공급자 결정과 최종 결과 이벤트 메타데이터를 보존한다. 구 payment_audit_log는 새 흐름에서 쓰지 않는다.
 
-현재 빌드·테스트는 로컬 호스트(Linux, Docker)에서 실행한다. 과거 OrbStack·OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](../tools/verification/README.md)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
+현재 빌드·테스트는 로컬 호스트(Linux, Docker)에서 실행한다. 과거 OrbStack·OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](../tools/verification/README.md)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, PG 응답 유실·롤백과 8개 앱의 재시작을 확인한다.
 API 계약이 바뀌면 OpenAPI 스냅샷도 함께 갱신한다.
 
-## Settlement와 외부 모의 PG 경계
+## Settlement 경계
 
 Settlement는 sub가 없거나 공백·100자 초과인 JWT도 401로 거절한다. CREATOR의 내 매출·월 합계는 JWT sub로 제한하고 PG 비용·플랫폼 잔여액·다른 판매자 정보를 노출하지 않는다.
 ADMIN만 전체 조회·지난 월 마감·PG 명세 수집·재대사를 수행한다. 고객이 PG 금액·수령 상태를 입력할 수 없다.
 Catalog 소유자 GET에는 Download와 다른 전용 서비스 키를 사용하며 Gateway에 내부·PG 제어 경로를 추가하지 않는다.
-Payment에는 PG 정산 중계 API가 없고 Settlement는 PG 공급자 DB를 직접 읽지 않는다.
-PG DB 계정은 PG만 사용한다. 키가 없거나 중복이면 PG가 기동하지 않으며 HTTP 오류·PG 지급 보고를 실제 은행 입금 완료로 해석하지 않는다.
+Payment에는 PG 정산 중계 API가 없다. Settlement의 PG 포트는 "제공 안 함"이라 PG를 호출하는 작업은 503 `UPSTREAM_UNAVAILABLE`이고, PG 키를 받지 않는다([결정 settlement-consumption-off](decisions.md#settlement-consumption-off)).
 
 <a id="deployment-secrets"></a>
 
@@ -71,7 +68,7 @@ PG DB 계정은 PG만 사용한다. 키가 없거나 중복이면 PG가 기동�
 배포 비밀은 배포 도구의 비밀 설정 → 배포 프로세스 환경 → Docker Compose → 필요한 앱 환경으로만 전달한다. 실행기 `scripts/protected-compose.py`는 비밀 파일을 만들거나 읽지 않는다.
 - 값은 환경 변수로 주입하며 shell source·명령 인자에 넣지 않는다. Compose에 `--env-file /dev/null`을 지정해 `.env` 자동 읽기를 막고 `COMPOSE_*` 상속 설정을 거절한다.
 - 기본 실행은 누락과 Compose 구문만 검사하고 `--apply`에서만 `start-apps.sh`의 순차 시작·health 대기를 실행한다. 사전 검사가 실패하면 시작하지 않으며, 시작 도중 실패의 자동 롤백은 없다.
-- 필수 입력의 빈 값·누락은 시작 전에 거절한다(DB·Studio·Review·Download 저장소 키, BFF 비밀, Auth 부트스트랩 비밀번호, Catalog 네 관계·Payment→Order 서비스 키, Payment 승인 암호화 키, 모의 PG 키 셋·DB 비밀번호. `CATALOG_DOWNLOAD_STORAGE_ENABLED=true`면 Catalog의 Download 읽기 계정도). 형식·강도·외부 인증 성공은 보장하지 않는다. `docker-compose.injected.yml`이 DB·Studio 저장소 설정을 덮어 개발 기본 비밀로 복귀하지 못하게 한다.
+- 필수 입력의 빈 값·누락은 시작 전에 거절한다(DB·Studio·Review·Download 저장소 키, BFF 비밀, Auth 부트스트랩 비밀번호, Catalog 네 관계·Payment→Order 서비스 키, Payment 승인 암호화 키. `CATALOG_DOWNLOAD_STORAGE_ENABLED=true`면 Catalog의 Download 읽기 계정도). 형식·강도·외부 인증 성공은 보장하지 않는다. `docker-compose.injected.yml`이 DB·Studio 저장소 설정을 덮어 개발 기본 비밀로 복귀하지 못하게 한다.
 - Compose stdout/stderr는 숨긴다. 배포 도구의 `set -x`·환경 덤프·`compose config` 출력은 금지한다. Docker 관리자와 실행 계정은 컨테이너 환경의 키를 읽을 수 있다.
 - 서비스 접근키는 한 값만 받으므로 한쪽만 교체하면 호출이 실패한다. Payment 승인 암호화 키는 기존 자료 복호화에 필요해 임의 재생성하지 않는다. 무중단 교체·폐기, 실제 비밀 저장소·운영 배포는 아직 범위 밖이다.
 
@@ -86,8 +83,6 @@ PG DB 계정은 PG만 사용한다. 키가 없거나 중복이면 PG가 기동�
 | `PAYMENT_ORDER_SERVICE_KEY` | Payment·Order | `X-Payment-Service-Key`, `POST /internal/v1/orders/{orderNo}/payment-admissions` 및 `/{admissionId}/failure` |
 | `PAYMENT_APPROVAL_PAYLOAD_KEY` | Payment | 승인 접수 암호화(HTTP 키 아님) |
 | `BFF_CLIENT_SECRET` | Auth·Gateway | BFF 토큰 교환 |
-| `MOCK_PG_PAYMENT_KEY` / `MOCK_PG_SETTLEMENT_KEY` | 외부 모의 PG·Payment / 외부 모의 PG·Settlement | PG 승인·조회 / 정산 조회 |
-| `MOCK_PG_CONTROL_KEY` | 외부 모의 PG만 | 업무 앱에 제공하지 않음 |
 | `DOWNLOAD_STORAGE_SECRET_KEY` | Catalog·Download | Catalog는 다운로드 금지 검증용 읽기 클라이언트로 사용 |
 
 - 키 누락·빈 값·잘못된 값, 다른 관계의 키나 헤더는 401이다. 서버 쪽 키가 비어 있으면 모든 요청을 거절한다. 올바른 키라도 선언하지 않은 메서드·내부 경로·관리자 작업에는 401이며, 서비스 키는 사용자 ADMIN 권한으로 취급하지 않고 사용자 JWT만으로도 내부 경로에 접근할 수 없다. 정상 응답은 `Cache-Control: no-store`다.
@@ -96,20 +91,4 @@ PG DB 계정은 PG만 사용한다. 키가 없거나 중복이면 PG가 기동�
 
 ## PortOne 웹훅 수신 경계
 
-Payment가 직접 받는 웹훅 POST만 서명을 검증해 접수한다. 알림은 결과를 확정하지 않고 서버 조회의 힌트로만 쓴다.
-
-| 입력 | 응답·처리 |
-|---|---|
-| 서명 헤더 세 종류의 누락·중복, 원문 변조 | 401, 접수·재조회 예약·Outbox 불변 |
-| 전달 시각 | ±300초 허용, ±301초 401 |
-| 복수 서명 | 잘못된 서명·미지원 버전이 섞여도 유효한 v1 서명 하나면 허용 |
-| 본문 크기 | 재서명한 정확한 64 KiB 200, 초과 413 |
-| 서명된 잘못된 JSON(중복 필드·뒤에 붙인 JSON) | 400, 접수 없음 |
-| 같은 ID·같은 원문 재전송 / 같은 ID·다른 원문 | 최초 접수 보존 / 409 |
-| 잘못된 상점·없는 결제·다른 결제 공급자 | 400·404·409, 업무 생성 없음 |
-| 서명만 가진 다른 메서드·경로 | 401, 사용자·관리자 권한을 부여하지 않음 |
-| SIMULATED 제공자 | 검증기 없음, 서명된 POST도 익명 401·MEMBER/ADMIN 403 |
-| 비밀키 누락·빈 값·형식 오류 | 검증기 조립 거절 |
-| 동시 접수·접수 저장 후 DB 실패 | 한 접수 행으로 수렴 / 접수·재조회 예약 동시 롤백 후 재개 |
-
-공개 HTTPS edge의 다른 메서드 응답은 405로 진입점이 다르다. Gateway에 익명 허용·CSRF 예외를 추가하지 않는다. 실제 제공사 전송·인증서 갱신·운영 키 주입은 이 경계의 검증 범위가 아니다.
+웹훅 검증기·접수 어댑터를 걷어내 이 경계는 지금 없다([결정 remove-pg-adapters](decisions.md#remove-pg-adapters)). 검증기가 조립되지 않으므로 `POST /api/v1/payments/webhooks/portone`은 서명이 있어도 익명 401·MEMBER/ADMIN 403이고 접수 행을 만들지 않는다(`PortOneWebhookDisabledIntegrationTest`). Gateway에 익명 허용·CSRF 예외를 추가하지 않는다.

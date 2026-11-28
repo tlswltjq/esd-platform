@@ -12,7 +12,7 @@ Catalog는 승인된 출시 요청으로 공개 상품·공개본의 정본을 �
 Order는 주문 당시 상품·가격과 최종 결제 결과를 보존한다. Payment는 확정 주문의 결제 접수·PG 호출·미확정 재개·결과 발행을 담당한다.
 License는 OrderPaid를 근거로 상품 보유권·주문별 구매 근거와 내 라이브러리를 관리한다.
 Download는 License 보유권·Catalog 현재 공개 빌드를 HTTP로 확인하고 전체 ZIP의 S3/MinIO 만료 URL을 발급한다. DB·보유권 사본·Kafka 없이 요청마다 조회하며 연계 장애 중 새 발급은 실패한다.
-Settlement는 OrderPaid·외부 모의 PG 거래/비용·Catalog 소유자를 대조해 매출·배분·월 마감을 저장하고, PG 지급 명세를 직접 조회해 모의 수령을 대사한다. [완료 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)를 따른다.
+Settlement는 OrderPaid·PG 거래/비용·Catalog 소유자를 대조해 매출·배분·월 마감을 저장하고, PG 지급 명세를 직접 조회해 수령을 대사한다. PG 어댑터를 걷어낸 동안은 PG 포트가 "제공 안 함"이고 이벤트 소비를 꺼 매출을 기록하지 않는다([결정 settlement-consumption-off](decisions.md#settlement-consumption-off)). [완료 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)를 따른다.
 
 MySQL을 쓰는 서비스는 각자의 스키마를 소유하고 Flyway로 변경한다. 모듈마다 `V1__baseline.sql`(그 시점 스키마와 같은 기준선)에서 시작해 V2부터 증분으로 쌓고, 적용된 스크립트는 고치지 않는다. 보존할 운영 데이터가 없는 동안은 새 열·제약을 채움 없이 낸다([결정 187](decisions.md#flyway-baseline)). 같은 MySQL 프로세스를 사용해도 서비스 간 테이블을 직접 조인하거나 하나의 트랜잭션으로 묶지 않는다. Store도 전용 MySQL 스키마를 사용한다. Store 사본은 Catalog 이벤트와 시작 시 공개 HTTP 조회로 구성하며 버전 비교·저장을 같은 트랜잭션에서 처리한다. Download의 구 MongoDB 자료는 보존하지만 새 업무에서는 읽거나 쓰지 않는다. 원본과 사본 사이에는 이벤트 반영 지연이 있다.
 
@@ -63,9 +63,9 @@ DB 커밋과 Kafka 발행은 한 번의 원자적 작업이 아니다. 발행 �
 
 Order는 Catalog의 기존 공개 상세를 HTTP로 읽고 주문 당시 상품·버전·정가·할인액 0·고객 청구액을 고정한다.
 HTTP는 DB 트랜잭션 밖에서 호출하고 주문·OrderPlaced Outbox를 같이 저장한다. 결제 결과의 원래 요청·구매자·금액·통화를 확인하고 주문 잠금·결과·Inbox를 한 트랜잭션으로 반영한다. 최초 PAID이면 OrderPaid Outbox도 함께 저장한다.
-Payment는 고정 paymentId로 모의 PG를 호출한다. 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. License는 OrderPaid의 봉투·본문·키를 내부 PaidOrder로 변환하고, 구매자·상품별 권한과 주문별 근거·Inbox를 함께 저장한다.
+Payment는 고정 paymentId로 `PgGateway` 포트를 호출한다. 지금 구현은 외부 호출 없이 바로 승인하는 어댑터 하나다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 접수·Inbox, 트랜잭션 밖 PG 호출, 최종 결과·Outbox 저장을 나눈다. PG 응답 유실과 결과 저장 실패는 PENDING을 유지해 같은 키로 재개한다. License는 OrderPaid의 봉투·본문·키를 내부 PaidOrder로 변환하고, 구매자·상품별 권한과 주문별 근거·Inbox를 함께 저장한다.
 출처와 권한은 License 한 행에 저장한다. Order의 DB 유일 제약은 동일 상품의 PENDING·PAID 주문을 합쳐 한 건으로 제한하며 최종 FAILED에서만 새 구매를 허용한다. Order PAID와 라이브러리 반영 사이에는 전달 지연이 있다.
-PortOne TEST의 환불은 Order 접수/판정→License 실제 정지→Payment 취소/조회→완료 또는 확정 실패 뒤 실제 복구로 진행한다. 모듈별 로컬 트랜잭션과 Outbox를 연결하며 원 PAID는 유지한다. 실제 운영 자금 이동·정산 환불 조정은 후속 대상이다. [현재 환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md). [Payment 실행·검증](../tools/verification/README.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](../tools/verification/README.md)
+환불은 Order 접수/판정→License 실제 정지→Payment 취소/조회→완료 또는 확정 실패 뒤 실제 복구로 진행하는 계약이다. Payment의 PG 취소·조회 어댑터는 걷어내 지금은 조립되지 않는다([결정 remove-pg-adapters](decisions.md#remove-pg-adapters)). 모듈별 로컬 트랜잭션과 Outbox를 연결하며 원 PAID는 유지한다. 실제 운영 자금 이동·정산 환불 조정은 후속 대상이다. [현재 환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md). [Payment 실행·검증](../tools/verification/README.md) [현재 사용자 흐름](domain/workflows.md#purchase-flow) · [Order 실행 안내](../tools/verification/README.md)
 
 승인·지급·환불·비용은 각 담당 모듈이 근거를 보존한다. 아래 보상·환불과 위험 기록은 재작성 전 설계·분석 자료이며 현재 환불 구현의 완료 여부는 위 인계와 검증 기록을 따른다. PaymentService·prepare·환불 스위퍼 관련 코드는 현재 MVP에서 제거했다.
 환불은 처리 의도를 기록하고 PG를 호출한 뒤 완료를 기록하는 단계로 나누며, 중단 후 재시도할 수 있어야 한다. 보상은 이미 완료된 외부 처리를 다른 업무로 되돌리는 것이므로 하나의 DB 롤백과 다르다. [결제 모델](domain/models/order-payment.md)과 [재시작 시나리오 E9](experiments.md#resilience)에 당시 상태와 검증 근거가 있다.

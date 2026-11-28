@@ -3,7 +3,7 @@
 [전체 안내](../model-guide.md) · [정산 실행](../../../tools/verification/README.md) · [MVP 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md) · [책임 분리](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md) · [PortOne 혜택 A](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-external-benefit-verification.md) · [Order·Payment](order-payment.md)
 
 Settlement는 기존 OrderPaid의 불변 구매 근거를 매출로 기록한다. 판매자는 Catalog의 불변 ownerSubject,
-PG 근거는 선택한 공급자에서 직접 확인한다. SIMULATED는 외부 모의 PG의 거래·비용·명세, PORTONE_TEST는 현재 TOSSPAY_V2 원승인·지급 구성을 조회한다. Payment HTTP나 다른 모듈 DB를 경유하지 않는다.
+PG 근거는 Settlement의 PG 포트로 공급자에서 직접 확인하는 계약이다. Payment HTTP나 다른 모듈 DB를 경유하지 않는다. 지금은 PG 어댑터를 걷어내 PG 포트가 "제공 안 함"(503)이고, `ORDER_PAID`·환불 확정 소비를 꺼 새 매출을 기록하지 않는다([결정 remove-pg-adapters](../../decisions.md#remove-pg-adapters)·[결정 settlement-consumption-off](../../decisions.md#settlement-consumption-off)).
 
 <a id="money-example"></a>
 ## 플랫폼 전액 부담 배분
@@ -85,15 +85,13 @@ ADMIN이 기존 providerSettlementId로 수집하면 외부 PG의 불변 명세 
 
 승인 행의 금액은 양수·수수료/VAT는 음수, 환불 행은 그 반대 부호로 보고한 값을 보존한다. 원본 전체 페이지·커서·합계가 검증돼야 하나의 트랜잭션으로 접수한다. 대사는 저장한 원본과 내부 구매/환불을 별도로 대조하며 미도착·불일치·환경/키 대응 미검증을 구분한다. `MATCHED_REPORTED`는 은행 실수령·판매자 송금 완료가 아니다.
 
-현재 내부 승인 경로는 PORTONE_TEST다. TEST 빈 결과는 `EMPTY_TEST` 관측일 뿐 기존 구매의 확정 비용 0원이 아니며 LIVE 명세와 TEST 구매를 연결해 비용을 확정하지 않는다. LIVE 승인 접수와 실제 가맹점별 키 대응은 이번에 추가/검증하지 않았다. 기존 월 금융 요약은 그대로이고 PG 보고 비용/반환/VAT는 새 ADMIN 명세·항목 조회에서 확인한다. PG 비용의 월 귀속/요약 통합과 API 밖의 차액 정산 등은 후속이다. [정확한 구현·검증 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-pg-evidence-verification.md)를 따른다.
+어댑터를 걷어내기 전 내부 승인 경로는 PORTONE_TEST였다. TEST 빈 결과는 `EMPTY_TEST` 관측일 뿐 기존 구매의 확정 비용 0원이 아니며 LIVE 명세와 TEST 구매를 연결해 비용을 확정하지 않는다. LIVE 승인 접수와 실제 가맹점별 키 대응은 이번에 추가/검증하지 않았다. 기존 월 금융 요약은 그대로이고 PG 보고 비용/반환/VAT는 새 ADMIN 명세·항목 조회에서 확인한다. PG 비용의 월 귀속/요약 통합과 API 밖의 차액 정산 등은 후속이다. [정확한 구현·검증 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-pg-evidence-verification.md)를 따른다.
 
-## 외부 모의 PG
+## 과거 자료
 
-[독립 앱](../../../simulators/mock-pg/src/main/java/com/stove/mockpg/MockPgApplication.java)은 pg_charge·pg_settlement·pg_settlement_item을 자기 MySQL에 보존한다.
-Payment는 승인·조회 키를, Settlement는 읽기 키를 사용한다. 검증용 정산 회차 제어 키는 업무 앱에 전달하지 않는다.
 기존 내장 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 기존 미산정 비용을 0원으로 채우지 않는다.
 
 구 settlement_record·seller_settlement·ShedLock 자료는 보존하지만 현재 업무에서는 사용하지 않는다.
 V8은 기존 매출의 검증 거래·비용을 분리 복사하고 기존 비용/잔여액 열을 nullable `legacy_*`로 보존한다. 새 행의 미확정 값을 과거 열에 0원으로 채우지 않는다. 과거 명세·월 마감은 그대로 보존한다.
 
-HTTP 조립은 공급자 설정에 따라 모의 PG 또는 PortOne TEST 원승인 읽기를 선택한다. PortOne 비용·지급 자료는 아직 미연동이며 빈 0원 결과를 만들지 않는다. 일반 할인 부담·환불 조정·재마감·세금계산서·판매자 송금·CSV는 후속 범위다.
+PG 비용·지급 자료는 미연동이며 빈 0원 결과를 만들지 않는다. 일반 할인 부담·환불 조정·재마감·세금계산서·판매자 송금·CSV는 후속 범위다.

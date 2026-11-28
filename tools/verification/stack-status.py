@@ -70,7 +70,7 @@ def main():
             (["docker", "compose", "-p", "stove", "-f", "docker-compose.yml", "-f", "docker-compose.local.yml"],
              ["mysql", "mysql-bootstrap", "redis", "kafka", "minio"], {"mysql-bootstrap"}),
             (["docker", "compose", "-p", "stove-apps", "-f", "docker-compose.apps.yml", "-f", "docker-compose.apps.local.yml"],
-             ["pg-mysql", "mock-pg", "auth", "gateway", "web-bff", "studio", "review", "catalog", "store", "order", "payment", "license", "download", "settlement"], set()),
+             ["auth", "gateway", "web-bff", "studio", "review", "catalog", "store", "order", "payment", "license", "download", "settlement"], set()),
         ]
     deadline = time.monotonic() + args.timeout
     while True:

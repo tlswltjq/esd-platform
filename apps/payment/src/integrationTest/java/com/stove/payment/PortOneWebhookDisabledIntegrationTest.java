@@ -17,7 +17,6 @@ import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "server.address=127.0.0.1", "stove.payment.pg.provider=SIMULATED",
-        "stove.payment.pg.base-url=http://127.0.0.1:1", "stove.payment.pg.api-key=fixture-disabled-provider-key",
         "stove.outbox.relay-enabled=false", "stove.payment.processing-enabled=false",
         "spring.kafka.listener.auto-startup=false"})
 class PortOneWebhookDisabledIntegrationTest extends PaymentDatabaseIntegrationTestBase {

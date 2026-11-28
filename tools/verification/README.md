@@ -5,7 +5,7 @@
 저장소 루트에서 실행한다.
 
 ```bash
-python3 tools/verification/verify-settlement.py
+python3 tools/verification/verify-license.py
 python3 tools/verification/verify-jib.py --help
 ```
 
@@ -15,7 +15,7 @@ python3 tools/verification/verify-jib.py --help
 |---|---|
 | `verify-*.py` | 모듈별 격리 스택 및 Jib 이미지 검증 |
 | `verify-tracing.py` · `support/tracing_verification.py` | `--foundation-only`로 공통 기반을 먼저 검증하고, 기본 실행으로 Payment 재시작·장애·추적 복원을 검증 |
-| `verify-jib.py --backup-restore` · `support/backup_restore_verification.py` | 구매 전 전체 백업과 binlog·빌드 연속 복사 뒤 MySQL·MinIO를 데이터째 삭제하고 `tools/operations/backup.py`로 복구. 테이블 체크섬·객체 해시 비교 후 정산 단계를 이어서 검증. [절차](../../docs/backup-restore.md) |
+| `verify-jib.py --backup-restore` · `support/backup_restore_verification.py` | 구매 전 전체 백업과 binlog·빌드 연속 복사 뒤 MySQL·MinIO를 데이터째 삭제하고 `tools/operations/backup.py`로 복구. 테이블 체크섬·객체 해시 비교 후 새 구매·다운로드를 이어서 검증. [절차](../../docs/backup-restore.md) |
 | `verify-jib.py --prometheus-only` · `support/prometheus_verification.py` | 실제 Prometheus로 11개 수집 대상·필수 지표·운영 경보 로드 검증 |
 | `auth-bff.py` | 실행 중인 스택의 Auth/BFF 검증. [필수 설정](../../docs/auth-bff.md) 필요 |
 | `verify-gateway-ownership.py` · `support/gateway_ownership.py` | 실제 12개 앱(웹 BFF·API 게이트웨이 포함)·전용 DB에서 본인/타인 조회와 심사/운영 역할 진입 검증. 구매 자료는 DB 픽스처이며 실제 금융·구매 전이와 구분. 산출물은 저장소 `runs/`(`ESD_SCRATCH`로 바꿀 수 있다). [범위·재실행](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/gateway-service-ownership-verification.md) |
@@ -23,10 +23,7 @@ python3 tools/verification/verify-jib.py --help
 | `support/boot_jars.py` · `test_boot_jars.py` | plain·test-fixtures를 제외한 실행 JAR 선택. 누락·복수 후보는 실패 |
 | `support/ports.py` · `test_ports.py` | 도구별 앱 포트 간격(1000 간격, 모두 32768 아래). 시작 전 사용 중·임시 포트 범위를 확인하고 실패하면 바로 멈춤. 기존 `*_PORT_OFFSET` 환경 변수로 바꿀 수 있음. [결정 105](../../docs/decisions.md#verification-tool-ports) |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
-| `support/mock_pg_runtime.py` | 독립 DB를 사용하는 외부 모의 PG 실행·종료 |
-| `portone-test-checkout.py` · `support/portone_checkout.py` | 준비된 포트원 V2·토스페이 TEST 채널의 독립 결제창·서버 조회·전액 취소 검증. 업무 앱과 DB는 변경하지 않음 |
-| `verify-refund-settlement.py` · `verify-approval-journeys.py` · `verify-expiry-journeys.py` · `support/fake_portone_stack.py` · `support/portone_fake.py` | PortOne 흉내 서버를 둔 격리 실제 스택 여정(결정 111·119·120). `verify-expiry-journeys.py`는 주문 기한을 넘는 조합을 31분 대기 한 번으로 묶어 별도 야간 작업(제한 60분)에서 돈다. 흉내 서버는 paymentId별 시도 이력과 콘솔 전용 제어 `POST /_fake/control/payments/{paymentId}/{fail-attempt\|pay-pending\|arm-confirm\|settle\|console-approve\|console-cancel}`를 둔다. 운영 코드는 PortOne 주소만 바뀐다. `verify-refund-settlement.py --settlement-compose`는 Settlement만 `docker-compose.apps.yml` + `docker-compose.settlement-portone.yml`로 띄운 컨테이너(실행별 Jib 태그, host 네트워크)로 바꾼다 |
-| `support/portone-edge/` | OCI 공개 IP의 HTTPS 웹훅 수신·인증서 자동 갱신 설정과 로컬 격리 Payment 연결·검증 기록 |
+| `support/payment_fault.py` | Payment를 검증 전용 장애 설정(`PaymentFaultConfiguration`)으로 띄우는 실행 인자. 운영 어댑터는 항상 승인하므로([결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)) 거절·응답 유실은 이 설정으로만 만든다 |
 
 검증 도구는 인프라와 앱을 실행하고 검증 데이터를 생성한다. 이번 분리는 코드 위치와 진입점만 정리하며, 각 검증의 포트·DB·컨테이너 격리, 결과 저장 위치, 정리 절차는 유지한다. 검증 로직 수정은 이 디렉터리에서 수행한다.
 
@@ -39,21 +36,8 @@ python3 tools/verification/verify-jib.py --help
 
 ## 실행 상태 검사
 
-`python3 tools/verification/stack-status.py`는 기본 로컬 스택에서 완료 모듈에 필요한 인프라와 앱(외부 PG·PG DB 포함)을 기다린다. 다른 Docker 프로젝트의 상태는 검사하지 않는다. 헬스체크가 없는 서비스는 실행 여부만 확인하며 API·브로커 기능 검증을 대신하지 않는다.
+`python3 tools/verification/stack-status.py`는 기본 로컬 스택에서 완료 모듈에 필요한 인프라와 앱을 기다린다. 다른 Docker 프로젝트의 상태는 검사하지 않는다. 헬스체크가 없는 서비스는 실행 여부만 확인하며 API·브로커 기능 검증을 대신하지 않는다.
 
 별도 Compose 스택은 `-p PROJECT -f COMPOSE_FILE`로 지정한다. `--service NAME`으로 대상을 좁히고, 성공 종료해야 하는 초기화 작업은 `--one-shot NAME`으로 지정한다. 컨테이너를 변경하거나 시작하지 않는다.
 
 래퍼 제거·상태 검사 교체 후 `python3 -B tools/verification/verify-jib.py --skip-build`도 통과했다. 최신 결과는 `runs/jib-validation-7hmyv5ve/result.json`, 전체 도구 정리 검증은 [조사·실행 기록 원문](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/scripts-tools-audit.md)을 따른다.
-
-## 포트원 테스트 결제 연결
-
-로컬 `.env.portone-test`에 Store ID·테스트 채널 키·포트원 V2 API Secret을 준비한다. 빈 형식은 `portone-test.env.example`을 따른다. 이 파일은 Git에서 제외하며 Secret을 출력하거나 커밋하지 않는다.
-
-```sh
-python3 tools/verification/portone-test-checkout.py
-python3 -m unittest discover -s tools/verification -p test_portone_checkout.py -v
-```
-
-`http://127.0.0.1:18792`에서 테스트 결제 → 서버 결과 확인 → 테스트 전액 취소를 진행한다. 이 도구가 만든 고정 9,000원 거래만 사용하고 서버에서 TEST 채널·상점·통화·금액을 확인한 뒤 취소한다. 요청 접수나 브라우저 응답만으로 성공을 확정하지 않는다. 실제 승인·취소는 사용자와 제공사 테스트 환경의 동작 확인이 필요하다.
-
-실행별 `runs/portone-checkout-*/state.json`을 보존한다. 서버 재시작 시 `--run-dir runs/기존실행폴더`로 동일 결제·취소 시도 키를 재사용한다. 미확정 시 새 실행으로 대신하지 않는다. 3시간이 지난 미확정 취소는 새 키나 재호출 없이 결과 대조가 필요하다. 이 도구는 업무 앱의 환불 정책·복구·정산을 구현하지 않는다. 범위·검증 근거는 [연동 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/pg-test-integration-plan.md)을 따른다.

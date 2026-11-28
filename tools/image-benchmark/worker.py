@@ -19,11 +19,11 @@ import urllib.request
 # web-bff is the browser entrance (8080); the API gateway it relays to listens on 8093 (decisions 223/224).
 MODULES = {"auth": 8091, "web-bff": 8080, "gateway": 8093, "studio": 8085, "review": 8086,
            "catalog": 8081, "store": 8087, "order": 8082, "payment": 8083,
-           "license": 8084, "download": 8088, "settlement": 8089, "mock-pg": 8092}
+           "license": 8084, "download": 8088, "settlement": 8089}
 
 
 def module_path(name):
-    return ("simulators" if name == "mock-pg" else "apps") + "/" + name
+    return "apps/" + name
 
 
 def capture(args, cwd=None):

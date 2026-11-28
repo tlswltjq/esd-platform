@@ -17,16 +17,16 @@
 | 업무 모듈 | Catalog | `stove_catalog` | 객체 저장소 태그 쓰기(`catalog:adapter/storage/S3BuildDistribution.java`) |
 | 업무 모듈 | Store | `stove_store` | 없음 |
 | 업무 모듈 | Order | `stove_order` | 없음 |
-| 업무 모듈 | Payment | `stove_payment` | PG 승인·조회·취소(`payment:adapter/pg/*`), PG 통지 수신(`payment:api/controller/PortOneWebhookController.java:28`) |
+| 업무 모듈 | Payment | `stove_payment` | PG 승인·조회·취소(`payment:adapter/pg/*`), PG 통지 수신(`payment:api/controller/PortOneWebhookController.java:28`). 지금은 외부 PG 호출이 없고 `ImmediateApprovalPgGateway`가 프로세스 안에서 승인한다([결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)) |
 | 업무 모듈 | License | `stove_license` | 없음 |
 | 업무 모듈 | Download | 없음(요청마다 조회) | 객체 저장소 서명 URL(`download:adapter/storage/S3BuildStorage.java`) |
-| 업무 모듈 | Settlement | `stove_settlement` | PG 거래·취소·지급 명세 조회(`settlement:adapter/*PgPayment*`·`*Refund*`·`*Statement*`) |
+| 업무 모듈 | Settlement | `stove_settlement` | PG 거래·취소·지급 명세 조회. 지금은 `settlement:adapter/Unavailable*`(503)뿐이고 이벤트 소비를 끈다([결정 settlement-consumption-off](../../docs/decisions.md#settlement-consumption-off)) |
 | 외부 공급자 | PG | — | Payment·Settlement가 각자 `core.port`로 부른다 |
-| 외부 공급자 | 기준 시뮬레이터 | — | 결정 141: PortOne 흉내 서버(`tools/verification/support/portone_fake.py`)가 기준. `simulators/mock-pg`는 독립 공급자(AGENTS.md 4절), Payment `SimulatedPgHttpGateway`·Settlement `SimulatedPg*HttpClient`가 부른다 |
+| 외부 공급자 | 기준 시뮬레이터 | — | 지금 없음. 결정 141의 PortOne 흉내 서버와 `simulators/mock-pg`는 PG adapter와 함께 걷어냈다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)) |
 | 외부 공급자 | 객체 저장소(S3/MinIO) | 버킷 하나(`STORAGE_BUCKET`) | Studio 쓰기, Review·Download 읽기, Catalog 태그. 버킷 정책이 태그로 읽기를 막는다(`infra/minio/policies/download-reader.json:19`) |
 | 외부 공급자 | 메일 | — | Auth만 |
 
-> adapter 메모(공급자 이름은 여기만): Payment PG 어댑터는 `PortOnePaymentApprovalGateway`·`PortOnePaymentAttemptLookup`·`PortOneRefundCancellationGateway`·`PortOneRefundPaymentLookup`·`SimulatedPgHttpGateway`, Settlement는 `PortOnePaymentHttpClient`·`PortOneRefundHttpClient`·`TossPayStatementHttpClient`·`SimulatedPgPaymentHttpClient`·`SimulatedPgSettlementHttpClient`, 미연결 대체 `UnavailablePgRefunds`·`UnavailablePgSettlements`·`UnavailablePgStatementSource`다. PG 통지 경로 이름 `/api/v1/payments/webhooks/portone`은 공급자 이름을 경로에 담는다(T28와 함께 결정 140 중립화 대상).
+> adapter 메모(공급자 이름은 여기만): PG adapter(Payment의 PortOne·Simulated, Settlement의 PortOne·TossPay·Simulated)는 모두 걷어냈다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)). 지금 Payment는 `ImmediateApprovalPgGateway`, Settlement는 `UnavailablePgPayments`·`UnavailablePgRefunds`·`UnavailablePgSettlements`·`UnavailablePgStatementSource`다. 이 문서의 흐름·불변식 표에 남은 `PortOne*`·`Simulated*`·`AdmittedPortOnePgGateway`·`JdbcPortOneWebhookReceipts`·모의 PG 위치 표기와 흉내 서버 재현은 걷어내기 전 기준이며, PG를 되살릴 때(T41) 다시 맞춘다. PG 통지 경로 이름 `/api/v1/payments/webhooks/portone`은 공급자 이름을 경로에 담는다(T28와 함께 결정 140 중립화 대상).
 
 ### 동기 의존 (HTTP)
 
@@ -42,9 +42,9 @@
 | Settlement → Catalog | `GET /internal/v1/products/{code}/owner` | 조회 | `settlement:adapter/CatalogOwnerHttpClient.java:14` | `X-Settlement-Service-Key` | 매출 기록 때 판매자 확인 |
 | Download → Catalog | `GET /internal/v1/products/{code}/build` | 조회 | `download:adapter/CatalogBuildHttpClient.java:26` | `X-Download-Service-Key` | 현재 공개 빌드·제한 확인 |
 | Download → License | `GET /api/v1/library/{code}` (고객 토큰 전달) | 조회 | `download:adapter/LicenseHttpClient.java:19` | 고객 JWT | 보유권 `ACTIVE` 확인 |
-| Payment → PG | 승인·조회·취소 | 명령·조회 | `payment:adapter/pg/*` | 공급자 키 | 결제·환불 실행 |
-| Settlement → PG | 거래·취소·지급 명세 조회 | 조회 | `settlement:adapter/*` | 공급자 키 | 매출·환불 근거와 대사(Payment 경유 없음, Settlement R4.1 `specs/settlement/requirements.md:66`) |
-| PG → Payment | 통지 수신 | 들어옴 | `payment:api/controller/PortOneWebhookController.java:28` | 서명 검증 | 결제 상태 변경 통지 |
+| Payment → PG | 승인·조회·취소 | 명령·조회 | `payment:adapter/pg/*`(지금 외부 호출 없음) | 공급자 키 | 결제·환불 실행 |
+| Settlement → PG | 거래·취소·지급 명세 조회 | 조회 | `settlement:adapter/*`(지금 외부 호출 없음) | 공급자 키 | 매출·환불 근거와 대사(Payment 경유 없음, Settlement R4.1 `specs/settlement/requirements.md:66`) |
+| PG → Payment | 통지 수신 | 들어옴 | `payment:api/controller/PortOneWebhookController.java:28`(지금 조립되지 않음) | 서명 검증 | 결제 상태 변경 통지 |
 
 동기 그래프: 웹 BFF → {Auth, Gateway}; Gateway → {Auth, Store, Catalog, Order, Payment, License, Download, Studio, Review, Settlement}; Payment → Order → Catalog; Store → Catalog; Settlement → Catalog; Download → {Catalog, License}. **순환 없음**(P1.2-1 충족). Catalog·License·Auth는 다른 업무 모듈을 동기 호출하지 않는다.
 
@@ -462,12 +462,12 @@ Review·Catalog·Studio의 상태×입력 표(원요청·철회·판정 입력�
 
 #### adapter 메모 (결제 공급자 규칙, 결정 140 — core 계약 아님)
 
-core 계약에는 공급자 이름을 쓰지 않았다. 지금 쓰는 공급자(PortOne V2·토스페이 채널)의 규칙은 adapter와 설정에 둔다.
+core 계약에는 공급자 이름을 쓰지 않았다. 공급자(PortOne V2·토스페이 채널)의 규칙은 adapter와 설정에 둔다. 그 adapter는 걷어냈고([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)) 아래는 되살릴 때의 기준이다.
 
-- PG 관측 상태 `READY`·`PENDING`·`PAID`·`FAILED`·`CANCELLED`(core `ApprovalObservation.State`)로의 변환: 공급자 `PAY_PENDING` → `PENDING` 등은 `PortOnePaymentApprovalGateway`가 한다.
+- PG 관측 상태 `READY`·`PENDING`·`PAID`·`FAILED`·`CANCELLED`(core `ApprovalObservation.State`)로의 변환: 공급자 `PAY_PENDING` → `PENDING` 등은 adapter가 한다.
 - 확정 송신 거절 분류: 공급자의 형식 갖춘 400·403·일반 409 → `ApprovalPostRejected`(core 보류 사유 `PG_REQUEST_REJECTED`). 분류표는 adapter 소유.
 - 멱등 보장 기한 3시간: 공급자 `Idempotency-Key` 보장 기간. adapter 설정 키로 두고 core에 기한 값만 넘긴다(P3.11-5, RC-14).
-- 웹훅 서명(`HmacPortOneWebhookVerifier`)·이벤트 종류(`Transaction.*`)는 adapter. core에는 "조회 힌트" 하나로만 들어온다.
+- 웹훅 서명·이벤트 종류(`Transaction.*`)는 adapter. core에는 "조회 힌트" 하나로만 들어온다.
 - 지금 core에 남은 공급자 상수: `"PORTONE_TEST"` 비교(`Payment.java:148`, `PaymentApproval.java:72`), 주석의 "PortOne's idempotency window"(`PaymentApproval.java:24`). MC-P3.
 
 #### 단계별 실패 표

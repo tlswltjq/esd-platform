@@ -12,9 +12,7 @@ import org.springframework.test.context.TestPropertySource;
 
 @AutoConfigureObservability(tracing = false)
 @TestPropertySource(properties = {
-        "server.address=127.0.0.1", "stove.payment.pg.provider=SIMULATED",
-        "stove.payment.pg.base-url=http://127.0.0.1:1", "stove.payment.pg.api-key=metrics-fixture-key",
-        "stove.payment.pg.connect-timeout=PT1S", "stove.payment.pg.read-timeout=PT1S"})
+        "server.address=127.0.0.1", "stove.payment.pg.provider=SIMULATED"})
 class PrometheusScrapeIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     @Autowired private TestRestTemplate http;
 

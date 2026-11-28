@@ -7,10 +7,13 @@ import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.RefundPaymentConfirmedEvent;
 import com.stove.settlement.core.service.RecordConfirmedRefund;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 
+// 결정 settlement-consumption-off: PG 조회가 연결되지 않은 동안 소비하지 않는다(기본 꺼짐).
+@ConditionalOnProperty(name = "stove.settlement.consumption-enabled", havingValue = "true")
 @Component @RequiredArgsConstructor
 public class RefundEventListener {
     private final ObjectMapper mapper;
