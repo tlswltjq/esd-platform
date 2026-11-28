@@ -23,8 +23,8 @@ _ALLOWED = {
     'download': _READER | {'CATALOG_DOWNLOAD_SERVICE_KEY'},
     'settlement': _DB | {'CATALOG_SETTLEMENT_SERVICE_KEY'},
 }
-# PORTONE_ stays a credential prefix: a leftover PG secret in the shell must not reach any app (결정 remove-pg-adapters).
-_PREFIXES = ('CATALOG_', 'PAYMENT_', 'PORTONE_', 'AUTH_', 'BFF_',
+# The PG prefixes stay although no app is allowed them: a leftover PG secret in the shell must not reach any app (결정 remove-pg-adapters).
+_PREFIXES = ('CATALOG_', 'PAYMENT_', 'MOCK_PG_', 'PORTONE_', 'SETTLEMENT_PORTONE_', 'TOSSPAY_', 'AUTH_', 'BFF_',
              'STORAGE_', 'REVIEW_STORAGE_', 'DOWNLOAD_STORAGE_')
 
 

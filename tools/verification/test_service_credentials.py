@@ -26,10 +26,13 @@ class ServiceCredentialsTest(unittest.TestCase):
     def test_leftover_pg_secrets_reach_no_application(self):
         apps = ['auth', 'web-bff', 'gateway', 'studio', 'review', 'catalog', 'store', 'order',
                 'payment', 'license', 'download', 'settlement']
-        inherited = {'PORTONE_API_SECRET': 'payment-portone-fixture', 'PORTONE_WEBHOOK_SECRET': 'webhook-fixture'}
+        inherited = {'PORTONE_API_SECRET': 'payment-portone-fixture', 'PORTONE_WEBHOOK_SECRET': 'webhook-fixture',
+                     'SETTLEMENT_PORTONE_API_SECRET': 'settlement-portone-fixture', 'TOSSPAY_API_KEY': 'tosspay-fixture',
+                     'MOCK_PG_PAYMENT_KEY': 'payment-fixture', 'MOCK_PG_SETTLEMENT_KEY': 'settlement-fixture',
+                     'MOCK_PG_CONTROL_KEY': 'control-fixture', 'MOCK_PG_DB_PASSWORD': 'db-fixture'}
         for app in apps:
             self.assertEqual({}, service_environment(app, inherited), app)
-        self.assertEqual(['PORTONE_API_SECRET', 'PORTONE_WEBHOOK_SECRET'], credential_names(inherited))
+        self.assertEqual(sorted(inherited), credential_names(inherited))
 
     def test_bootstrap_and_bff_credentials_are_separate(self):
         values = {'BFF_CLIENT_SECRET': 'bff-fixture', 'AUTH_ADMIN_PASSWORD': 'admin-fixture',
