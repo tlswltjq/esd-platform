@@ -2508,6 +2508,18 @@
 - 구분: 추천 수용(조건 추가)
 - 결과: [PR #255](https://github.com/tlswltjq/esd-platform/pull/255)
 
+<a id="cross-review-invocation"></a>
+## 237. Codex 교차 리뷰는 `tools/ci` 스크립트가 `codex exec`로 직접 부르고, 세션 기록의 실제 모델·추론 수준을 확인한다
+- 문제: [결정 108](#cross-review-before-merge)·[117](#review-roles)·[145](#review-packet)은 코드 PR을 구현과 다른 모델(Codex)이 추론 수준 high로 리뷰하게 하지만, 저장소에 호출 절차가 없고 review-gate는 표 형식만 본다. 2026-11-28 지침 재평가에서 CLI의 `kirocrew spawn run --model gpt-6.1-terra`가 경고 없이 Claude(`provider=claude_code`)로 돌았고, `auto`로 요청한 Codex 실행은 모두 추론 수준 `[low]`로 풀린 기록이 나왔다. 리뷰 판정표의 "Codex·high"를 확인할 근거가 없다.
+- 선택지: A KiroCrew 대시보드 호출을 유지하고 리뷰 뒤 `state.json`의 provider·모델·추론 수준을 스크립트로 확인 / B `tools/ci` 스크립트가 `codex exec -m <모델> -c model_reasoning_effort=high -s read-only`에 리뷰 묶음을 넣어 직접 부르고, Codex 세션 기록(`turn_context`)의 실제 모델·추론 수준·샌드박스를 확인해 다르면 실패 / C 스크립트가 `kirocrew spawn`으로 부르고 같은 확인 (추천: B — 결정 213의 "반복 절차는 테스트 붙은 스크립트"와 결정 145의 "리뷰 묶음 입력"을 한 곳에서 지키고, 에이전트가 대시보드 승인 없이 끝까지 진행할 수 있으며(결정 118), Crew의 lessons·memory 주입이 없어 문맥이 가장 독립적이다. 시험 호출에서 세션 기록에 `gpt-6.1-terra`·`high`·`read-only`가 남는 것을 확인했다)
+- 내 의견: "B로 진행해"
+- 선택: B — 추천 이유를 받아들였다.
+  - 스크립트는 실제 모델·추론 수준·세션 ID를 출력하고, PR 본문 `리뷰 판정`의 리뷰어 칸에 그대로 적는다. review-gate가 그 칸을 검사할지는 따로 정한다.
+  - 비용: 스크립트·테스트를 새로 두고, KiroCrew 대시보드에는 리뷰 실행이 남지 않는다. codex CLI 경로·버전에 의존한다.
+  - A·C를 버린 이유: A는 매번 대시보드에서 사람이나 다른 세션이 띄워야 하고, C는 실행마다 대시보드 승인이 필요하며 배정이 Crew 내부 상태에 좌우된다. 둘 다 Crew 기억 주입이 섞인다.
+- 구분: 추천 수용
+- 결과: [PR #257](https://github.com/tlswltjq/esd-platform/pull/257)
+
 ---
 
 ## 검증하며 드러난 것
