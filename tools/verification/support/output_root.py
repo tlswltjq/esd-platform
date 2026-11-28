@@ -9,6 +9,7 @@ from pathlib import Path
 def output_root(repo, environ=None):
     environ = os.environ if environ is None else environ
     scratch = environ.get('ESD_SCRATCH')
-    root = Path(scratch) if scratch else Path(repo) / 'runs'
+    # PR #259 R3: 절대 경로로 돌려줘 다른 작업 디렉터리(Compose 등)에서도 같은 위치를 본다.
+    root = (Path(scratch) if scratch else Path(repo) / 'runs').resolve()
     root.mkdir(parents=True, exist_ok=True)
     return root

@@ -8,7 +8,11 @@ from support.boot_jars import application_jar
 
 class BootJarsTest(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.TemporaryDirectory(dir=os.environ.get('ESD_SCRATCH'))  # CI에는 없다(PR #230 R1)
+        # CI에는 없다(PR #230 R1). 빈 값은 기본 임시 폴더, 없는 경로는 만들어 쓴다(PR #259 R4).
+        scratch = os.environ.get('ESD_SCRATCH') or None
+        if scratch:
+            Path(scratch).mkdir(parents=True, exist_ok=True)
+        self.directory = tempfile.TemporaryDirectory(dir=scratch)
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         self.libs = self.root / 'apps/order/build/libs'

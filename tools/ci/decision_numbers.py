@@ -118,8 +118,11 @@ def parse_decisions(text):
     anchors = {}
     anchor_lines = {}
     pending = []
+    anchor_line = 0
     for line_number, line in enumerate(lines, 1):
         names = [match.group(1) for match in ANCHOR.finditer(line)]
+        if names:
+            anchor_line = line_number
         for name in names:
             if name in anchor_lines:
                 errors.append('docs/decisions.md:{}: 중복 앵커 {} (첫 줄 {})'.format(
@@ -137,6 +140,9 @@ def parse_decisions(text):
             errors.append('docs/decisions.md:{}: 헤딩 형식 오류: {}'.format(line_number, line))
             pending = []
         elif NAMED_HEADING.match(line) and pending:
+            if anchor_line != line_number - 1:
+                # PR #259 R2: review_packet.py는 앵커 바로 다음 줄만 이름 결정 제목으로 읽는다.
+                errors.append('docs/decisions.md:{}: 식별자 앵커 바로 다음 줄이 제목이어야 한다'.format(line_number))
             if len(pending) != 1:
                 errors.append('docs/decisions.md:{}: 식별자 앵커는 하나여야 한다: {}'.format(
                     line_number, ','.join(pending)))

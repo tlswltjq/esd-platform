@@ -34,7 +34,8 @@ INSTRUCTIONS = """# 리뷰 묶음 (결정 145)
 
 DECISION_REF = re.compile(r'결정\s*(\d+(?:\s*[·,/]\s*\d+)*)')
 DECISION_ID_REF = re.compile(r'결정\s+`?([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`?')
-NAMED_ANCHOR = re.compile(r'^<a id="([a-z][a-z0-9]*(?:-[a-z0-9]+)*)"></a>$')
+# decision_numbers.py의 ANCHOR와 같은 모양(따옴표 두 종류·공백)을 받는다(PR #259 R2).
+NAMED_ANCHOR = re.compile(r'^\s*<a\s+id=["\']([a-z][a-z0-9]*(?:-[a-z0-9]+)*)["\']\s*>\s*</a>\s*$')
 REQUIREMENT_REF = re.compile(r'(?<![A-Za-z0-9_])R(\d+)(?:[.\-]\d+)?(?![A-Za-z0-9_])')
 MODULE_PATH = re.compile(r'^(?:apps|specs)/([a-z0-9-]+)/')
 
@@ -89,19 +90,19 @@ def decision_numbers(*texts):
     return sorted(found)
 
 
-def named_headings(decisions):
-    """식별자 → 헤딩 줄. 식별자 앵커 바로 다음 줄이 번호 없는 `## ` 헤딩일 때만 이름 결정이다."""
+def named_anchors(decisions):
+    """식별자 → 앵커 줄 위치. 식별자 앵커 바로 다음 줄이 번호 없는 `## ` 헤딩일 때만 이름 결정이다."""
     lines = decisions.split('\n')
     found = {}
-    for anchor, heading in zip(lines, lines[1:]):
+    for index, (anchor, heading) in enumerate(zip(lines, lines[1:])):
         match = NAMED_ANCHOR.match(anchor)
         if match and heading.startswith('## ') and not heading[3:4].isdigit():
-            found.setdefault(match.group(1), heading)
+            found.setdefault(match.group(1), index)
     return found
 
 
 def decision_ids(decisions, *texts):
-    named = named_headings(decisions)
+    named = named_anchors(decisions)
     found = set()
     for text in texts:
         found.update(m.group(1) for m in DECISION_ID_REF.finditer(text or '') if m.group(1) in named)
@@ -113,21 +114,23 @@ def decision_keys(decisions, *texts):
     return decision_numbers(*texts) + decision_ids(decisions, *texts)
 
 
-def heading_of(decisions, key):
+def heading_index(decisions, key):
+    """결정 헤딩의 줄 위치. 식별자는 그 앵커 다음 줄이다(같은 제목·접두어 제목에 흔들리지 않는다, PR #259 R1)."""
+    lines = decisions.split('\n')
     if isinstance(key, str):
-        return named_headings(decisions).get(key)
-    return next((line for line in decisions.split('\n') if line.startswith('## %d. ' % key)), None)
+        anchor = named_anchors(decisions).get(key)
+        return None if anchor is None else anchor + 1
+    return next((i for i, line in enumerate(lines) if line.startswith('## %d. ' % key)), None)
 
 
 def decision_sections(decisions, keys):
     lines = decisions.split('\n')
     parts = []
     for key in keys:
-        heading = heading_of(decisions, key)
-        body = section(decisions, heading) if heading else ''
+        head = heading_index(decisions, key)
+        body = section('\n'.join(lines[head:]), lines[head]) if head is not None else ''
         if not body:
             continue
-        head = lines.index(heading)
         anchor = lines[head - 1] + '\n' if head > 0 and lines[head - 1].startswith('<a id=') else ''
         parts.append(anchor + body)
     return parts
@@ -175,7 +178,8 @@ def own_decisions(pr_body, subjects, decisions=''):
 
 
 def decision_titles(decisions, keys):
-    return ['- ' + heading[3:] for heading in (heading_of(decisions, key) for key in keys) if heading]
+    lines = decisions.split('\n')
+    return ['- ' + lines[head][3:] for head in (heading_index(decisions, key) for key in keys) if head is not None]
 
 
 def group(path):

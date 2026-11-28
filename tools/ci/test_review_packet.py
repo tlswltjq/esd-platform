@@ -32,6 +32,13 @@ class SectionTest(unittest.TestCase):
         self.assertEqual(['- 스펙 위치'], review_packet.decision_titles(DECISIONS, ['spec-root']))
         self.assertEqual([], review_packet.decision_sections(DECISIONS, ['one']))
 
+    def test_r1_named_section_comes_from_its_anchor_not_a_matching_title(self):
+        # PR #259 R1: 같은 제목이나 접두어 제목이 앞에 있어도 그 식별자 앵커의 절을 넣는다.
+        text = ('<a id="a-one"></a>\n## 스펙 위치 바꿈\n- 문제: 앞\n\n<a id="a-two"></a>\n## 스펙 위치\n- 문제: 뒤\n\n'
+                "<a id='a-three'></a>\n## 스펙 위치\n- 문제: 셋\n")
+        self.assertEqual(['<a id="a-two"></a>\n## 스펙 위치\n- 문제: 뒤\n'], review_packet.decision_sections(text, ['a-two']))
+        self.assertEqual(["<a id='a-three'></a>\n## 스펙 위치\n- 문제: 셋\n"], review_packet.decision_sections(text, ['a-three']))
+
 
 class ReferenceTest(unittest.TestCase):
     def test_decision_numbers_split_joined_lists(self):
