@@ -9,10 +9,13 @@ from contextlib import redirect_stdout
 import cross_review
 
 THREAD = '01a2206b-a434-7493-a311-12a515815057'
+PACKET = '# 리뷰 묶음\n'
 
 
-def session_lines(model='gpt-6.1-terra', effort='high', sandbox='read-only', turns=1):
-    lines = [{'type': 'session_meta', 'payload': {'id': THREAD, 'originator': 'codex_exec'}}]
+def session_lines(model='gpt-6.1-terra', effort='high', sandbox='read-only', turns=1, packet=PACKET):
+    lines = [{'type': 'session_meta', 'payload': {'id': THREAD, 'originator': 'codex_exec'}},
+             {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+                                                   'content': [{'type': 'input_text', 'text': packet}]}}]
     for _ in range(turns):
         lines.append({'type': 'turn_context', 'payload': {'model': model, 'effort': effort,
                                                           'sandbox_policy': {'type': sandbox}}})
@@ -27,7 +30,7 @@ def write_session(sessions, lines, thread=THREAD):
     return path
 
 
-def fake_codex(sessions, lines, answer='지적 없음', thread=THREAD):
+def fake_codex(sessions, lines, answer='지적 없음', thread=THREAD, sleep=0):
     """테스트용 'codex exec': 세션 기록을 쓰고, --json 이벤트를 내고, -o 파일에 답을 쓴다."""
     script = (
         'import json, sys, pathlib\n'
@@ -35,12 +38,13 @@ def fake_codex(sessions, lines, answer='지적 없음', thread=THREAD):
         'sys.stdin.read()\n'
         'out = args[args.index("-o") + 1]\n'
         'pathlib.Path(out).write_text({answer!r}, encoding="utf-8")\n'
+        'import time; time.sleep({sleep!r})\n'
         'd = pathlib.Path({sessions!r}) / "2026" / "11" / "28"\n'
         'd.mkdir(parents=True, exist_ok=True)\n'
         '(d / ("rollout-x-" + {thread!r} + ".jsonl")).write_text({body!r}, encoding="utf-8")\n'
         'print(json.dumps({{"type": "thread.started", "thread_id": {thread!r}}}))\n'
         'print(json.dumps({{"type": "turn.completed"}}))\n'
-    ).format(answer=answer, sessions=str(sessions), thread=thread, body='\n'.join(lines) + '\n')
+    ).format(answer=answer, sessions=str(sessions), thread=thread, body='\n'.join(lines) + '\n', sleep=sleep)
     return [sys.executable, '-c', script]
 
 
@@ -78,6 +82,13 @@ class CheckTest(unittest.TestCase):
         self.assertTrue(cross_review.check(session_lines(turns=0), 'gpt-6.1-terra'))
 
 
+class PacketTest(unittest.TestCase):
+    def test_session_must_carry_this_packet_as_user_input(self):
+        # PR #257 R2: 모델·추론만 맞는 시험 호출이나 다른 작업 세션으로 리뷰어 줄을 받지 않는다.
+        self.assertEqual([], cross_review.packet_errors(session_lines(), PACKET))
+        self.assertTrue(cross_review.packet_errors(session_lines(packet='다른 작업'), PACKET))
+
+
 class FindSessionTest(unittest.TestCase):
     def test_finds_by_thread_id_in_file_name(self):
         with tempfile.TemporaryDirectory() as sessions:
@@ -91,13 +102,13 @@ class FindSessionTest(unittest.TestCase):
 
 
 class RunTest(unittest.TestCase):
-    def run_main(self, codex, sessions, root, out):
+    def run_main(self, codex, sessions, root, out, extra=()):
         packet = Path(root) / 'packet.md'
-        packet.write_text('# 리뷰 묶음\n', encoding='utf-8')
+        packet.write_text(PACKET, encoding='utf-8')
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             code = cross_review.main(['run', '--packet', str(packet), '--out', str(out), '--root', str(root),
-                                      '--sessions', str(sessions), '--codex', json.dumps(codex)])
+                                      '--sessions', str(sessions), '--codex', json.dumps(codex), *extra])
         return code, buffer.getvalue()
 
     def test_verified_review_prints_reviewer_line(self):
@@ -117,6 +128,24 @@ class RunTest(unittest.TestCase):
             self.assertFalse(out.exists())
             self.assertTrue(Path(str(out) + '.unverified').exists())
 
+    def test_session_of_another_task_fails(self):
+        with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:
+            out = Path(root) / 'review.md'
+            code, _ = self.run_main(fake_codex(sessions, session_lines(packet='다른 작업')), sessions, root, out)
+            self.assertEqual(1, code)
+            self.assertFalse(out.exists())
+
+    def test_timeout_after_writing_result_moves_it_aside(self):
+        # PR #257 R1: 결과를 쓴 뒤 시간 초과되면 검증 안 된 결과가 원래 경로에 남았다.
+        with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:
+            out = Path(root) / 'review.md'
+            code, printed = self.run_main(fake_codex(sessions, session_lines(), sleep=5), sessions, root, out,
+                                          extra=('--timeout', '1'))
+            self.assertEqual(1, code)
+            self.assertIn('실패', printed)
+            self.assertFalse(out.exists())
+            self.assertTrue(Path(str(out) + '.unverified').exists())
+
     def test_codex_failure_is_failure(self):
         with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:
             code, printed = self.run_main([sys.executable, '-c', 'import sys; sys.exit(3)'], sessions, root,
@@ -126,14 +155,27 @@ class RunTest(unittest.TestCase):
 
 
 class VerifyTest(unittest.TestCase):
-    def test_verify_existing_session(self):
+    def verify(self, sessions, packet_text):
+        packet = Path(sessions) / 'packet.md'
+        packet.write_text(packet_text, encoding='utf-8')
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = cross_review.main(['verify', '--session', THREAD, '--packet', str(packet), '--sessions', sessions])
+        return code, buffer.getvalue()
+
+    def test_verify_existing_session_with_its_packet(self):
         with tempfile.TemporaryDirectory() as sessions:
             write_session(sessions, session_lines())
-            buffer = io.StringIO()
-            with redirect_stdout(buffer):
-                code = cross_review.main(['verify', '--session', THREAD, '--sessions', sessions])
+            code, printed = self.verify(sessions, PACKET)
             self.assertEqual(0, code)
-            self.assertIn('세션 ' + THREAD, buffer.getvalue())
+            self.assertIn('세션 ' + THREAD, printed)
+
+    def test_verify_rejects_session_that_did_not_review_this_packet(self):
+        with tempfile.TemporaryDirectory() as sessions:
+            write_session(sessions, session_lines(packet='시험 호출'))
+            code, printed = self.verify(sessions, PACKET)
+            self.assertEqual(1, code)
+            self.assertNotIn('리뷰어:', printed)
 
 
 if __name__ == '__main__':
