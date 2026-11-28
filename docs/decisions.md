@@ -2708,6 +2708,15 @@
 - 구분: 추천 수용
 - 결과: 미착수. 착수한 PR에서 이 줄을 채운다
 
+<a id="remove-pg-adapters"></a>
+## mock-pg 앱과 PG 어댑터를 걷어내고 payment·settlement 코어는 남긴다
+- 문제: 결제·정산·PG 연동을 나중으로 미루려 하는데 PG 경로가 세 겹(mock-pg 앱과 `Simulated*` 어댑터, PortOne·TossPay 어댑터, 검증용 fake PortOne)으로 남아 다른 코드를 읽는 데 방해가 된다. payment·settlement 코어가 PG 모양이고 동결 여정 5개 중 3개([결정 201](#scope-freeze-verified-journeys))가 PG 경로를 쓴다.
+- 선택지: A mock-pg만 제거하고 PortOne 어댑터는 유지 / B PG 어댑터를 모두 제거하고 payment·settlement 코어는 유지 / C payment·settlement 모듈까지 통째로 제거 / D 코드는 두고 빌드·기본 스택에서만 제외 (추천: C — 결제·정산을 미룬다면 그 책임을 가진 모듈이 없는 상태가 구조와 맞고, B·D는 돌지 않는 코드를 남긴다)
+- 내 의견: "B" (결정 전 발언: "과거에 PG연동을 위해 실제 연결을 하기도 하고 목pg앱을 만들기도했는데 결제, 정산, PG연동은 나중으로 미루려고해서 mock pg와 어뎁터는 걷어내고싶음. 다른 코드 이해에도 방해되고")
+- 선택: B — 이유는 말하지 않았다. 어댑터가 없는 동안 포트를 무엇으로 조립하는지와 결정 201 여정 기준선을 어떻게 고치는지는 따로 정한다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268), 판단 색인 행
+
 ---
 
 ## 검증하며 드러난 것
