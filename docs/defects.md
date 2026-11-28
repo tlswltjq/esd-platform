@@ -17,7 +17,7 @@
 - 수정이 끝난 항목은 재현 테스트에서 태그를 떼어 기본 빌드가 지키는 회귀 방어선으로 옮긴다. 테스트 이름은 `[D-0NN]`으로 이 문서와 연결한다. 작성 규칙과 태그 운용은 [testing.md](testing.md) 참고.
 - **현재 남은 결함은 [D-026](#d-026) 1건**이다(`ConsumerLagMetricTest#appMetricGoesSilent`는 의도적으로 영구 실패).
 
-**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`·`KeyOrderGuardTest`(D-003·D-013·D-014·D-055·D-056·D-057), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `UnknownPropertyExceptionHandlerTest`(D-024·D-025), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-049·D-051, 회귀 방어선), `PortOneRefundCancellationGatewayTest`·`RefundCancellationDispatchIntegrationTest`(D-048, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
+**현재 저장소에 남은 재현 테스트**(2026-11-06 파일 검색 기준): `OutboxEventTest`·`OutboxRelayTest`·`OutboxPendingQueryTest`·`KeyOrderGuardTest`(D-003·D-013·D-014·D-055·D-056·D-057), `EventEnvelopeTest`·`ProcessedEventGuardTest`(D-004), `BusinessExceptionStatusTest`(D-015 참조), `ArchRuleEnforcementTest`(D-021), `ConsumerLagMetricTest`(D-026), `PaymentApprovalIntegrationTest`(D-044·D-049·D-051, 회귀 방어선), `PortOneRefundCancellationGatewayTest`·`RefundCancellationDispatchIntegrationTest`(D-048, 회귀 방어선), `SettlementIntegrationTest`·`SettlementMigrationIntegrationTest`(D-045·D-046, 회귀 방어선), `StoreIntegrationTest`(D-047, 회귀 방어선), `RefundWorkerTracingIntegrationTest`(D-050, 회귀 방어선), `LicenseRestorationIntegrationTest`·`LicenseApprovalCorrectionIntegrationTest`·`LicenseMigrationIntegrationTest`(D-052, 회귀 방어선), `DeploymentShutdownContractTest`·`GatewayGracefulShutdownTest`(D-034·D-035), `GatewayActuatorExposureTest`(닫힌 항목). 나머지 항목의 재현 테스트는 재작성 때 해당 코드와 함께 제거됐다.
 
 ---
 
@@ -363,6 +363,7 @@
 - **증상** 공개 `GET /api/v1/products?sort=productId,desc`가 500(`No property 'productId' found for type 'Product'`), 응답에 없는 내부 이름 `id,desc`만 200이었다. 계약이 뒤집혀 있었고 엔티티 타입명이 공개 경로로 나갔다.
 - **원인** 요청 문자열이 검사 없이 엔티티 속성으로 해석됐고 `PropertyReferenceException`이 핸들러 목록에 없었다.
 - **수정** ① `ProductSort`가 허용 키(`productId → id`, `productCode`·`name`·`price`)를 명시하고 그 밖은 `INVALID_REQUEST`(`ProductQueryService`가 호출) ② 안전망 `UnknownPropertyExceptionHandler`가 400으로 받는다. `id`는 거절한다. 안전망은 `@Order` 없이는 catch-all에 밀려 실행되지 않았으므로 테스트가 불리한 순서로 세운다. `ProductSortKeysTest`가 허용 표를 응답(`ProductResponse`)·엔티티 속성과 전수 대조한다.
+- **이후** 재작성 뒤 요청의 정렬 문자열을 `Sort`로 넘기는 API가 없어 안전망과 그 테스트를 제거했다([결정 remove-unknown-property-net](decisions.md#remove-unknown-property-net)). 이 예외는 이제 서버 코드 오류에서만 나고 500으로 응답한다.
 
 ---
 
@@ -375,6 +376,7 @@
 - **증상** `price`·`name`처럼 유일하지 않은 키나 정렬 없는 요청에서 동값이 페이지를 넘으면 상품이 두 페이지에 나오거나 어디에도 안 나온다. e2e는 "22번째 상품에서 터졌다"며 호출 쪽만 피해 갔다.
 - **수정** 표를 통과한 정렬 끝에 `id desc`를 붙인다(정렬 없으면 최신순). 함께 막은 것: 되싣는 요청 문자열의 제어문자 제거·길이 제한(`EchoedInput.safe`, 로그 줄 위조 방지), 표보다 많은 `sort` 절 거절, 안전망 로그에 타입명 기록. 상위 클래스 필드를 보도록 전수 대조를 고쳤다.
 - 확인: 꼬리표 줄을 지우면 단위 3건, `apply`가 정렬을 떨어뜨리면 통합 5건이 빨개진다. `EchoedInput`을 빼면 로그 어펜더 테스트가 빨개진다.
+- **이후** `EchoedInput`과 그 테스트는 안전망과 함께 제거했다([결정 remove-unknown-property-net](decisions.md#remove-unknown-property-net)).
 
 ---
 
