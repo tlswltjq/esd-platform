@@ -2708,6 +2708,15 @@
 - 구분: 추천 수용
 - 결과: 미착수. 착수한 PR에서 이 줄을 채운다
 
+<a id="remove-unknown-property-net"></a>
+## `EchoedInput`과 알 수 없는 속성 안전망을 제거한다
+- 문제: `common/web`의 `EchoedInput`은 `UnknownPropertyExceptionHandler`만 쓰는데, 재작성 뒤 요청의 정렬 문자열을 Spring Data `Sort`로 넘기는 API가 없다. `PropertyReferenceException`은 이제 서버 코드 오류에서만 나고, 안전망이 그것을 400으로 가린다.
+- 선택지: A `EchoedInput`과 그 테스트만 제거 / B `EchoedInput`·`UnknownPropertyExceptionHandler`·두 테스트·자동 구성 등록을 제거 / C B에 더해 `GlobalExceptionHandler`의 요청 유래 로그 메시지를 정화하거나 구조화 로그로 바꾼다 (추천: B — 쓰이지 않는 방어 코드와 서버 오류를 400으로 가리는 안전망을 함께 걷는다. C의 로그 위조 방어는 별개 정책이라 따로 정한다)
+- 내 의견: "B"
+- 선택: B — 서버가 만든 잘못된 정렬은 `GlobalExceptionHandler`의 500으로 드러난다. 요청의 정렬을 다시 `Pageable`로 바인딩하면 [D-024](defects.md#d-024)가 재발하므로 그때 허용 키 검증을 함께 넣는다.
+- 구분: 추천 수용
+- 결과: [PR #269](https://github.com/tlswltjq/esd-platform/pull/269), 근거 색인 2026-11-28 알 수 없는 속성 안전망 제거 행
+
 ---
 
 ## 검증하며 드러난 것

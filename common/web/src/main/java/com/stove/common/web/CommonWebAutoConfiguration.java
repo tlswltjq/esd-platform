@@ -24,20 +24,6 @@ public class CommonWebAutoConfiguration {
     }
 
     /**
-     * 스프링 데이터를 쓰는 실행에서만 등록한다(D-024).
-     *
-     * <p>이 모듈은 스프링 데이터를 {@code compileOnly} 로만 안다. 조건 없이 등록하면
-     * 데이터 없는 실행에서 어드바이스의 파라미터 타입을 훑는 순간 기동이 깨진다.
-     * 오늘은 common:web 을 쓰는 앱 9종이 전부 common:messaging → common:jpa 로
-     * 스프링 데이터를 물고 있지만, 그 사실에 기대는 대신 조건으로 적어 둔다.
-     */
-    @Bean
-    @ConditionalOnClass(name = "org.springframework.data.mapping.PropertyReferenceException")
-    public UnknownPropertyExceptionHandler unknownPropertyExceptionHandler() {
-        return new UnknownPropertyExceptionHandler();
-    }
-
-    /**
      * 추적을 구성하지 않은 실행에서도 뜨도록 {@link Tracer} 를 선택 주입한다 —
      * 없으면 {@code NOOP} 이 들어가 헤더를 붙이지 않을 뿐, 요청 처리는 그대로다.
      */

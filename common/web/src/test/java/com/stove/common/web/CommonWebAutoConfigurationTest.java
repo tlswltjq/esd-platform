@@ -25,15 +25,13 @@ class CommonWebAutoConfigurationTest {
     void optionalIntegrationsCanBeAbsent() {
         new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(CommonWebAutoConfiguration.class))
-                .withClassLoader(new FilteredClassLoader(
-                        "org.springdoc", "org.springframework.security", "org.springframework.data"))
+                .withClassLoader(new FilteredClassLoader("org.springdoc", "org.springframework.security"))
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(GlobalExceptionHandler.class);
                     assertThat(context).hasSingleBean(TraceIdResponseFilter.class);
                     assertThat(context).doesNotHaveBean("apiDocumentationCustomizer");
                     assertThat(context).doesNotHaveBean("securityExceptionHandler");
-                    assertThat(context).doesNotHaveBean("unknownPropertyExceptionHandler");
                 });
     }
 
@@ -45,7 +43,6 @@ class CommonWebAutoConfigurationTest {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(ApiDocumentationCustomizer.class);
                     assertThat(context).hasSingleBean(SecurityExceptionHandler.class);
-                    assertThat(context).hasSingleBean(UnknownPropertyExceptionHandler.class);
                 });
     }
 }
