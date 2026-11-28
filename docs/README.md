@@ -13,7 +13,7 @@
 
 | 무엇 | 문서 |
 |---|---|
-| 모듈별 현재 계약·남은 작업 | [`specs/`](../specs/README.md) — 모듈마다 `requirements`·`design`(끝에 "사용 안내")·`tasks` |
+| 모듈별 현재 계약·남은 작업 | [`specs/`](../specs/README.md) — 모듈마다 `requirements`·`design`·`tasks` |
 | 단계·순서·완료 조건 | [로드맵](roadmap.md) |
 | 왜 그렇게 했고 무엇을 버렸나 | [설계 결정](decisions.md) |
 | 사용자의 판단 이력 | [판단 색인](judgment-index.md) |

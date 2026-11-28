@@ -2636,6 +2636,15 @@
 - 구분: 추천 수용
 - 결과: [PR #261](https://github.com/tlswltjq/esd-platform/pull/261)
 
+<a id="usage-guide-removed"></a>
+## 모듈 `design.md`의 "사용 안내" 절을 없애고 링크를 실행·검증 안내로 돌린다
+- 문제: README와 문서 43곳이 `specs/<모듈>/design.md#사용-안내`를 가리키는데 그 절은 store에만 남아 있었다. 나머지 11개 모듈은 링크가 파일 맨 위로 떨어졌다. CI는 `[결정 …]` 링크만 검사해 이 깨짐을 잡지 못했다.
+- 선택지: A 11개 `design.md`에 "사용 안내" 절을 다시 쓴다 / B 링크를 `tools/verification/README.md`(전환 절차는 `tools/migrations/README.md`)로 돌리고 "design.md 끝의 사용 안내" 약속을 지운다 / C B에 더해 상대 링크·앵커 검사를 review-gate에 넣는다 (추천: C — 스펙은 계약, 실행 방법은 실행 안내에 두고, 검사가 없으면 같은 깨짐이 다시 쌓인다)
+- 내 의견: "사용안내가 필요함?" · "B"
+- 선택: B — 절은 실행·검증 안내와 겹쳐 필요 없다고 보고 없앴다. store에 남은 절은 지우고, 다른 곳에 없던 복구 확인 방법만 `docs/getting-started.md`의 "장애 확인과 재처리"로 옮겼다. 링크 검사는 넣지 않는다. 비용: 다른 깨진 상대 링크는 계속 사람이 찾아야 한다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #263](https://github.com/tlswltjq/esd-platform/pull/263), 근거 색인 2026-11-28 사용 안내 링크 행
+
 ---
 
 ## 검증하며 드러난 것

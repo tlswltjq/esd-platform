@@ -307,9 +307,3 @@ core가 주는 상태 값(`Supplier`)만 받는다. 지표 이름(목표, R8.3·
 | `stove.messaging.ops.enabled` | false | 공통 운영 API(목표: 실패 보관 재투입) | 평소 꺼 둠(결정 87). 켤 때 ADMIN 인증이 필요 — Store는 지금 리소스 서버 설정이 없다(notes F) |
 
 정본 조회 시간 제한(연결 3초·읽기 10초)은 `CatalogClientConfiguration`의 코드 값이다. 설정 키로 뺄지는 정하지 않았고 운영·테스트 차이가 없다.
-
-## 사용 안내
-
-- 실행: `DB_HOST`·`DB_PORT`·`DB_USER`·`DB_PASSWORD`, `CATALOG_BASE_URL`, Catalog와 같은 값의 `CATALOG_STORE_SERVICE_KEY`. 기존 개발 MySQL에는 관리자 계정으로 [스키마 준비 SQL](../../tools/migrations/store/store-schema.sql)을 적용하고, 새 환경은 `infra/mysql/init`에 들어 있다.
-- 검증: `./gradlew :apps:store:test :apps:store:integrationTest -Pstove.infraTest.maxParallel=1`, `python3 tools/verification/verify-store.py`(포트 충돌 시 `STORE_TEST_PORT_OFFSET`). 9개 서비스 여정은 `python3 tools/verification/verify-g4-operations.py`(`G4_TEST_PORT_OFFSET` 기본 20000).
-- 복구 확인: 경고 로그, `stove.store.sync.*`, `store_reconciliation` 전후 기록, 실패 보관 표. 식별 충돌·정본 계약 위반은 Catalog 원인을 고치면 다음 회차에서 회복 여부가 보인다. 개발 환경 전체 재구축은 Store를 멈추고 사본 표를 비운 뒤 시작한다.
