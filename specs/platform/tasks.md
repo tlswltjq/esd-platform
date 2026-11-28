@@ -331,8 +331,8 @@
     - [x] `verify-license.py` → `licenseE2eTest` — PR #286
     - [x] `verify-download.py` → `downloadE2eTest` — PR #287
     - [x] `verify-g4-operations.py` → `g4OperationsE2eTest` — PR #288
-    - [ ] `verify-tracing.py` → `tracingE2eTest`
-    - [ ] 마무리: 작업 표에서 `phase` 구조를 걷어내고, 앱별 비밀 허용 목록을 한 곳으로 모으고(`ServiceCredentials.java`와 `support/service_credentials.py`), `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이거나 지우고, Store가 있는 스택에서 브로커 무응답 중 Catalog가 낸 공개 알림이 복구 뒤 Store 사본에 닿는지 보는 단언을 더하고(PR #282에서 잡지 못한 변형), `docs/testing.md`·`tools/verification/README.md`를 맞춘다.
+    - [x] `verify-tracing.py` → `tracingE2eTest` — 옮기지 않는다([결정 tracing-stays-on-jib](../../docs/decisions.md#tracing-stays-on-jib)). `verify-jib.py --tracing`의 한 모드라 Jib 스택에 남는다. `tracingE2eTest`만 단계 실행(`phase`)을 계속 쓴다.
+    - [ ] 마무리: 작업 표의 `phase` 구조는 `tracingE2eTest`만 쓰도록 줄이고, 앱별 비밀 허용 목록을 한 곳으로 모으고(`ServiceCredentials.java`와 `support/service_credentials.py`), `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이거나 지우고, Store가 있는 스택에서 브로커 무응답 중 Catalog가 낸 공개 알림이 복구 뒤 Store 사본에 닿는지 보는 단언을 더하고(PR #282에서 잡지 못한 변형), `docs/testing.md`·`tools/verification/README.md`를 맞춘다.
   - 옮기지 않는 것: `verify-jib.py`(Jib 이미지 스택, 구매 여정·백업 복구·Prometheus·측정).
 - [x] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** — PR #279 ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild))
   - `LicenseOutageFlowTest`(5건)가 `stack.stop(LICENSE)`·`start`로 License를 직접 멈췄다 되살린다: 주입 전 깨끗함 → 주입 확인 → 나머지 앱·무관한 조회는 계속 → 보유자의 티켓이 `503 UPSTREAM_UNAVAILABLE`(Download R9.3) → 복구 뒤 200. `ServiceOutageChaosTest`·`Journey`를 지웠다.
