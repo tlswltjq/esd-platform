@@ -2812,6 +2812,18 @@
 - 구분: 추천 수용
 - 결과: [PR #272](https://github.com/tlswltjq/esd-platform/pull/272)
 
+<a id="error-observability"></a>
+## HTTP 오류를 지표·경보·모은 로그로 본다
+- 문제: `GlobalExceptionHandler`는 업무 오류를 상태 코드에 따라 `warn`·`error` 로그로만 남긴다. 로그는 컨테이너마다 평문으로 흩어져 있고 수집기가 없다. HTTP 5xx를 보는 경보가 없고, 오류 코드별 지표도 없다. 요청 한 건은 traceId로 찾을 수 있지만 장애를 감지하거나 코드별 추이를 볼 수 없다.
+- 선택지: 1 HTTP 5xx 비율 경보 / 2 오류 코드를 요청 지표의 태그로 / 3 구조화(JSON) 로그 / 4 Loki 로그 수집. 넷은 서로 배타적이지 않다 (추천: 1부터 순서대로 — 지표는 이미 나오고 있어 1의 비용이 가장 작고 감지 공백이 가장 크다. 4는 범위 동결(결정 201) 안에서 인프라를 더하는 일이라 우선순위가 낮다고 적었다)
+- 내 의견: "1-4를 모두 적용"
+- 선택: 1·2·3·4 모두. 임계값·태그 이름 등 세부는 채팅에서 "정할 것"으로만 적었고 구현하며 정했다(AI 해석).
+  - 1: `HttpServerErrorRateHigh` — 서비스별 5xx 비율이 5%를 넘은 채 5분, `warning`. `/actuator` 요청은 뺀다(헬스 체크의 503은 `ServiceDown`이 다루고 스크레이프가 분모를 채운다).
+  - 2: `http_server_requests`에 `error_code` 태그. 실패 응답(`ApiResponse.error`)의 코드를 싣고 성공은 `none`. MVC 앱만 해당한다(Gateway·웹 BFF는 WebFlux).
+  - 3·4: 후속 PR에서 정한 세부를 이 항목에 더한다.
+- 구분: 추천과 다른 선택
+- 결과: 1·2 [PR #273](https://github.com/tlswltjq/esd-platform/pull/273), 근거 색인 2026-11-28 HTTP 오류 지표 행. 3·4는 후속 PR에서 이 줄을 채운다
+
 <a id="remove-envelope-term"></a>
 ## "봉투"라는 용어를 걷어내고 `EventEnvelope`를 `EventMessage`로 바꾼다
 - 문제: "봉투"가 서로 다른 세 가지를 가리켰다 — 공통 응답 구조(`ApiResponse`), 본문과 대비되는 이벤트 식별 값(`eventId`·`eventType` 헤더), 헤더·키·본문을 묶은 수신 단위(`EventEnvelope` 클래스). 응답에 쓰기에는 어색한 번역어이고, `EventEnvelope`도 본문을 감싸는 구조가 아니라 Kafka 레코드를 정규화한 값이라 이름이 구조와 맞지 않는다.
