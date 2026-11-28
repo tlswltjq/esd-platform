@@ -1,7 +1,7 @@
 # 로드맵 — 기능 일반화와 이후 고도화
 
 **목표 (2026-10-29 사용자 결정):** MVP 상태의 전 기능을 일반적인 사용 수준으로 고도화한 뒤, 엣지 케이스·성능 관점으로 추가 고도화한다.
-**범위 동결 (2026-11-16, [결정 201](decisions.md#scope-freeze-verified-journeys)):** 지금 검증된 여정까지를 "기본 기능 완료"로 동결하고, 다음 단계는 메시징 분리·비교(M)다. 아래 G1~G7의 남은 항목은 동결 뒤 백로그다(0절).
+**범위 동결 (2026-11-16, [결정 201](decisions.md#scope-freeze-verified-journeys)):** 지금 검증된 여정까지를 "기본 기능 완료"로 동결하고, 다음 단계는 Kafka 기준선과 독립 구현 비교(M, [결정 227](decisions.md#kafka-only-messaging)·[228](decisions.md#messaging-comparison-closure))다. 아래 G1~G7의 남은 항목은 동결 뒤 백로그다(0절).
 모듈별 남은 작업은 각 `.kiro/specs/<모듈>/tasks.md`, 단계별 검증 결과는 [근거 색인](evidence.md), 정책 선택은 [결정 기록](decisions.md)과 [판단 색인](judgment-index.md)을 따른다.
 이 문서는 단계의 정의·순서·완료 조건만 다룬다. 진행 경위는 적지 않는다.
 
@@ -27,7 +27,7 @@
 2. 실제 앱 기준으로 Kafka의 성능·안정성 기준선을 잰다.
 3. 다른 기술은 같은 업무를 독립 구현한 앱으로, Kafka 기준선과 같은 벤치마크 계약(업무 시나리오·기대 상태·전달 보장·장애 주입·지표)으로 잰다. 앱 안에 기술 교체용 공통 추상화를 두지 않는다.
 
-**M 상태:** 결정 209 구조(브로커 중립 포트 + adapter 다섯)에서 잰 비교 — 평시 부하, S4~S7, S3 1회차 — 는 그 구조의 기록으로 [E12](experiments.md#messaging-comparison)에 남기고 비교 측정은 닫았다(결정 228, 플랫폼 T36·T37). 1은 PR #250에서 진행 중이다. 2·3은 아직 시작하지 않았다.
+**M 상태:** 결정 209 구조(브로커 중립 포트 + adapter 다섯)에서 잰 비교 — 평시 부하, S4~S7, S3 1회차 — 는 그 구조의 기록으로 [E12](experiments.md#messaging-comparison)에 남기고 비교 측정은 닫았다(결정 228, 플랫폼 T36·T37). 1은 [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)으로 끝났다. 2·3의 상태는 [플랫폼 tasks.md](../.kiro/specs/platform/tasks.md)(T39~)를 본다.
 
 ## 1. 단계의 정의
 
