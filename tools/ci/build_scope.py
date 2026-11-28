@@ -8,8 +8,10 @@
 - ``apps/<앱>/`` 아래만 바뀌었으면(``*.md`` 제외) 그 앱들의 ``:apps:<앱>:build``와 ``:common:test:test``.
   앱끼리는 프로젝트 의존이 없지만, ``common:test``의 배포 계약 테스트가 모든 앱의 ``application.yml``을 읽는다
   (``common/test/build.gradle``의 ``inputs.files``, PR #208 R1).
+- 결정 ci-scope-leaf-paths: 다른 모듈이 기대지 않는 ``e2e/``·``benchmarks/messaging/``만 바뀌었으면 그 모듈의 ``build``,
+  저장소 루트의 ``docker-compose*.yml``만 바뀌었으면 그 파일을 읽는 ``:common:test:test``. 앱 범위와 섞이면 합친다.
 - 이름 바꾸기는 옛 경로와 새 경로를 둘 다 본다(``--no-renames``, PR #208 R2).
-- 그 밖의 경로(``common/``, 빌드 설정, ``infra/``, ``tools/``, ``.github/``, ``e2e/`` 등)가 하나라도 있으면 전체.
+- 그 밖의 경로(``common/``, 빌드 설정, ``infra/``, ``tools/``, ``.github/`` 등)가 하나라도 있으면 전체.
 - 변경 목록이 비었으면(얻지 못했으면) 전체.
 
 예: ``python3 -I -B tools/ci/build_scope.py --event pull_request --base HEAD^1 >> "$GITHUB_OUTPUT"``
@@ -27,7 +29,8 @@ _APP = re.compile(r"^apps/([a-z][a-z-]*)/")
 # 결정 216: Gradle 빌드가 읽지 않는다고 확인한 경로(2026-11-23 조사: *.gradle의 rootProject.file·inputs).
 # Gradle이 읽는 tools/migrations/**(migrationTest 입력)·infra/**(Catalog 정책)·*.gradle은 넣지 않는다.
 # 새 경로를 넣기 전에 `git grep -n "tools/<경로>" -- '*.gradle'`로 Gradle 입력이 아닌지 확인한다.
-NOT_READ_BY_GRADLE_PREFIXES = ("tools/ci/", "tools/measurement/", "tools/verification/", ".claude/")
+# scripts/는 2026-11-28 조사(같은 grep, common/test 테스트가 읽는 경로)에서 Gradle 입력이 아니었다(결정 ci-scope-leaf-paths).
+NOT_READ_BY_GRADLE_PREFIXES = ("tools/ci/", "tools/measurement/", "tools/verification/", ".claude/", "scripts/")
 NOT_READ_BY_GRADLE_FILES = (".gitignore",)
 
 
@@ -35,6 +38,21 @@ def not_read_by_gradle(path):
     if path.endswith(".gradle"):
         return False
     return path in NOT_READ_BY_GRADLE_FILES or path.startswith(NOT_READ_BY_GRADLE_PREFIXES)
+
+
+# 결정 ci-scope-leaf-paths: 어느 모듈도 의존하지 않는 모듈(2026-11-28 `git grep "project(':e2e')"`·`':benchmarks`로 확인).
+# 다른 모듈이 의존하게 되면 여기서 뺀다.
+LEAF_MODULES = (("e2e/", ":e2e:build"), ("benchmarks/messaging/", ":benchmarks:messaging:build"))
+# 저장소 루트의 Compose 파일은 common/test/build.gradle 의 inputs.files(composeConfigs)만 읽는다.
+_ROOT_COMPOSE = re.compile(r"^docker-compose[A-Za-z0-9.-]*\.ya?ml$")
+
+
+def narrow_task(path):
+    """한 모듈의 작업만 돌리면 되는 경로면 그 작업, 아니면 None."""
+    for prefix, task in LEAF_MODULES:
+        if path.startswith(prefix):
+            return task
+    return APP_FILE_READERS if _ROOT_COMPOSE.match(path) else None
 
 
 def decide(event, paths, apps):
@@ -45,13 +63,15 @@ def decide(event, paths, apps):
     for path in paths:
         if path.endswith(".md") or not_read_by_gradle(path):
             continue
+        narrowed = narrow_task(path)
+        if narrowed is not None:
+            selected.add(narrowed)
+            continue
         match = _APP.match(path)
         if match is None or match.group(1) not in apps:
             return list(FULL)
-        selected.add(match.group(1))
-    if not selected:
-        return []
-    return [":apps:%s:build" % name for name in sorted(selected)] + [APP_FILE_READERS]
+        selected.update((":apps:%s:build" % match.group(1), APP_FILE_READERS))
+    return sorted(selected)
 
 
 def output_line(tasks):

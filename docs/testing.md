@@ -120,7 +120,7 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 | **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 21종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **CI 밤마다·수동** (`verify-jib.py`) |
 | **L7 장애 주입** | 서비스를 정지시켰을 때 격리되는가, 복구되는가 | **망가뜨려도 되는** 스택 | `e2e` 모듈 (`chaos` 태그) | `ServiceOutageChaosTest` | 회차에 수 분 | 손으로 |
 
-CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 main push마다 `./gradlew build`(L0~L5·과거 이행)를, PR에서는 바뀐 범위만 돌린다([결정 207](decisions.md#ci-build-scope): 문서만이면 생략, `apps/<앱>/` 안만이면 그 앱의 `build`, 그 밖은 전체). 또 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`, `:e2e:purchaseE2eTest`의 구매→지급→다운로드)을 돌린다. PG 연동은 걷어내 결제 실패·환불 야간 작업은 없다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 공개 저장소라 self-hosted 러너를 쓰지 않고, 비밀 값은 CI에 넣지 않는다.
+CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 main push마다 `./gradlew build`(L0~L5·과거 이행)를, PR에서는 바뀐 범위만 돌린다([결정 207](decisions.md#ci-build-scope): 문서만이면 생략, `apps/<앱>/` 안만이면 그 앱의 `build`, 그 밖은 전체. `e2e/`·`benchmarks/messaging/`만이면 그 모듈의 `build`, 루트 `docker-compose*.yml`만이면 `:common:test:test`, `scripts/`만이면 생략 — [결정 ci-scope-leaf-paths](decisions.md#ci-scope-leaf-paths)). 또 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`, `:e2e:purchaseE2eTest`의 구매→지급→다운로드)을 돌린다. PG 연동은 걷어내 결제 실패·환불 야간 작업은 없다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 공개 저장소라 self-hosted 러너를 쓰지 않고, 비밀 값은 CI에 넣지 않는다.
 
 L6·L7 이 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
 컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다. 대신 `./gradlew :e2e:e2eTest` 로 따로 부른다.

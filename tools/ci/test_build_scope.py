@@ -43,7 +43,7 @@ class BuildScopeTest(unittest.TestCase):
         for path in ["common/messaging/src/main/java/X.java", "build.gradle", "settings.gradle",
                      "gradle/libs.versions.toml",
                      "infra/minio/policies/download-reader.json", ".github/workflows/ci.yml",
-                     "e2e/build.gradle", "gradle.properties"]:
+                     "gradle.properties"]:
             self.assertEqual(scope([path, "apps/order/src/main/java/A.java"]), ["build"], path)
 
     def test_paths_gradle_does_not_read_skip_gradle(self):
@@ -61,6 +61,23 @@ class BuildScopeTest(unittest.TestCase):
                      "tools/verification/verify-test-boundaries.gradle", "infra/minio/policies/download-reader.json",
                      "tools/remote/remote.sh", "tools/observability/collect-lag.sh", "tools/README.md.bak"]:
             self.assertEqual(scope([path]), ["build"], path)
+
+    def test_leaf_modules_and_compose_files_build_only_their_reader(self):
+        # 결정 ci-scope-leaf-paths: 다른 모듈이 기대지 않는 e2e·benchmarks와, common:test만 읽는 루트 Compose 파일.
+        self.assertEqual(scope(["e2e/src/test/java/com/stove/e2e/A.java", "e2e/build.gradle"]), [":e2e:build"])
+        self.assertEqual(scope(["benchmarks/messaging/src/main/java/B.java"]), [":benchmarks:messaging:build"])
+        self.assertEqual(scope(["docker-compose.apps.yml", "docker-compose.yml"]), [":common:test:test"])
+        self.assertEqual(scope(["e2e/src/test/java/A.java", "apps/order/src/main/java/A.java", "docker-compose.local.yml"]),
+                         [":apps:order:build", ":common:test:test", ":e2e:build"])
+        # 저장소 루트의 Compose 파일만이다. 다른 위치·다른 벤치마크 모듈·공통 모듈이 섞이면 전체다.
+        for path in ["infra/docker-compose.yml", "benchmarks/other/src/main/java/B.java", "benchmarks/build.gradle",
+                     "docker-compose.yml.bak"]:
+            self.assertEqual(scope([path]), ["build"], path)
+        self.assertEqual(scope(["e2e/src/test/java/A.java", "common/web/src/main/java/X.java"]), ["build"])
+
+    def test_scripts_are_not_read_by_gradle(self):
+        self.assertEqual(scope(["scripts/start-apps.sh", "scripts/protected-compose.py", "docs/x.md"]), [])
+        self.assertEqual(scope(["scripts/build.gradle"]), ["build"])
 
     def test_an_unknown_app_directory_builds_everything(self):
         self.assertEqual(scope(["apps/newapp/src/main/java/A.java"]), ["build"])
