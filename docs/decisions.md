@@ -2618,6 +2618,15 @@
 - 구분: 추천 수용
 - 결과: [PR #261](https://github.com/tlswltjq/esd-platform/pull/261)
 
+<a id="build-on-draft"></a>
+## draft PR에서도 CI `build`를 돌린다
+- 문제: [결정 137](#claim-draft-pr)은 draft에서 `build`를 건너뛰고 ready로 바꾸면 돌게 했다. GitHub은 건너뛴 작업을 필수 검사에서 성공으로 보고해서, `pr_finish.py`가 그 함정을 막는 규칙을 덧붙였고 결함이 두 번 났다(#236 CI 시작 판정, #245 draft 때 건너뛴 build를 최종 결과로 읽음). 최근 CI 실행 100회 중 60회가 draft 건너뜀이었고, 작업 중에는 CI 피드백이 없어 ready 뒤 전체 대기를 그대로 기다렸다(2026-11-28 #259·#260).
+- 선택지: A 유지 / B draft에서도 push마다 build를 돌리고, ready 때는 같은 head 결과를 쓰며, 건너뛰는 분기와 `pr_finish.py`의 draft 예외를 없앤다 / C draft를 쓰지 않고 처음부터 ready PR (추천: B — "건너뜀 = 성공" 함정이 구조적으로 사라지고 도구 규칙이 줄며, 착수 표시(draft)는 남는다. 대가는 작업 중 push마다 CI가 도는 것으로, 결정 207의 범위 축소가 그대로라 대부분 짧다. C는 문서만인 착수 PR이 조건을 채워 너무 일찍 병합될 수 있다)
+- 내 의견: "b"
+- 선택: B — 추천을 받아들였다. 감수한 것: 여러 세션이 함께 push하면 무료 요금제의 동시 작업 한도로 대기열이 생길 수 있다.
+- 구분: 추천 수용
+- 결과: [PR #261](https://github.com/tlswltjq/esd-platform/pull/261)
+
 ---
 
 ## 검증하며 드러난 것
