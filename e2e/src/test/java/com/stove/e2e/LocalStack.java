@@ -22,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,12 +76,14 @@ final class LocalStack implements AutoCloseable {
     private final ConfluentKafkaContainer kafka;
     private final GenericContainer<?> minio;
     private final Map<String, String> environment = new LinkedHashMap<>();
+    private final Set<StackApp> apps;
     private final Map<StackApp, Process> processes = new EnumMap<>(StackApp.class);
     private final Map<String, Set<String>> credentialRecipients = new TreeMap<>();
     private final String settlementServiceKey = secret();
     private final Thread shutdownHook = new Thread(this::stopProcesses, "local-stack-shutdown");
 
-    private LocalStack(Path repository, Path directory, int offset) {
+    private LocalStack(Path repository, Path directory, int offset, Set<StackApp> apps) {
+        this.apps = apps;
         this.repository = repository;
         this.directory = directory;
         this.offset = offset;
@@ -104,26 +107,31 @@ final class LocalStack implements AutoCloseable {
     }
 
     /**
-     * 열두 앱 전체를 띄운다. 실패하면 띄운 것을 내리고 던진다.
+     * 고른 앱을 띄운다. 실패하면 띄운 것을 내리고 던진다. 인프라는 고른 앱과 상관없이 모두 뜬다.
      *
      * <p>{@link Stove}가 클래스 초기화 때 읽는 {@code stove.e2e.port-offset}을 여기서 정한다. 그래서 {@link Stove}를
      * 처음 건드리기 전에 불려야 한다({@link LocalStackExtension}).
      */
-    static LocalStack start() {
+    static LocalStack start(Set<StackApp> apps) {
         Path repository = Path.of(required("stove.e2e.repo-root")).toAbsolutePath();
         int offset = portOffset();
         System.setProperty("stove.e2e.port-offset", Integer.toString(offset));
+        if (apps.isEmpty()) {
+            throw new IllegalArgumentException("띄울 앱이 없다");
+        }
         String run = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now());
         Path directory = runDirectory(repository.resolve("e2e/build/local-stack"), run);
-        LocalStack stack = new LocalStack(repository, directory, offset);
+        LocalStack stack = new LocalStack(repository, directory, offset, EnumSet.copyOf(apps));
         try {
             Instant began = Instant.now();
             stack.startInfrastructure();
+            // Kafka에 직접 쓰는 여정(ReviewCreatorFlowTest 등)이 읽는 주소다.
+            System.setProperty("stove.e2e.kafka-brokers", stack.kafkaBootstrapServers());
             Instant infrastructureReady = Instant.now();
             stack.startApplications();
             // 이 층은 판정만이 아니라 숫자를 남긴다(e2e/build.gradle의 showStandardStreams와 같은 이유).
             System.out.printf("  LocalStack 기동: 인프라 %d초 + 앱 %d개 %d초 (오프셋 %d, 로그 %s)%n",
-                    Duration.between(began, infrastructureReady).toSeconds(), StackApp.values().length,
+                    Duration.between(began, infrastructureReady).toSeconds(), apps.size(),
                     Duration.between(infrastructureReady, Instant.now()).toSeconds(), offset, directory);
             return stack;
         } catch (Exception failure) {
@@ -149,15 +157,27 @@ final class LocalStack implements AutoCloseable {
         }
     }
 
-    /** 멈춘 앱을 다시 띄우고 준비될 때까지 기다린다. */
-    void start(StackApp app) {
-        launch(app);
+    /** 떠 있는 앱 집합. */
+    Set<StackApp> apps() {
+        return Set.copyOf(apps);
+    }
+
+    /**
+     * 멈춘 앱을 다시 띄우고 준비될 때까지 기다린다. {@code arguments}는 이번 기동에만 붙는 실행 인자다(예: {@code
+     * --stove.outbox.relay-enabled=false}).
+     */
+    void start(StackApp app, String... arguments) {
+        if (!apps.contains(app)) {
+            throw new IllegalArgumentException(app.module() + " 은 이 스택에 없다: " + apps);
+        }
+        launch(app, arguments);
         awaitReady(List.of(app), Duration.ofSeconds(180));
     }
 
-    void restart(StackApp app) {
+    /** 앱 프로세스를 실제로 내렸다가 다시 띄운다. 인자를 주지 않으면 기본 설정으로 뜬다. */
+    void restart(StackApp app, String... arguments) {
         stop(app);
-        start(app);
+        start(app, arguments);
     }
 
     /** 스택의 MySQL에서 한 줄짜리 조회를 한다. 탭으로 나뉜 값이 돌아온다. */
@@ -199,6 +219,32 @@ final class LocalStack implements AutoCloseable {
         for (String reader : List.of("review-reader", "download-reader")) {
             mc("admin", "user", "add", "admin", reader, READER_PASSWORD);
             mc("admin", "policy", "attach", "admin", "build-read", "--user", reader);
+        }
+        requireReadOnly("review-reader");
+    }
+
+    /**
+     * 읽기 전용 계정이 정말 쓰지도 지우지도 못하는지 확인한다. 준비물이 잘못돼 계정에 쓰기 권한이 붙으면, Review가
+     * 읽기 전용 계정으로만 빌드 저장소에 닿는다는 전제가 조용히 깨진 채 여정이 통과한다.
+     */
+    private void requireReadOnly(String reader) throws IOException, InterruptedException {
+        String fixture = "admin/" + BUCKET + "/iam-check.bin";
+        shell("printf 'read-only fixture' | mc pipe " + fixture);
+        mc("alias", "set", "reader", "http://localhost:9000", reader, READER_PASSWORD);
+        if (minio.execInContainer("sh", "-c", "printf forbidden | mc pipe reader/" + BUCKET + "/write-must-fail.bin")
+                .getExitCode() == 0) {
+            throw new IllegalStateException(reader + " 계정이 빌드 저장소에 쓸 수 있다");
+        }
+        if (minio.execInContainer("mc", "rm", "reader/" + BUCKET + "/iam-check.bin").getExitCode() == 0) {
+            throw new IllegalStateException(reader + " 계정이 빌드 저장소에서 지울 수 있다");
+        }
+        mc("stat", fixture);
+    }
+
+    private void shell(String script) throws IOException, InterruptedException {
+        Container.ExecResult result = minio.execInContainer("sh", "-c", script);
+        if (result.getExitCode() != 0) {
+            throw new IllegalStateException(script + " 실패: " + result.getStderr());
         }
     }
 
@@ -271,23 +317,26 @@ final class LocalStack implements AutoCloseable {
         return values;
     }
 
-    private void launchAndAwait(Duration limit, StackApp... apps) {
-        for (StackApp app : apps) {
+    private void launchAndAwait(Duration limit, StackApp... group) {
+        List<StackApp> chosen = Stream.of(group).filter(apps::contains).toList();
+        for (StackApp app : chosen) {
             launch(app);
         }
-        awaitReady(List.of(apps), limit);
+        awaitReady(chosen, limit);
     }
 
-    private void launch(StackApp app) {
+    private void launch(StackApp app, String... arguments) {
         Map<String, String> selected = new LinkedHashMap<>(ServiceCredentials.environmentFor(app, environment));
         if (app == StackApp.CATALOG || app == StackApp.SETTLEMENT) {
             selected.put("CATALOG_SETTLEMENT_SERVICE_KEY", settlementServiceKey);
         }
         credentialRecipients.put(app.module(), ServiceCredentials.credentialNames(selected));
-        ProcessBuilder builder = new ProcessBuilder(
+        List<String> command = new ArrayList<>(List.of(
                 Path.of(System.getProperty("java.home"), "bin", "java").toString(),
                 "-Xmx256m", "-jar", applicationJar(app).toString(),
-                "--server.address=127.0.0.1", "--server.port=" + (app.port() + offset));
+                "--server.address=127.0.0.1", "--server.port=" + (app.port() + offset)));
+        command.addAll(List.of(arguments));
+        ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(repository.toFile());
         builder.environment().clear();
         builder.environment().putAll(selected);

@@ -40,6 +40,10 @@ tasks.named('test') { enabled = false }
 // 노브가 하나인 것은 포트가 오프셋 규칙이기 때문이다(Stove 클래스 주석).
 def endpoints = ['host', 'port-offset']
 
+// LocalStack 이 띄울 수 있는 앱 전체(StackApp 과 같은 목록).
+def localStackApps = ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order', 'payment',
+                      'license', 'download', 'settlement']
+
 // ── 모듈·여정별 검증 태스크 표 ─────────────────────────────────────────
 // 태그 하나에 태스크 하나다. 아래 `e2eTest` 의 제외 목록과 태스크 등록이 모두 이 표에서 나온다(결정 e2e-task-table).
 // 새 태그를 여기에 더하면 `e2eTest` 에서 자동으로 빠진다.
@@ -47,12 +51,13 @@ def endpoints = ['host', 'port-offset']
 //   optional : 주어졌을 때만 넘기는 `stove.e2e.<이름>`
 //   phase    : `stove.e2e.<property>` 로 고르는 테스트 메서드 하나(재시작을 사이에 둔 단계 실행)
 //   expected : 실행 건수. 다르거나 건너뜀이 있으면 failure 문구로 실패한다. 없으면 세지 않는다
-//   localStack: 테스트가 스택을 직접 띄운다(LocalStackExtension). bootJar·MinIO 이미지를 먼저 준비한다
+//   localStack: 테스트가 스택을 직접 띄운다(LocalStackExtension). 값은 그 여정이 띄우는 앱 목록이고(@LocalStackApps 와 같게 둔다),
+//               그 앱의 bootJar 와 MinIO 이미지를 먼저 준비한다
 def suites = [
     // 열두 앱. 테스트가 스택을 띄우고 내린다(결정 e2e-stack-in-junit, 시범 1)
     [task: 'ownershipE2eTest', tag: 'ownership',
      description: '실제 BFF 로그인으로 구매자·창작자·운영자가 자기 것만 보고 자기 문만 여는지 검증한다 (스택을 직접 띄운다)',
-     localStack: true,
+     localStack: localStackApps,
      expected: 3, failure: 'Ownership verification requires 3 executed checks without skips'],
     // Auth·Gateway·Studio
     [task: 'studioE2eTest', tag: 'studio',
@@ -61,13 +66,12 @@ def suites = [
      expected: 7, failure: 'Studio E2E requires 7 executed checks without skips'],
     // Auth·Gateway·Studio·Review
     [task: 'reviewE2eTest', tag: 'review',
-     description: '실제 로그인·심사·빌드 열람·재심사·출시 요청을 네 모듈로 검증한다',
-     props: ['kafka-brokers'],
+     description: '실제 로그인·심사·빌드 열람·재심사·출시 요청을 네 모듈로 검증한다 (스택을 직접 띄운다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review'],
      expected: 10, failure: 'Review E2E requires 10 executed checks without skips'],
     [task: 'reviewRestartE2eTest', tag: 'review-restart',
-     description: 'Review 재시작 전후 저장된 판정·미발행 Outbox의 복구를 검증한다',
-     props: ['review-evidence'],
-     phase: [test: 'ReviewRestartFlowTest', property: 'review-restart-phase', first: 'preparePendingResult'],
+     description: 'Review를 재시작해도 저장된 판정이 그대로이고 미발행 Outbox가 복구되는지 검증한다 (스택을 직접 띄우고 재시작한다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review'],
      expected: 1, failure: 'Review restart verification requires one executed check without skips'],
     // 다섯 모듈. 실제 프로세스 재시작을 단계로 나눠 검증한다
     [task: 'catalogE2eTest', tag: 'catalog',
@@ -258,9 +262,7 @@ tasks.register('chaosTest', Test) {
     }
 }
 
-// LocalStack 이 띄우는 앱(StackApp 과 같은 목록)과 MinIO 이미지 선택(루트 build.gradle).
-def localStackApps = ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order', 'payment',
-                      'license', 'download', 'settlement']
+// MinIO 이미지 선택(루트 build.gradle).
 def minioImageSelection = rootProject.ext.minioImageSelection
 
 // ── 표의 태스크 등록 ───────────────────────────────────────────────────
@@ -279,7 +281,7 @@ suites.each { suite ->
                 systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").get()
         }
         if (suite.localStack) {
-            localStackApps.each { app -> dependsOn ":apps:${app}:bootJar" }
+            suite.localStack.each { app -> dependsOn ":apps:${app}:bootJar" }
             systemProperty 'stove.e2e.repo-root', rootDir.absolutePath
             // 기동 시간 같은 숫자를 콘솔에 남긴다.
             testLogging.showStandardStreams = true

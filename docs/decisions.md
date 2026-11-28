@@ -2848,7 +2848,7 @@
   - 기존 컨테이너·볼륨 보존 확인은 Gradle 실행을 `measure_guard.py`로 감싸서 한다.
   - 감수한 비용: 전면 이전까지 가면 스크립트 11개와 테스트 20여 개를 고친다. 이전 중에는 두 방식이 함께 있다. 범위 동결(결정 201) 안에서 시범까지는 기준선 확인 경로의 수리로 보고, 전면 이전은 그 범위를 넘을 수 있다고 적어 둔다.
 - 구분: 추천 수용
-- 결과: T43 [PR #275](https://github.com/tlswltjq/esd-platform/pull/275). T44(시범 1) [PR #277](https://github.com/tlswltjq/esd-platform/pull/277) — 앱은 컨테이너가 아니라 `bootJar` 프로세스로 띄웠다(발급자·공개 주소가 테스트와 앱에 같은 문자열이어야 해서, AI 해석). 근거 색인 2026-11-28 소유권 격리 여정 행. T49는 후속 PR에서 이 줄을 채운다
+- 결과: T43 [PR #275](https://github.com/tlswltjq/esd-platform/pull/275). T44(시범 1) [PR #277](https://github.com/tlswltjq/esd-platform/pull/277) — 앱은 컨테이너가 아니라 `bootJar` 프로세스로 띄웠다(발급자·공개 주소가 테스트와 앱에 같은 문자열이어야 해서, AI 해석). 근거 색인 2026-11-28 소유권 격리 여정 행. T49(시범 2) [PR #278](https://github.com/tlswltjq/esd-platform/pull/278) — 재시작 여정이 단계 속성·증거 파일 없이 한 테스트로 돈다. 근거 색인 2026-11-28 Review 재시작 여정 행. 전면 이전 여부는 플랫폼 T51에서 다시 묻는다
 
 <a id="chaos-test-rebuild"></a>
 ## 돌지 못하는 `chaosTest`는 지우지 않고 새 스택 제어 위에서 다시 세운다

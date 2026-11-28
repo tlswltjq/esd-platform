@@ -241,4 +241,4 @@ adapter 메모(공급자 규칙, core 계약 아님):
 - 바인딩은 `config`의 `ReviewStorageProperties`가 하고 adapter에는 값·클라이언트만 넘긴다(AGENTS.md 3절).
 - 운영/테스트 차이: 테스트 전용 경로·설정 키는 없다. 다만 저장소 엔드포인트·버킷·리전·JWT 주소·DB 계정(`DB_PASSWORD:stove1234`)의 로컬 개발 기본값이 운영 설정에 들어 있어, 운영에서 값을 빠뜨려도 기동한다(RV-T10, 원칙 ⑦ 확인 필요).
 - 심사자 계정은 Auth 기동 전에 `AUTH_REVIEWER_EMAIL`·`AUTH_REVIEWER_PASSWORD`(ADMIN은 `AUTH_ADMIN_*`)로 준비한다. 공개 가입은 REVIEWER를 주지 않는다.
-- 검증: `./gradlew :apps:review:test :apps:review:integrationTest`, `python3 tools/verification/verify-review.py`(앱 포트 +30000, `REVIEW_TEST_PORT_OFFSET`, MinIO 이미지 `STOVE_TEST_MINIO_IMAGE`).
+- 검증: `./gradlew :apps:review:test :apps:review:integrationTest`, `./gradlew :e2e:reviewE2eTest :e2e:reviewRestartE2eTest`(테스트가 스택을 직접 띄우고 Review를 재시작한다. 앱 포트 +15000, `-Dstove.e2e.port-offset`, MinIO 이미지 `STOVE_TEST_MINIO_IMAGE`).
