@@ -287,12 +287,14 @@
   - [x] RabbitMQ Streams adapter([결정 211](../../../docs/decisions.md#rabbitmq-streams-comparison)) — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222). `common:messaging-rabbitmq-streams`: 토픽마다 super stream(분할 3, 보존 7일), 분할마다 단일 활성 소비자, 처리·격리 보관 뒤 위치 저장, 새 그룹은 `first`부터. 공통 계약 8개 + Streams 고유 1개(붙기 전 발행한 메시지도 새 그룹이 받음) 통과, 변이(단일 활성 소비자 제거) 시 계약 2·3 실패. 측정 하네스 `--broker rabbitmq-streams`.
   - [x] S1 새 소비 서비스와 초기 적재, S2 버그 수정 뒤 과거 재반영 — 재지 않고 닫았다([결정 228](../../../docs/decisions.md#messaging-comparison-closure)). 비교 대상 adapter를 [결정 227](../../../docs/decisions.md#kafka-only-messaging)로 지웠다.
 
-- [ ] **T39. Kafka 단일 구현의 성능·안정성 기준선을 잰다(작업 B)** ([결정 227](../../../docs/decisions.md#kafka-only-messaging)·[229](../../../docs/decisions.md#benchmark-fault-injection)~[235](../../../docs/decisions.md#dlt-write-failure-injection), [E13 지표·계약](../../../docs/experiments.md#kafka-baseline))
+- [x] **T39. Kafka 단일 구현의 성능·안정성 기준선을 잰다(작업 B)** — 완료 조건 충족으로 닫았다. 실행 수단이 없어 재지 않은 두 항목은 T40(동결 뒤 백로그)로 옮겼다([결정 238](../../../docs/decisions.md#kafka-baseline-closure)) ([결정 227](../../../docs/decisions.md#kafka-only-messaging)·[229](../../../docs/decisions.md#benchmark-fault-injection)~[235](../../../docs/decisions.md#dlt-write-failure-injection), [E13 지표·계약](../../../docs/experiments.md#kafka-baseline))
   - 정본: 지표 정의·벤치마크 계약·판정식은 E13, 부하 조건은 결정 230, 판정 기준은 결정 231(잠정 벤치마크 기준, SLO 아님), 결과 보관은 결정 233.
   - [x] B1 지표 명세·벤치마크 계약(E13), 소비 재시도·격리 지표(`stove.kafka.consumer.failed-deliveries`·`.recovered`·`.recovery-failures`) — PR #252.
   - [x] B2 층 2 메시징 구간 벤치: `benchmarks:messaging` 모듈(결정 234) — 시험 앱(운영과 같은 자동 구성, 헤더 `x-bench-fail`대로 실패), open-loop 부하 발생기, 회차 폴더·요약(`summary.json`)·그래프 스크립트, smoke — PR #253([E13 층 2 실행](../../../docs/experiments.md#kafka-baseline-layer2)).
   - [x] B3 층 1 E2E 하네스: `verify-jib.py --measure` 확장(주문률 단계, Offered·Completed·Outstanding 10초 시계열, 부하 발생기 달성률), 외부 장애 주입(소비 DB 권한 회수·`docker kill`·잘못된 봉투 발행·DLT `max.message.bytes`), smoke — PR #254([E13 층 1 실행](../../../docs/experiments.md#kafka-baseline-layer1)).
   - [x] B4 측정: 기준선(E2E 2주문/s·메시징 100 msg/s 정식 3회) → 탐색 → 정식(기준·포화 경계) → 장애(시나리오 3~6). 결과는 E13과 `docs/experiments.d/E13/<회차>/` — PR #255([E13 결과](../../../docs/experiments.md#kafka-baseline-results)). 최대 지속 처리량 층 1 [6, 7)주문/s·층 2 [100, 110) msg/s, 층 2 기준 발행률은 [결정 236](../../../docs/decisions.md#layer2-base-rate).
-  - [ ] 층 2 시험 앱 프로세스 kill 단계(시나리오 5·6 층 2)와 격리 뒤 `quarantine/replay` 재투입 시간 측정 — B4에서 실행 수단이 없어 미측정 사유로 남겼다.
-  - [ ] 별도 시나리오(결정 235 범위 밖): DLT 저장 성공 직후 원본 offset 커밋 실패로 생기는 DLT 중복.
   - 완료 조건: 시나리오 1~6마다 결과 또는 미측정 사유·실행 방법이 E13에 있고, 최대 지속 처리량이 결정 231 판정식으로 [통과 단계, 실패 단계) 구간으로 적혀 있다.
+
+- [ ] **T40. (동결 뒤 백로그) T39에서 재지 않은 Kafka 기준선 항목** ([결정 238](../../../docs/decisions.md#kafka-baseline-closure)) — M에 필요할 때만 꺼낸다. 미측정 사유는 [E13 결과](../../../docs/experiments.md#kafka-baseline-results) "측정하지 못하는 것"에 있다.
+  - [ ] 층 2 시험 앱 프로세스 kill 단계(시나리오 5·6 층 2)와 격리 뒤 `quarantine/replay` 재투입 시간 측정 — 선행: `bench_messaging.py`에 시험 앱 종료·재기동 단계, 회차 절차에 관리자 인증 ops API 호출을 넣는다. 그때까지 층 2 kill은 층 1 kill 결과로 대신한다.
+  - [ ] 별도 시나리오(결정 235 범위 밖): DLT 저장 성공 직후 원본 offset 커밋 실패로 생기는 DLT 중복.
