@@ -75,7 +75,8 @@ class ProblemsTest(unittest.TestCase):
         for text in ('배경: https://github.com/o/r/actions/runs/4611 에서 실패했다',
                      '<!-- main CI 복구: https://github.com/o/r/actions/runs/4611 -->',
                      'main CI 복구: https://github.com/x/y/actions/runs/4611',
-                     'main CI 복구: https://github.com/o/r/actions/runs/46110'):
+                     'main CI 복구: https://github.com/o/r/actions/runs/46110',
+                     '```\n- main CI 복구: https://github.com/o/r/actions/runs/4611\n```'):
             with self.subTest(text=text):
                 self.assertTrue(pr_finish.problems(pr(body=text + '\n' + pr()['body']), red))
         self.assertEqual([], pr_finish.problems(pr(), None))
@@ -100,6 +101,14 @@ class MainCiTest(unittest.TestCase):
         with mock.patch.object(pr_finish, 'gh', return_value=(0, json.dumps(runs), '')):
             self.assertEqual(9, pr_finish.main_ci_failure()['id'])
         with mock.patch.object(pr_finish, 'gh', return_value=(0, json.dumps(runs[:2] + runs[3:]), '')):
+            self.assertIsNone(pr_finish.main_ci_failure())
+        # 재리뷰 1 R1: 읽은 목록이 꽉 찼는데 성공·실패가 하나도 없으면 판정할 수 없으므로 막는다.
+        cancelled = [{'databaseId': n, 'conclusion': 'cancelled', 'headSha': 'e' * 40, 'url': 'u'}
+                     for n in range(pr_finish.MAIN_RUNS)]
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, json.dumps(cancelled), '')):
+            with self.assertRaises(SystemExit):
+                pr_finish.main_ci_failure()
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, json.dumps(cancelled[:3]), '')):
             self.assertIsNone(pr_finish.main_ci_failure())
         with mock.patch.object(pr_finish, 'gh', return_value=(0, '[]', '')):
             self.assertIsNone(pr_finish.main_ci_failure())

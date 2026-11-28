@@ -43,6 +43,7 @@ REQUIRED = ('build', 'review-gate')
 RERUN = {'edit': ('review-gate',)}
 MAIN_FAILURES = ('failure', 'timed_out', 'startup_failure')
 MAIN_SUCCESS = 'success'
+MAIN_RUNS = 100
 MAIN_FIX = re.compile(r'^\s*(?:[-*]\s+)?main CI 복구\s*[:：]\s*(\S+)', re.MULTILINE)
 VIEW_FIELDS = 'number,state,isDraft,mergeStateStatus,headRefOid,body,statusCheckRollup'
 
@@ -225,21 +226,26 @@ def main_ci_failure():
     """결정 stop-merge-on-red-main: main push CI 가운데 성공·실패로 끝난 가장 최근 실행이 실패면 {id, url, sha},
     아니면 None. 실패 뒤의 취소·건너뜀은 실패를 해소하지 않는다(PR #261 R1). 읽지 못하면 통과로 바꾸지 않고 멈춘다."""
     code, out, err = gh(['run', 'list', '--workflow', 'ci.yml', '--branch', 'main', '--event', 'push',
-                         '--status', 'completed', '--limit', '30', '--json', 'databaseId,conclusion,headSha,url'],
+                         '--status', 'completed', '--limit', str(MAIN_RUNS), '--json', 'databaseId,conclusion,headSha,url'],
                         check=False)
     if code != 0:
         raise SystemExit('실패: main CI 상태를 읽지 못함: ' + err.strip())
-    for run in json.loads(out or '[]'):
+    runs = json.loads(out or '[]')
+    for run in runs:
         if run.get('conclusion') == MAIN_SUCCESS:
             return None
         if run.get('conclusion') in MAIN_FAILURES:
             return {'id': run['databaseId'], 'url': run.get('url'), 'sha': run.get('headSha')}
+    if len(runs) >= MAIN_RUNS:
+        # PR #261 재리뷰 1 R1: 꽉 찬 목록에 성공·실패가 없으면 판정할 수 없다. 통과로 바꾸지 않는다.
+        raise SystemExit('실패: main CI 최근 {}건에 성공·실패가 없어 상태를 판정할 수 없다.'.format(MAIN_RUNS))
     return None
 
 
 def fixes_main(pr, red):
     """PR #261 R2: 주석 밖의 `main CI 복구: <URL>` 줄이 이 저장소의 그 run URL과 정확히 같아야 고치는 PR이다."""
-    body = re.sub(r'<!--.*?-->', '', pr.get('body') or '', flags=re.S)
+    # 재리뷰 1 R2: HTML 주석과 코드 블록 안의 예시는 세지 않는다.
+    body = '\n'.join(review_gate.outside_fences(re.sub(r'<!--.*?-->', '', pr.get('body') or '', flags=re.S).split('\n')))
     return any(link.rstrip('.,)') == red['url'] for link in MAIN_FIX.findall(body))
 
 
