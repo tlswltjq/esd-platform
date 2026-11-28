@@ -2870,6 +2870,15 @@
 - 구분: 추천과 다른 선택
 - 결과: [PR #280](https://github.com/tlswltjq/esd-platform/pull/280)(기록·로드맵). 구현은 플랫폼 T52의 PR들
 
+<a id="tracing-stays-on-jib"></a>
+## Tracing 여정은 `LocalStack`으로 옮기지 않고 Jib 스택에 남긴다
+- 문제: [결정 e2e-full-migration](#e2e-full-migration)은 남은 여정 아홉 개를 모두 옮기되 `verify-jib.py`는 옮기지 않는다고 정했다. 아홉 개에 넣은 `verify-tracing.py`는 `verify-jib.py --tracing`을 부르는 껍데기이고, 실제 검증(`support/tracing_verification.py`)은 Jib 이미지 스택에 Tempo·Grafana를 붙여 Payment 컨테이너를 재시작하고 샘플링을 바꾸며 돈다. 두 규칙이 이 항목에서 부딪친다. 목록을 만들 때 스크립트 이름만 보고 내용을 확인하지 않아 생긴 일이다(AI의 착오).
+- 선택지: A 옮기지 않는다 — `verify-jib.py`의 모드로 둔다 / B `LocalStack`에 Tempo·Grafana와 추적 설정·샘플링 제어를 더해 옮긴다 (추천: A — 추적 수집은 앱 코드보다 배포 구성에 의존해 배포 이미지에서 보는 것이 목적에 맞고, `verify-jib.py`를 옮기지 않는 이유와 같다. B는 단계 실행 구조를 완전히 없애지만 검증 대상이 이미지에서 `bootJar` 프로세스로 바뀐다)
+- 내 의견: "A로 해"
+- 선택: A — T52는 여덟 개로 끝낸다. `:e2e:tracingE2eTest`만 파이썬이 단계마다 부르는 구조(`phase`·`props`)를 계속 쓰고, 작업 표의 그 장치는 이 작업을 위해 남긴다.
+- 구분: 추천 수용
+- 결과: [PR #289](https://github.com/tlswltjq/esd-platform/pull/289)(기록)
+
 ---
 
 ## 검증하며 드러난 것
