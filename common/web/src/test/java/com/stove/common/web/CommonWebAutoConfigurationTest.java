@@ -30,6 +30,8 @@ class CommonWebAutoConfigurationTest {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(GlobalExceptionHandler.class);
                     assertThat(context).hasSingleBean(TraceIdResponseFilter.class);
+                    assertThat(context).hasSingleBean(ApiErrorCodeAdvice.class);
+                    assertThat(context).hasSingleBean(ApiErrorObservationConvention.class);
                     assertThat(context).doesNotHaveBean("apiDocumentationCustomizer");
                     assertThat(context).doesNotHaveBean("securityExceptionHandler");
                 });

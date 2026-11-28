@@ -5,7 +5,7 @@
 
 | 모듈 | 책임 |
 |---|---|
-| `web` | 응답 봉투, 확장 가능한 오류 계약, Servlet 예외 처리·추적·API 문서 지원 |
+| `web` | 응답 봉투, 확장 가능한 오류 계약, Servlet 예외 처리·추적·API 문서 지원, 요청 지표(`http_server_requests`)의 `error_code` 태그 |
 | `security` | API JWT 검증, 역할 변환, 검증된 principal의 식별 정보 추출·주입 |
 | `jpa` | 영속성 감사와 공통 시간 필드 |
 | `contract` | 이벤트 계약: 토픽·이벤트 종류·payload, 봉투(`EventEnvelope.from(ConsumerRecord)`)·헤더 이름과 읽기(`EventHeaders`). Kafka 클라이언트(레코드·헤더 타입)와 Jackson만 의존 |

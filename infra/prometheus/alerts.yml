@@ -180,6 +180,28 @@ groups:
             생성 후 30분을 넘긴 PENDING 주문이 {{ $value }}건이고 30분 추세가 줄지 않는다.
             만료 스케줄러 실행·DB 잠금·처리 실패 로그를 확인한다.
 
+      # 서버 오류 응답 비율(결정 error-observability). 요청 로그의 `error` 줄은 누가 보기 전에는 아무도 모른다.
+      #
+      # 건수가 아니라 비율로 본다 — 한 건의 500 은 흔하고, 요청의 5% 가 5분 넘게 실패하면 그 서비스가 일을 못 하는 것이다.
+      # `for` 로 지속을 보므로 배포 직후의 짧은 실패에는 울리지 않는다.
+      # `/actuator` 는 뺀다 — 헬스 체크의 503 은 ServiceDown 과 프로브가 다루고, 10초마다 긁는 스크레이프가 분모를 채워
+      # 업무 요청의 실패 비율을 낮춰 보이게 한다.
+      # 어떤 오류인지는 같은 지표의 `error_code` 태그로 나눠 본다(common:web 의 ApiErrorObservationConvention).
+      - alert: HttpServerErrorRateHigh
+        expr: >-
+          sum by (application) (rate(http_server_requests_seconds_count{status=~"5..", uri!~"/actuator.*"}[5m]))
+          / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }}: 요청의 {{ $value | humanizePercentage }} 가 5xx 로 실패한다"
+          description: >-
+            최근 5분 요청 중 5xx 비율이 5% 를 넘은 채 5분이 지났다.
+            sum by (uri, status, error_code) (rate(http_server_requests_seconds_count{application="{{ $labels.application }}", status=~"5.."}[5m]))
+            로 어느 API 의 어떤 오류인지 보고, 응답의 X-Correlation-Id(traceId)로 그 요청의 로그와 트레이스를 찾는다.
+
       # 스크레이프가 끊기면 업무 경보가 조용해지므로 수집 실패 자체도 감시한다.
       - alert: ServiceDown
         expr: up == 0
