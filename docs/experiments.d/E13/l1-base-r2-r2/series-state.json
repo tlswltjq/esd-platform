@@ -1,0 +1,45 @@
+{
+  "stages": {
+    "r2": {
+      "rate": 2.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-kfcfmgyv",
+      "seconds_taken": 1480,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 2.0,
+        "rates": {
+          "offered_per_s": 2.0,
+          "completed_per_s": 2.0011111111111113,
+          "completed_over_offered": 1.0005555555555556
+        },
+        "outstanding_drain_seconds": 1.2,
+        "backlog_drain_seconds": 8.719,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 179.524,
+          "p95_ms": 269.537,
+          "p99_ms": 305.185,
+          "max_ms": 450.229
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 900,
+  "warmup": 300,
+  "buyers": 20,
+  "faults": [],
+  "rates": [
+    2.0
+  ]
+}

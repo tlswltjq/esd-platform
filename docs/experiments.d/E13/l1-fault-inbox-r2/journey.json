@@ -1,0 +1,34 @@
+{
+  "window": {
+    "since": "2026-11-27 22:36:39.612594",
+    "until": "2026-11-27 22:46:40.239379",
+    "orders": 1200,
+    "diagnosis": {
+      "orders_in_db": "1320",
+      "matched_orders": "1200",
+      "matched_purchases": "1200",
+      "latest_order_numbers": "fc6f0f1b-f48f-4a58-a887-0e14a04e4841,3b9ca0a1-6581-4392-953c-4f668165d2ee",
+      "evidence_sample": [
+        "f5424bc9-f838-4629-8324-5dd6e1efbeb8",
+        "694794a0-8aeb-4650-91f7-1e32354c7e86"
+      ]
+    }
+  },
+  "purchase": {
+    "completed": 1200,
+    "incomplete": 0,
+    "failed": 0,
+    "created_to_basis": {
+      "p50_ms": 887.201,
+      "p95_ms": 1403.452,
+      "p99_ms": 1533.989,
+      "max_ms": 4087.246
+    },
+    "paid_to_basis": {
+      "p50_ms": 192.529,
+      "p95_ms": 296.205,
+      "p99_ms": 360.149,
+      "max_ms": 3261.479
+    }
+  }
+}

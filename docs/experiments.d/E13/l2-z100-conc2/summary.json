@@ -1,0 +1,668 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-z100-conc2",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 100.0,
+      "warmup_seconds" : 120,
+      "seconds" : 180,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : 2,
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "832baea961f502215f8a02e1e37f97d5a2c934c5",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-28T02:25:17.517296+00:00",
+    "load_started_us" : 1795832754709071,
+    "load_ended_us" : 1795833055400134,
+    "observation_deadline_us" : 1795833655400134,
+    "settled_us" : 1795833059081518,
+    "timed_out" : false,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 0.301,
+      "jvm_gc_pause_seconds_count" : 52.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 1.0097E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 68,
+          "cpu_percent_mean" : 48.73,
+          "cpu_percent_max" : 206.36,
+          "memory_mib_mean" : 668.9,
+          "memory_mib_max" : 979.6
+        },
+        "mysql" : {
+          "samples" : 68,
+          "cpu_percent_mean" : 27.18,
+          "cpu_percent_max" : 35.69,
+          "memory_mib_mean" : 409.7,
+          "memory_mib_max" : 416.4
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 40124,
+          "growth_kib" : 39388
+        },
+        "mysql" : {
+          "before_kib" : 206372,
+          "after_kib" : 253400,
+          "growth_kib" : 47028
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 32,
+        "cpu_seconds" : 99.44,
+        "cpu_percent_mean" : 32.93,
+        "rss_mib_max" : 527.9
+      }
+    },
+    "lag" : [ {
+      "total" : null,
+      "partitions" : {
+        "1" : 27,
+        "0" : null,
+        "2" : 37
+      },
+      "members" : 3,
+      "at_us" : 1795832757007601
+    }, {
+      "total" : 196,
+      "partitions" : {
+        "1" : 101,
+        "0" : 92,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832767717900
+    }, {
+      "total" : 86,
+      "partitions" : {
+        "1" : 33,
+        "0" : 52,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832777205924
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "1" : 1,
+        "0" : 1,
+        "2" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795832787080796
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "0" : 1,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832797291328
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "0" : 2,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832807036476
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 0,
+        "0" : 2,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832817128650
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "0" : 1,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832827545496
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 1,
+        "0" : 1,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832837290741
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 0,
+        "0" : 2,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832847021396
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "0" : 2,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832857149478
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "0" : 2,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832867246551
+    }, {
+      "total" : 2,
+      "partitions" : {
+        "1" : 2,
+        "0" : 0,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832876944261
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "0" : 2,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832887121802
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "0" : 2,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832897193746
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "0" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832907195214
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "0" : 0,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832917229525
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "0" : 2,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832926862894
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 0,
+        "0" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832936842213
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 2,
+        "0" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832947067955
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "0" : 2,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832957227560
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "0" : 2,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832966892464
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 1,
+        "0" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832977027371
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 0,
+        "0" : 2,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832986988353
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 2,
+        "0" : 2,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832996972347
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 2,
+        "0" : 0,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795833007229467
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "1" : 0,
+        "0" : 3,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795833016823663
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 2,
+        "0" : 1,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795833026963995
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "1" : 1,
+        "0" : 2,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795833037185030
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "1" : 0,
+        "0" : 1,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795833047286231
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "1" : 0,
+        "0" : 0,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795833056737824
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "1" : 0,
+        "0" : 0,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795833058974380
+    } ],
+    "export_at_us" : 1795833059197120,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "payload_bytes" : 1024,
+      "seed" : 230,
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "topic" : "bench.messages.v1",
+      "keys" : 600,
+      "seconds" : 180,
+      "rate" : 100.0,
+      "warmup_seconds" : 120,
+      "permanent_ratio" : 0.0
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:42399",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 30000,
+    "acked" : 30000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 100.0,
+      "messages" : 18000,
+      "window_start_us" : 1795832875407956,
+      "window_end_us" : 1795833055407956,
+      "window_seconds" : 180,
+      "sent_in_window" : 18000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 100.0,
+      "behind_schedule_us" : {
+        "count" : 18000,
+        "p99" : 309,
+        "p50" : 75,
+        "max" : 6395
+      }
+    },
+    "finished_us" : 1795833055400134,
+    "finished_monotonic_ns" : 15435364305813110
+  },
+  "window" : {
+    "start_us" : 1795832875407956,
+    "end_us" : 1795833055407956,
+    "seconds" : 180.0
+  },
+  "counts" : {
+    "requested" : 30000,
+    "requested_measure" : 18000,
+    "acked" : 30000,
+    "ack_failed" : 0,
+    "received" : 30000,
+    "attempts" : 30000,
+    "failed_attempts" : 0,
+    "completed" : 30000,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 100.0,
+    "acked_per_s" : 100.0,
+    "received_per_s" : 100.0,
+    "completed_per_s" : 100.0,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 0.0
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 762,
+      "p95" : 1333,
+      "p99" : 2231,
+      "p999" : 6267,
+      "mean" : 847.6031666666667,
+      "max" : 13383,
+      "curve" : [ [ 0.0, 375 ], [ 10.0, 584 ], [ 25.0, 644 ], [ 50.0, 762 ], [ 75.0, 934 ], [ 90.0, 1135 ], [ 95.0, 1333 ], [ 99.0, 2231 ], [ 99.5, 3029 ], [ 99.9, 6267 ], [ 99.99, 12855 ], [ 100.0, 13383 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAABPN4nDVV0Y7bRBT1Xk8ms95Zr+u63tSkrnFdKwTLtbaWZaKQRqtgoiiKQhRWS4hWVVhVq6raB3gpD4CQeEOIh4pnXvgRfoK/QOITODPZOtnxzJ17zzn3Zu5s95d39w2j/dzYP+bd+0AN/7z7y3jx397wb4uOyaCH1MLHJIMZjIgZRG1ucoO3yOCCM8YMThbjBBeOJXFBjBimllpzyaVlCbxcy7I9y5KOwIS70rOllLbn+I5rSbcTdH0sYtt3/E7gSNd1Is+LO3YY+4nnh0kWZUlchkVe99OqnGSjuu71y6oc9epBMRme18Vstpqtx9v5bLVavVkvVuc32/V2t9xcXF7dvNxttttXm+Xt9UUz3Vy9ff12e3O1nf+4W7yZ395cNZv5dblqmmV9dbl6ub789nKye/nqdnW5ul3PVpvp+Pp8t97MX8/nq92iub6+nG9H17tBs14u5m+q8eaqXNTDyXw3uxierZfLy0mzWo+qZrkcFXU9XjWDi6ZuFqNpVQ2b3vhsOpgsx8N6dt6sFpPBZjYcVeN6Op5OqrKaYWc8ruuy3k6qqkqmcTGcDstqkfX7i6qq87QZDIrz87qpe5M0y4syH9bjdJhXo6ZalsUgj8/zSX7W7xejOKvGg1FZRf0kH2bLOhlOC8T1izDNsqLXz6NslPV6xTTN6qIYj/JRmBVRv+r0y7N+1ENUlpzVSe73+1mFuqdpHXTrTlgGvbMi79Rpt8p7Z71eL6/iNEyTIgrDpJuF3aEfRXEWpwnekTfIvCjNoziI0igLgjjMok6QBmFc+nkvCYKe70aB5ztO0I2TwE3w4yfSjyPPDaIgCt0gDDtZ4Asn9FzH8XzX6/i+Z7m243T8Trdjd1PX5a6L0+VZjt2xhd0Rni9xwFzmScezbc91Q4kIiaHrSC5c1/Wl59o4mY7w3dDBYXSl1XFkIKQFLdLisAhuOEwwyRzpuDiuHIfXlcKTjCS3pMD5xum1mBCWTcJ2LZgFtwURzjgxoEshpJpaglmSWdxisDDVSxLdIwTnQgiDGxY20EeWwIDugRkbusHQT2gvjs6yoQQWKVWfCQPRQrUcBx480IjARzcSBtChYzkzsEd40JKgtEjhGOhcQiRCgGsCCXLhqLoY0QZT/WuQhe5VC42toJRq9RgKD1UhEhpSaGoOVkPdA/gCSii3/YXBFSjuELVsA1gjcX2dcK0NNEJfL234qa8OgxOUaTLlihuIDom3mEl056bteorbyESIyXT6IDK1XaduKF7auxoMMsy7OE3UQgGUuyoLVyJ1pOLQsxYz9tpPVM66dEq9hkLtGNcXo4I3tQs2zP1Ko2CiQJF0W3O3ldKWQoXS+2SKvRfXNaVDdqgANB5cW8jXoPfZnmhOY79QG8f6jylPUrDt9zLvuB6zNh2xvVJdPzphxvuCmEyL29/nID7WQfsfAOjK3QSeQY9Q0Ba2TZ1ZiymWtgbTy0N2xKHiaC/bVIJO6IHi+Ji0ZIAdsyMEQcSekuhUqzlldA8ujxD8lD7ApwU/xB7B3NZQh/REsz3C+xk9pufsAeyHKsln9CF9iekp/j89pPta7Am9wFwV5xgBvx7oKrXoI2zeo6/pcyCfItUjIKnKmWqlczxC6FOwfILZIX2B8TNE/HZAP8DlCZT9cQCLAdv39A39yQDZpq/oU/r9gP4+oJ/oHdF39PMB/Q9VT6UD",
+        "highest" : 3600000000
+      }
+    },
+    "broker" : {
+      "count" : 17980,
+      "negative" : 20,
+      "overflow" : 0,
+      "p50" : 1141,
+      "p95" : 4013,
+      "p99" : 15095,
+      "p999" : 153471,
+      "mean" : 2010.9713570634037,
+      "max" : 197503,
+      "curve" : [ [ 0.0, 12 ], [ 10.0, 844 ], [ 25.0, 960 ], [ 50.0, 1141 ], [ 75.0, 1509 ], [ 90.0, 2221 ], [ 95.0, 4013 ], [ 99.0, 15095 ], [ 99.5, 29839 ], [ 99.9, 153471 ], [ 99.99, 193279 ], [ 100.0, 197503 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "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",
+        "highest" : 3600000000
+      }
+    },
+    "processing" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 6927,
+      "p95" : 9687,
+      "p99" : 12063,
+      "p999" : 18255,
+      "mean" : 7395.2191111111115,
+      "max" : 173439,
+      "curve" : [ [ 0.0, 4288 ], [ 10.0, 6239 ], [ 25.0, 6515 ], [ 50.0, 6927 ], [ 75.0, 7859 ], [ 90.0, 8959 ], [ 95.0, 9687 ], [ 99.0, 12063 ], [ 99.5, 13431 ], [ 99.9, 18255 ], [ 99.99, 172671 ], [ 100.0, 173439 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAABE94nDVU0YrjNhT1KhqNxuP1aBVVaL2qKoRrjDHGhGDCNE2HMIRghjSEEEI2LGEYlmEYlmlfSpf2rX+wT33vn/Qf+tpfaOkP9MqZtSPp+t5z75UdnaN/+9QPAvJVcLx6z+sLP/316Y/gu3+Ojr9r9BP6Hr1EZ+gEnaIAnWMwwEL4JcwnuAfjHEYAHtTDJxDtTNwDF1gBhhlsWAALZoi8HwcEJoABFur5dO/FhEAtcAMeAAHGECHI2x4dYO+hfgK0r9Aj/oehG/Jdu4ZRQLpMgggNKQoooQQjiim4QkJRRCMCOSGlMQkxjXhEwjAkEQd0FIkoYlEkQxkKxZiOKdeKS5MILWMjeJIwYZJE6cQpbZiy1rE0y4ytUmWMa8oqL9OmqYbDNB/V5SAd1KPmarytJ02bX5ftqmyXzWA92symN5PtYrlejut369l2MW3ni/bmcblbr/bz7dNqu129W6838/1ytX48rGYfF6un5Wb9uLnf3L3/8LDb7vYP+8Ny/cvd/vH+4f3TYrM8/Lg/bG6XD7eHw+Ljdrd6Otzftu3d8vBhuXkcbqZ3m/243cxvb9rbw927ZnVz316vdrfz9rJZzxaz1eXsupnOZrt2udu069nyanXZtJPFaDJqh9PLZjq8nreD+dV4dFkWdTWBx6Zcl1dNWZeTbJzVk2Kc66rIq2Jcjcp6UDRV7dSgrEUxLAtra2cH2tZlkeq8SKCGszItU5eoXNrSZVmmnc1rYQVXJjVWGsMSI+DTwveWSghlucyKTHHDtdSpU4kqODOWO2ms0KZLhCHYMDFGylgkIjFpzJkWUrPcFMwapzXjAv7GhMWx4MIIya1kTiQxXAkUSRIhVaI1F97UDFrryinnsNbQiHPLOI8UT+FoCPhJ6Kq4YNCQ85GtBvkgc+n0Knc6G6ZlnQ4HZZ6XrMwqVw2sLlNVFNllCYcnS9LEZdXAWQXBEnKrJLM57NIUxlqmMu6cLuBLCKekzJiTqVQmkbm18IKWG61gA4k/orAL5qJYCcpDxUIplVSw95hJBidZ0VBxHodwzJnhMYt5FLKIsRhOexyFcRSHYUxFDEvIQ4yjiMYxYhwTTGJPTBpQBhmExAQIhCJEaQRBTBGioeAwEUlxGAA+opSgjoDwAOQDxoYkBhoDFTHwEUIUCO7JjYCCgAUyAzcBCWwPvQpAeghhgPkGXiG871gWOOw575t70fBq4TUlDHzBI/HRUVwCX5p6lel5NChGpy4wIOTlCJ3Rz0WgbBdAPbi9wB1l6agz4CLPYvbs7a4e1OrK9LyrRzptey5whvEpQL0ePqvfKeoCQQcN8AWIaqemYHvdxBDrH0He2+sUtw/rOflcslPJPtyvINjzz6foDT7zGAicdqELsF7Bi6FvQLZP0GsIvYb1HDxn6EsIv30uHXQV+343YH2BwPQ6f4G/Rr+C42f0pkvuo29h/g+hf1+jP1+g3xkk99EPHfZ/euKdEA==",
+        "highest" : 3600000000
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 8983,
+      "p95" : 14799,
+      "p99" : 26879,
+      "p999" : 164479,
+      "mean" : 10249.532555555556,
+      "max" : 206207,
+      "curve" : [ [ 0.0, 5944 ], [ 10.0, 7967 ], [ 25.0, 8367 ], [ 50.0, 8983 ], [ 75.0, 10183 ], [ 90.0, 12207 ], [ 95.0, 14799 ], [ 99.0, 26879 ], [ 99.5, 42079 ], [ 99.9, 164479 ], [ 99.99, 203263 ], [ 100.0, 206207 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAABbF4nD1W/4vcRBRPXiazs7k0zeXSXJqmaUjjmm6XZVnW7XY9Tj3OWpb1OIuWWutylFKOo5RjOdbzKKUW0VJKqbb4iyD+oCD4B/gH+DeoP/ov+Cf4eZPT28zMm/f9vZn35tIvX64YhvrZqP+s49Xk6c+XPxlv/VMjvr9ETTpJ58jC/AkZdAbDolWiBhC2MKRFZJMlGmRLmxjGbBAJTA0yBMAmiCQsbPA1mcpEhQWqBDEvsT6jltM7vbHAIRjAIqTlipoDDFJIaBNSKqF5lVSOw6JSYjBgCEfDkvULB44K/KRQDnmuIxylFGBfhQ6wjnKhCT/phjJ0lXI9pbzIARwqJWOpgtBRIo1C303C0MndJHAD3wnCMI7jIEySOMnzMI+DOE6jKG3FZZJ5fpVn7bIqi6LoZ3maV0WSRIOqVYRFu+r1BkW3nbey1vhKLx/1ysFwWBS9Ydmt8qrV7a/314vOsDXodTbb3UF3Y9pd73d7Zb832hxNx4PBcLp9a/LMfGL+ZB4ezmY37i6+M5+ZD1+Zhy/M2f3d2Y/mg8fmK/PhI3PvqXm0/8g8OFjcuLb34Ojg6Lk5m31l7s1fmL+YD56bP5j3n5gHi/mN+dHdp+biaLF/b35nsfstdM9vz+7Ndnfu7S8OF7du74Ftfv2JeWv/7vzOzt7BztbWtTvX5o/NmwfXP5xNJ1e2h7e3xld2tifr4+HudDLZXru6ub0xvbo1mdy8Opmujabt4dp4tHllMOiOx28P+p2qNZj025ujqjUc9Tc21qvx2nB9fdpdG/fH441+9/qkP2gPekV33B6M01ZVtsq0lw6rrD9sJ+1Ou12VnTyKqsTNorITRe3OKG538qJqJYEH1jLr4QiiImhlWRHGUSdp55mKoqDKvLybx36Rx0WZ4IRaWeJnaVTmRdZKojTMqhInFqZVhgMvy8wLkrwMWmlW5J00y0o/zdNWEEZpksZxFCWh7+WRXzpJGHghDHhB5MZB5MSxF0WR9ALXd9LAi3xfucoTvuMo3KhEBtL3VOB4oStxL6PId1zcSi9QnnKEK1wXGCUd1/Mcz3FxYx0PNztQuO8uLrfrCs+Ritz6WuPmKiFwgfny+64rcfNdyJPrSdQI14yAer7sEBGSICJ94aG8REACNUm+hKyriKuCa0lKzxEesTcQUAL+OSRRewhAwiwpyJIhwYciZMvCAVX5PLkklWKaNEKuRjinSHGFEhcxNsQuIgK4whUKl1CjBtOBIbguHJQuChygAbPMwE3DgKzQariumYFbBRRwb8HCTYbYLoywGHcGi6l6SGEgViW0Cm4WQEg0HGSUd8pAnOhNutsYLKC7khC6H3FfARFeSE6EUpajrSEYprMDdf+rJ3ZbdyttRupmppsh1CkbtiQ3Q8YJ3TABIJ2G9ljZAC12SndMoSm6v1IDCeDVFbUVHbLBSYdL3PcEJ0Vxnkg7iuxLQ3GKwe7810J1RrRiVS+ITEodgVEPo6brXDU4XzZgDsDS9pkmdbvmFFkcBml2xljymEm71oT3zAwGDsOg/wPSvFrUZgtLdByk0s+AjtCi+jBsKWxhszB0MRJSts5ZfWD6azJky/r1gAsKLxCQNgLgl2hJW+DfCTxv9Yt1UvvD3FrXCWjTTIJftJPMw9KsGudhQaxWYNNp7BrHz9cSNfQbCDJsaL8YvQwlKyCcoGXtmk1nSZwH0zLxB6Ug1xoa2hV8DVAsJtsYp8HxLisVrJh9lE1os5nRwpu8opNL7+BhXtbONzSySa/RKQg0qbYJoMFKV3WUbGqVLgA6DzVn2dZ5iC4BcQrbJShg8jnMp4F5D/QLUHgRY+nY33NYDfrbBOljuky/EX1EXxO9D+RZ0lxvAmAXPocD35iwc0acEivYsBk+xkv0Bv1h0l8mrYpfBcgXIPEpfUHH9PpEcEqf6f9EfjeRx9dJfKDtX0aYF+lf3auoyQ==",
+        "highest" : 3600000000
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    },
+    "e2e_all" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 3577,
+      "p95" : 7387,
+      "p99" : 18895,
+      "p999" : 140031,
+      "mean" : 4542.588,
+      "max" : 199423,
+      "curve" : [ [ 0.0, 2318 ], [ 10.0, 2979 ], [ 25.0, 3215 ], [ 50.0, 3577 ], [ 75.0, 4167 ], [ 90.0, 5423 ], [ 95.0, 7387 ], [ 99.0, 18895 ], [ 99.5, 33023 ], [ 99.9, 140031 ], [ 99.99, 197119 ], [ 100.0, 199423 ] ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "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",
+        "highest" : 3600000000
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "significant_digits" : 3,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "lowest" : 1,
+        "unit" : "us",
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "highest" : 3600000000
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 30000
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 0,
+    "lost_sample" : [ ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795832755407956,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 12,
+    "measure_to_bucket" : 29,
+    "requested" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 ],
+    "acked" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 ],
+    "received" : [ 836, 1074, 1090, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 ],
+    "completed" : [ 835, 1075, 1090, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ ],
+  "files" : {
+    "published.csv" : "058b0278eda3c62413aad245aec587933518e534f89f002b6605efbd061385f6",
+    "attempts-1795832744048-456077.csv" : "c6e17b54bd067d4704d5e2733bacb100722433184febd3ba9090d202b20f290e",
+    "bench_message.tsv" : "e09a5217b563571ca7b09ae63074d499e58750940e3b851f1e16a3d8fc30c66d",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "3b9c30b6eff00dc08341df6f71ff63286c174ba2561e32e4b3551754f9657d09",
+    "run.json" : "f7495d8041296a795ae5dcc79f38a56dad88a822e7c11198e5d2f172f65bdda0"
+  }
+}

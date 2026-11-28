@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" font-family="sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="70" y="18" font-size="14" font-weight="bold">Outstanding</text>
+<line x1="70" y1="370" x2="710" y2="370" stroke="#333"/>
+<line x1="70" y1="30" x2="70" y2="370" stroke="#333"/>
+<text x="64" y="374.0" text-anchor="end">0</text>
+<text x="64" y="289.0" text-anchor="end">50</text>
+<text x="64" y="204.0" text-anchor="end">100</text>
+<text x="64" y="119.0" text-anchor="end">150</text>
+<text x="64" y="34.0" text-anchor="end">200</text>
+<text x="70.0" y="386" text-anchor="middle">0</text>
+<text x="198.0" y="386" text-anchor="middle">120</text>
+<text x="326.0" y="386" text-anchor="middle">240</text>
+<text x="454.0" y="386" text-anchor="middle">360</text>
+<text x="582.0" y="386" text-anchor="middle">480</text>
+<text x="710.0" y="386" text-anchor="middle">600</text>
+<text x="390" y="408" text-anchor="middle">첫 표본 뒤 초</text>
+<polyline fill="none" stroke="#0072B2" stroke-width="2" points="70.0,259.5 80.7,205.1 91.3,176.2 102.0,142.2 112.7,130.3 123.3,133.7 134.0,126.9 144.7,166.0 155.3,191.5 166.0,242.5 176.7,293.5 187.3,342.8 198.0,351.3 208.7,353.0 219.3,356.4 230.0,358.1 240.7,351.3 251.3,354.7 262.0,346.2 272.7,349.6 283.3,347.9 294.0,354.7 304.7,347.9 315.3,347.9 326.0,347.9 336.7,349.6 347.3,347.9 358.0,359.8 368.7,351.3 379.3,358.1 390.0,358.1 400.7,358.1 411.3,356.4 422.0,356.4 432.7,359.8 443.3,356.4 454.0,356.4 464.7,356.4 475.3,356.4 486.0,354.7 496.7,353.0 507.3,353.0 518.0,353.0 528.7,349.6 539.3,351.3 550.0,347.9 560.7,347.9 571.3,354.7 582.0,361.5 592.7,356.4 603.3,356.4 614.0,354.7 624.7,356.4 635.3,354.7 646.0,356.4 656.7,354.7 667.3,353.0 678.0,351.3 688.7,349.6 699.3,354.7 710.0,370.0"/>
+<line x1="725" y1="40" x2="743" y2="40" stroke="#0072B2" stroke-width="2"/>
+<text x="749" y="44">Outstanding(건, 10초 칸 끝)</text></svg>

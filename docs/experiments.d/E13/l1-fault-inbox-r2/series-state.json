@@ -1,0 +1,52 @@
+{
+  "stages": {
+    "r2": {
+      "rate": 2.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-y3gwiq11",
+      "seconds_taken": 928,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": [],
+        "achieved_rate": 2.0,
+        "rates": {
+          "offered_per_s": 2.0,
+          "completed_per_s": 2.0016666666666665,
+          "completed_over_offered": 1.0008333333333332
+        },
+        "outstanding_drain_seconds": 1.17,
+        "backlog_drain_seconds": 1.268,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 192.529,
+          "p95_ms": 296.205,
+          "p99_ms": 360.149,
+          "max_ms": 3261.479
+        },
+        "faults": [
+          {
+            "kind": "db-revoke",
+            "problems": []
+          }
+        ],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 600,
+  "warmup": 60,
+  "buyers": 20,
+  "faults": [
+    "db-revoke:at=180,for=3,table=stove_license.processed_event"
+  ],
+  "rates": [
+    2.0
+  ]
+}

@@ -1,0 +1,5219 @@
+{
+  "origin_us": 1795796959499363,
+  "bucket_us": 10000000,
+  "window": {
+    "startEpochUs": 1795797259490747,
+    "endEpochUs": 1795797559490747,
+    "seconds": 300,
+    "sentInWindow": 2400,
+    "sentAfterWindow": 0,
+    "achievedRate": 8.0
+  },
+  "measure_from_bucket": 29,
+  "measure_to_bucket": 59,
+  "series": {
+    "offered": [
+      81,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      80,
+      79,
+      0
+    ],
+    "completed": [
+      3,
+      36,
+      53,
+      49,
+      52,
+      72,
+      67,
+      80,
+      80,
+      100,
+      81,
+      109,
+      109,
+      110,
+      111,
+      120,
+      115,
+      83,
+      76,
+      81,
+      82,
+      84,
+      75,
+      84,
+      75,
+      84,
+      73,
+      84,
+      82,
+      82,
+      79,
+      76,
+      86,
+      72,
+      84,
+      83,
+      82,
+      73,
+      83,
+      82,
+      82,
+      72,
+      83,
+      80,
+      84,
+      81,
+      76,
+      78,
+      83,
+      83,
+      72,
+      81,
+      82,
+      82,
+      80,
+      75,
+      81,
+      85,
+      82,
+      75,
+      11
+    ],
+    "failed": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "rejected": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "outstanding": [
+      78,
+      122,
+      149,
+      180,
+      208,
+      216,
+      229,
+      229,
+      229,
+      209,
+      208,
+      179,
+      150,
+      120,
+      89,
+      49,
+      14,
+      11,
+      15,
+      14,
+      12,
+      8,
+      13,
+      9,
+      14,
+      10,
+      17,
+      13,
+      11,
+      9,
+      10,
+      14,
+      8,
+      16,
+      12,
+      9,
+      7,
+      14,
+      11,
+      9,
+      7,
+      15,
+      12,
+      12,
+      8,
+      7,
+      11,
+      13,
+      10,
+      7,
+      15,
+      14,
+      12,
+      10,
+      10,
+      15,
+      14,
+      9,
+      7,
+      11,
+      0
+    ]
+  },
+  "totals": {
+    "completed": 4800,
+    "failed": 0,
+    "rejected": 0,
+    "unresolved": 0
+  },
+  "load_end_us": 1795797559368470,
+  "unresolved": 0,
+  "last_finish_us": 1795797560464089,
+  "outstanding_drain_seconds": 1.096,
+  "clock_check": {
+    "finish_before_start": 0
+  },
+  "rates": {
+    "offered_per_s": 8.0,
+    "completed_per_s": 7.99,
+    "completed_over_offered": 0.99875
+  },
+  "measured_orders": {
+    "requested": 2400,
+    "completed_in_window": 2389,
+    "completed_after_window": 11,
+    "failed": 0,
+    "rejected": 0,
+    "unresolved": 0
+  },
+  "observation": {
+    "wait_secs": 600,
+    "timed_out": false
+  },
+  "lag": {
+    "interval_seconds": 10,
+    "failures": 0,
+    "samples": [
+      {
+        "at_us": 1795796924608274,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795796938549155,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795796951934923,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795796974878411,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 21,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 3
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 15,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 19,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 29,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 89,
+        "unknown": 3
+      },
+      {
+        "at_us": 1795797001470455,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 10,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 18,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 13,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 48,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797028181611,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 7,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 9,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 18,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 25,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 6,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 68,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797050295163,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 5,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 4,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 6,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 12,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 33,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797069870180,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 6,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 6,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 4,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 17,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 33,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797086519661,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 8,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 17,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 15,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 46,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797102534841,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 10,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 12,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797117144115,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 2,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797130960468,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 5,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 9,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797145103632,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 1,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797158548123,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797174360220,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 4,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 5,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 6,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 18,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797188224198,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 4,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 5,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797201594188,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 9,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 13,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797214816749,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 13,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 5,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 20,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797228251608,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 1,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797241858682,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 10,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 5,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 15,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797255041136,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 12,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 6,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 18,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797268111224,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 3,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797281447138,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797295228881,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 8,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 10,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797308491176,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797321619177,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797334497068,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797348073135,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 4,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 7,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797361193069,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 1,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797374734152,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797387728514,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797400786848,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 2,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797413804474,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 5,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797426880478,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797439948093,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797453327840,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 2,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797466468558,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 5,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797479447292,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 7,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 3,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 12,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797492359822,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 4,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797505558318,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797518799833,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 4,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 7,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797531864790,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 1,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797544912346,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 2,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 4,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797557832567,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 1,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 12,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 13,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797571117842,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797584062806,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797596842660,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797609755268,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      },
+      {
+        "at_us": 1795797622094356,
+        "groups": {
+          "catalog-project-release": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "gateway-account-access": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-purchase-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "license-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-approval-correction": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-license-grant": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-payment-result": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-payment-confirmation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-preparation": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-restoration": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "order-refund-suspension": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-expiry": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-order-request": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "payment-refund-execution": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "review-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-confirmed-refund": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "settlement-paid-order": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "store-catalog-publication": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "studio-project": {
+            "lag": 0,
+            "unknown": 0
+          },
+          "web-bff-account-access": {
+            "lag": 0,
+            "unknown": 0
+          }
+        },
+        "total": 0,
+        "unknown": 0
+      }
+    ]
+  },
+  "backlog_drain_seconds": 11.749
+}

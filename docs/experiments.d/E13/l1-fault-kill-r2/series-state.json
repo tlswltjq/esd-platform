@@ -1,0 +1,52 @@
+{
+  "stages": {
+    "r2": {
+      "rate": 2.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-0pfs72ua",
+      "seconds_taken": 925,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": [],
+        "achieved_rate": 2.0,
+        "rates": {
+          "offered_per_s": 2.0,
+          "completed_per_s": 1.9983333333333333,
+          "completed_over_offered": 0.9991666666666666
+        },
+        "outstanding_drain_seconds": 0.538,
+        "backlog_drain_seconds": 6.547,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 205.991,
+          "p95_ms": 23336.365,
+          "p99_ms": 45599.433,
+          "max_ms": 49935.538
+        },
+        "faults": [
+          {
+            "kind": "kill",
+            "problems": []
+          }
+        ],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 600,
+  "warmup": 60,
+  "buyers": 20,
+  "faults": [
+    "kill:at=180,for=30,service=license"
+  ],
+  "rates": [
+    2.0
+  ]
+}

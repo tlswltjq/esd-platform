@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" font-family="sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="70" y="18" font-size="14" font-weight="bold">층 1 처리량 (10초 칸, 주문/s)</text>
+<rect x="188.5" y="30" width="426.7" height="340" fill="#eeeeee"/>
+<line x1="70" y1="370" x2="710" y2="370" stroke="#333"/>
+<line x1="70" y1="30" x2="70" y2="370" stroke="#333"/>
+<text x="64" y="374.0" text-anchor="end">0</text>
+<line x1="70" y1="370.0" x2="710" y2="370.0" stroke="#dddddd"/>
+<text x="64" y="289.0" text-anchor="end">5</text>
+<line x1="70" y1="285.0" x2="710" y2="285.0" stroke="#dddddd"/>
+<text x="64" y="204.0" text-anchor="end">10</text>
+<line x1="70" y1="200.0" x2="710" y2="200.0" stroke="#dddddd"/>
+<text x="64" y="119.0" text-anchor="end">15</text>
+<line x1="70" y1="115.0" x2="710" y2="115.0" stroke="#dddddd"/>
+<text x="64" y="34.0" text-anchor="end">20</text>
+<line x1="70" y1="30.0" x2="710" y2="30.0" stroke="#dddddd"/>
+<text x="70.0" y="386" text-anchor="middle">0</text>
+<text x="117.4" y="386" text-anchor="middle">20</text>
+<text x="164.8" y="386" text-anchor="middle">40</text>
+<text x="212.2" y="386" text-anchor="middle">60</text>
+<text x="259.6" y="386" text-anchor="middle">80</text>
+<text x="307.0" y="386" text-anchor="middle">100</text>
+<text x="354.4" y="386" text-anchor="middle">120</text>
+<text x="401.9" y="386" text-anchor="middle">140</text>
+<text x="449.3" y="386" text-anchor="middle">160</text>
+<text x="496.7" y="386" text-anchor="middle">180</text>
+<text x="544.1" y="386" text-anchor="middle">200</text>
+<text x="591.5" y="386" text-anchor="middle">220</text>
+<text x="638.9" y="386" text-anchor="middle">240</text>
+<text x="686.3" y="386" text-anchor="middle">260</text>
+<text x="390" y="408" text-anchor="middle">회차 시작 뒤 초(음영: 측정 구간)</text>
+<text x="14" y="200" transform="rotate(-90 14 200)" text-anchor="middle">msg/s</text>
+<polyline fill="none" stroke="#0072B2" stroke-width="2" points="70.0,198.3 93.7,200.0 117.4,200.0 141.1,200.0 164.8,200.0 188.5,200.0 212.2,200.0 235.9,200.0 259.6,200.0 283.3,200.0 307.0,200.0 330.7,200.0 354.4,200.0 378.1,200.0 401.9,200.0 425.6,200.0 449.3,200.0 473.0,200.0 496.7,200.0 520.4,200.0 544.1,200.0 567.8,200.0 591.5,200.0 615.2,201.7 638.9,370.0 662.6,370.0 686.3,370.0 710.0,370.0"/>
+<polyline fill="none" stroke="#D55E00" stroke-width="2" points="70.0,370.0 93.7,325.8 117.4,302.0 141.1,305.4 164.8,319.0 188.5,268.0 212.2,288.4 235.9,240.8 259.6,249.3 283.3,210.2 307.0,218.7 330.7,194.9 354.4,206.8 378.1,196.6 401.9,174.5 425.6,191.5 449.3,203.4 473.0,166.0 496.7,166.0 520.4,200.0 544.1,160.9 567.8,159.2 591.5,167.7 615.2,171.1 638.9,140.5 662.6,162.6 686.3,166.0 710.0,354.7"/>
+<polyline fill="none" stroke="#009E73" stroke-width="2" points="70.0,370.0 93.7,370.0 117.4,370.0 141.1,370.0 164.8,370.0 188.5,370.0 212.2,370.0 235.9,370.0 259.6,370.0 283.3,370.0 307.0,370.0 330.7,370.0 354.4,370.0 378.1,370.0 401.9,370.0 425.6,370.0 449.3,370.0 473.0,370.0 496.7,370.0 520.4,370.0 544.1,370.0 567.8,370.0 591.5,370.0 615.2,370.0 638.9,370.0 662.6,370.0 686.3,370.0 710.0,370.0"/>
+<line x1="725" y1="40" x2="743" y2="40" stroke="#0072B2" stroke-width="2"/>
+<text x="749" y="44">Offered(보낸 주문)</text>
+<line x1="725" y1="58" x2="743" y2="58" stroke="#D55E00" stroke-width="2"/>
+<text x="749" y="62">Completed(구매 근거)</text>
+<line x1="725" y1="76" x2="743" y2="76" stroke="#009E73" stroke-width="2"/>
+<text x="749" y="80">결제 실패</text></svg>

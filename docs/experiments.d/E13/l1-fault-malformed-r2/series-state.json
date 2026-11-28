@@ -1,0 +1,52 @@
+{
+  "stages": {
+    "r2": {
+      "rate": 2.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-601piakp",
+      "seconds_taken": 924,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": [],
+        "achieved_rate": 2.0,
+        "rates": {
+          "offered_per_s": 2.0,
+          "completed_per_s": 2.0,
+          "completed_over_offered": 1.0
+        },
+        "outstanding_drain_seconds": 0.674,
+        "backlog_drain_seconds": 1.464,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 181.48,
+          "p95_ms": 297.558,
+          "p99_ms": 356.154,
+          "max_ms": 501.43
+        },
+        "faults": [
+          {
+            "kind": "malformed",
+            "problems": []
+          }
+        ],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 600,
+  "warmup": 60,
+  "buyers": 20,
+  "faults": [
+    "malformed:at=180,topic=stove.order.v1,count=1"
+  ],
+  "rates": [
+    2.0
+  ]
+}

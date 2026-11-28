@@ -1,0 +1,62 @@
+{
+  "stages": {
+    "r2": {
+      "rate": 2.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-pwgwzqa6",
+      "seconds_taken": 925,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": [],
+        "achieved_rate": 2.0,
+        "rates": {
+          "offered_per_s": 2.0,
+          "completed_per_s": 2.0016666666666665,
+          "completed_over_offered": 1.0008333333333332
+        },
+        "outstanding_drain_seconds": 0.929,
+        "backlog_drain_seconds": 5.089,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 232.696,
+          "p95_ms": 37012.41,
+          "p99_ms": 44078.539,
+          "max_ms": 45786.466
+        },
+        "faults": [
+          {
+            "kind": "kill",
+            "problems": []
+          },
+          {
+            "kind": "kill",
+            "problems": []
+          },
+          {
+            "kind": "kill",
+            "problems": []
+          }
+        ],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 600,
+  "warmup": 60,
+  "buyers": 20,
+  "faults": [
+    "kill:at=180,for=5,service=license",
+    "kill:at=300,for=5,service=license",
+    "kill:at=420,for=5,service=license"
+  ],
+  "rates": [
+    2.0
+  ]
+}

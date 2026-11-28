@@ -1,0 +1,1490 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-f-transient3",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 100.0,
+      "warmup_seconds" : 120,
+      "seconds" : 600,
+      "size" : 1024,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : "기본값(결정 212: 3)",
+      "transient_ratio" : 0.01,
+      "transient_failures" : 3,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "9a5be881ee50edc75086030d4212aa03c861fc86",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-28T00:35:43.731226+00:00",
+    "load_started_us" : 1795826178895514,
+    "load_ended_us" : 1795826899563995,
+    "observation_deadline_us" : 1795827499563995,
+    "settled_us" : null,
+    "timed_out" : true,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 0.496,
+      "jvm_gc_pause_seconds_count" : 115.0,
+      "stove_kafka_consumer_failed_deliveries_total" : 1355.0,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 1.6707E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 293,
+          "cpu_percent_mean" : 32.15,
+          "cpu_percent_max" : 196.18,
+          "memory_mib_mean" : 888.9,
+          "memory_mib_max" : 1025.0
+        },
+        "mysql" : {
+          "samples" : 293,
+          "cpu_percent_mean" : 13.13,
+          "cpu_percent_max" : 57.82,
+          "memory_mib_mean" : 418.4,
+          "memory_mib_max" : 430.7
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 93160,
+          "growth_kib" : 92424
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 280496,
+          "growth_kib" : 74120
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 123,
+        "cpu_seconds" : 164.21,
+        "cpu_percent_mean" : 12.55,
+        "rss_mib_max" : 587.4
+      }
+    },
+    "lag" : [ {
+      "total" : 96,
+      "partitions" : {
+        "2" : 39,
+        "0" : 29,
+        "1" : 28
+      },
+      "members" : 3,
+      "at_us" : 1795826181142230
+    }, {
+      "total" : 21,
+      "partitions" : {
+        "2" : 17,
+        "0" : 3,
+        "1" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795826191690245
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 1,
+        "0" : 2,
+        "1" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795826201707661
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "2" : 3,
+        "0" : 0,
+        "1" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795826211713057
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 1,
+        "0" : 0,
+        "1" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795826221527315
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 0,
+        "0" : 3,
+        "1" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795826231323346
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 3,
+        "0" : 0,
+        "1" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795826241628032
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 0,
+        "0" : 4,
+        "1" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795826251324655
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "2" : 0,
+        "0" : 2,
+        "1" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795826261331904
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "2" : 2,
+        "0" : 1,
+        "1" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795826271433401
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "0" : 1,
+        "1" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795826280937859
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "2" : 2,
+        "0" : 3,
+        "1" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795826290966464
+    }, {
+      "total" : 29,
+      "partitions" : {
+        "2" : 0,
+        "0" : 29,
+        "1" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795826301031180
+    }, {
+      "total" : 763,
+      "partitions" : {
+        "2" : 242,
+        "0" : 319,
+        "1" : 202
+      },
+      "members" : 3,
+      "at_us" : 1795826310863967
+    }, {
+      "total" : 1020,
+      "partitions" : {
+        "2" : 76,
+        "0" : 554,
+        "1" : 390
+      },
+      "members" : 3,
+      "at_us" : 1795826321098089
+    }, {
+      "total" : 1769,
+      "partitions" : {
+        "2" : 282,
+        "0" : 786,
+        "1" : 701
+      },
+      "members" : 3,
+      "at_us" : 1795826330874417
+    }, {
+      "total" : 2323,
+      "partitions" : {
+        "2" : 341,
+        "0" : 1101,
+        "1" : 881
+      },
+      "members" : 3,
+      "at_us" : 1795826341089428
+    }, {
+      "total" : 3134,
+      "partitions" : {
+        "2" : 704,
+        "0" : 1373,
+        "1" : 1057
+      },
+      "members" : 3,
+      "at_us" : 1795826350869595
+    }, {
+      "total" : 3649,
+      "partitions" : {
+        "2" : 831,
+        "0" : 1465,
+        "1" : 1353
+      },
+      "members" : 3,
+      "at_us" : 1795826361426290
+    }, {
+      "total" : 4393,
+      "partitions" : {
+        "2" : 1135,
+        "0" : 1728,
+        "1" : 1530
+      },
+      "members" : 3,
+      "at_us" : 1795826370649422
+    }, {
+      "total" : 5103,
+      "partitions" : {
+        "2" : 1383,
+        "0" : 2034,
+        "1" : 1686
+      },
+      "members" : 3,
+      "at_us" : 1795826381043550
+    }, {
+      "total" : 5870,
+      "partitions" : {
+        "2" : 1740,
+        "0" : 2157,
+        "1" : 1973
+      },
+      "members" : 3,
+      "at_us" : 1795826391146521
+    }, {
+      "total" : 6309,
+      "partitions" : {
+        "2" : 1965,
+        "0" : 2234,
+        "1" : 2110
+      },
+      "members" : 3,
+      "at_us" : 1795826401171707
+    }, {
+      "total" : 6963,
+      "partitions" : {
+        "2" : 2324,
+        "0" : 2405,
+        "1" : 2234
+      },
+      "members" : 3,
+      "at_us" : 1795826410958080
+    }, {
+      "total" : 7726,
+      "partitions" : {
+        "2" : 2669,
+        "0" : 2636,
+        "1" : 2421
+      },
+      "members" : 3,
+      "at_us" : 1795826420881340
+    }, {
+      "total" : 8224,
+      "partitions" : {
+        "2" : 2795,
+        "0" : 2969,
+        "1" : 2460
+      },
+      "members" : 3,
+      "at_us" : 1795826431688006
+    }, {
+      "total" : 8833,
+      "partitions" : {
+        "2" : 2918,
+        "0" : 3233,
+        "1" : 2682
+      },
+      "members" : 3,
+      "at_us" : 1795826441187128
+    }, {
+      "total" : 9551,
+      "partitions" : {
+        "2" : 3158,
+        "0" : 3433,
+        "1" : 2960
+      },
+      "members" : 3,
+      "at_us" : 1795826450919623
+    }, {
+      "total" : 10297,
+      "partitions" : {
+        "2" : 3425,
+        "0" : 3697,
+        "1" : 3175
+      },
+      "members" : 3,
+      "at_us" : 1795826460782949
+    }, {
+      "total" : 10625,
+      "partitions" : {
+        "2" : 3635,
+        "0" : 3843,
+        "1" : 3147
+      },
+      "members" : 3,
+      "at_us" : 1795826471395661
+    }, {
+      "total" : 11095,
+      "partitions" : {
+        "2" : 3919,
+        "0" : 3960,
+        "1" : 3216
+      },
+      "members" : 3,
+      "at_us" : 1795826480719570
+    }, {
+      "total" : 11422,
+      "partitions" : {
+        "2" : 4173,
+        "0" : 4274,
+        "1" : 2975
+      },
+      "members" : 3,
+      "at_us" : 1795826490964921
+    }, {
+      "total" : 12099,
+      "partitions" : {
+        "2" : 4485,
+        "0" : 4450,
+        "1" : 3164
+      },
+      "members" : 3,
+      "at_us" : 1795826500718002
+    }, {
+      "total" : 12702,
+      "partitions" : {
+        "2" : 4648,
+        "0" : 4691,
+        "1" : 3363
+      },
+      "members" : 3,
+      "at_us" : 1795826510951739
+    }, {
+      "total" : 13240,
+      "partitions" : {
+        "2" : 4616,
+        "0" : 4963,
+        "1" : 3661
+      },
+      "members" : 3,
+      "at_us" : 1795826520680906
+    }, {
+      "total" : 14088,
+      "partitions" : {
+        "2" : 4972,
+        "0" : 5227,
+        "1" : 3889
+      },
+      "members" : 3,
+      "at_us" : 1795826531196698
+    }, {
+      "total" : 14653,
+      "partitions" : {
+        "2" : 5293,
+        "0" : 5356,
+        "1" : 4004
+      },
+      "members" : 3,
+      "at_us" : 1795826541055517
+    }, {
+      "total" : 15173,
+      "partitions" : {
+        "2" : 5559,
+        "0" : 5454,
+        "1" : 4160
+      },
+      "members" : 3,
+      "at_us" : 1795826550837790
+    }, {
+      "total" : 15699,
+      "partitions" : {
+        "2" : 5714,
+        "0" : 5550,
+        "1" : 4435
+      },
+      "members" : 3,
+      "at_us" : 1795826561072057
+    }, {
+      "total" : 16388,
+      "partitions" : {
+        "2" : 6057,
+        "0" : 5746,
+        "1" : 4585
+      },
+      "members" : 3,
+      "at_us" : 1795826570805061
+    }, {
+      "total" : 16809,
+      "partitions" : {
+        "2" : 6350,
+        "0" : 5753,
+        "1" : 4706
+      },
+      "members" : 3,
+      "at_us" : 1795826581379091
+    }, {
+      "total" : 17517,
+      "partitions" : {
+        "2" : 6653,
+        "0" : 6003,
+        "1" : 4861
+      },
+      "members" : 3,
+      "at_us" : 1795826591092824
+    }, {
+      "total" : 18377,
+      "partitions" : {
+        "2" : 6940,
+        "0" : 6273,
+        "1" : 5164
+      },
+      "members" : 3,
+      "at_us" : 1795826600827685
+    }, {
+      "total" : 19325,
+      "partitions" : {
+        "2" : 7300,
+        "0" : 6562,
+        "1" : 5463
+      },
+      "members" : 3,
+      "at_us" : 1795826611100058
+    }, {
+      "total" : 20030,
+      "partitions" : {
+        "2" : 7642,
+        "0" : 6766,
+        "1" : 5622
+      },
+      "members" : 3,
+      "at_us" : 1795826621037623
+    }, {
+      "total" : 20623,
+      "partitions" : {
+        "2" : 7879,
+        "0" : 6991,
+        "1" : 5753
+      },
+      "members" : 3,
+      "at_us" : 1795826630823955
+    }, {
+      "total" : 21400,
+      "partitions" : {
+        "2" : 8036,
+        "0" : 7291,
+        "1" : 6073
+      },
+      "members" : 3,
+      "at_us" : 1795826641188043
+    }, {
+      "total" : 21836,
+      "partitions" : {
+        "2" : 8228,
+        "0" : 7491,
+        "1" : 6117
+      },
+      "members" : 3,
+      "at_us" : 1795826650955507
+    }, {
+      "total" : 22424,
+      "partitions" : {
+        "2" : 8495,
+        "0" : 7657,
+        "1" : 6272
+      },
+      "members" : 3,
+      "at_us" : 1795826660724853
+    }, {
+      "total" : 22844,
+      "partitions" : {
+        "2" : 8572,
+        "0" : 7688,
+        "1" : 6584
+      },
+      "members" : 3,
+      "at_us" : 1795826670960514
+    }, {
+      "total" : 23483,
+      "partitions" : {
+        "2" : 8752,
+        "0" : 7925,
+        "1" : 6806
+      },
+      "members" : 3,
+      "at_us" : 1795826680674450
+    }, {
+      "total" : 24255,
+      "partitions" : {
+        "2" : 9113,
+        "0" : 8203,
+        "1" : 6939
+      },
+      "members" : 3,
+      "at_us" : 1795826690937474
+    }, {
+      "total" : 25036,
+      "partitions" : {
+        "2" : 9467,
+        "0" : 8342,
+        "1" : 7227
+      },
+      "members" : 3,
+      "at_us" : 1795826700699548
+    }, {
+      "total" : 25848,
+      "partitions" : {
+        "2" : 9813,
+        "0" : 8551,
+        "1" : 7484
+      },
+      "members" : 3,
+      "at_us" : 1795826710970368
+    }, {
+      "total" : 26374,
+      "partitions" : {
+        "2" : 10034,
+        "0" : 8680,
+        "1" : 7660
+      },
+      "members" : 3,
+      "at_us" : 1795826720965687
+    }, {
+      "total" : 26947,
+      "partitions" : {
+        "2" : 10301,
+        "0" : 8854,
+        "1" : 7792
+      },
+      "members" : 3,
+      "at_us" : 1795826730835911
+    }, {
+      "total" : 27474,
+      "partitions" : {
+        "2" : 10552,
+        "0" : 9046,
+        "1" : 7876
+      },
+      "members" : 3,
+      "at_us" : 1795826741115426
+    }, {
+      "total" : 28198,
+      "partitions" : {
+        "2" : 10746,
+        "0" : 9337,
+        "1" : 8115
+      },
+      "members" : 3,
+      "at_us" : 1795826750837614
+    }, {
+      "total" : 28996,
+      "partitions" : {
+        "2" : 11039,
+        "0" : 9562,
+        "1" : 8395
+      },
+      "members" : 3,
+      "at_us" : 1795826761103485
+    }, {
+      "total" : 29246,
+      "partitions" : {
+        "2" : 11208,
+        "0" : 9722,
+        "1" : 8316
+      },
+      "members" : 3,
+      "at_us" : 1795826771348068
+    }, {
+      "total" : 29626,
+      "partitions" : {
+        "2" : 11285,
+        "0" : 9926,
+        "1" : 8415
+      },
+      "members" : 3,
+      "at_us" : 1795826781354849
+    }, {
+      "total" : 30288,
+      "partitions" : {
+        "2" : 11439,
+        "0" : 10220,
+        "1" : 8629
+      },
+      "members" : 3,
+      "at_us" : 1795826791264972
+    }, {
+      "total" : 30924,
+      "partitions" : {
+        "2" : 11764,
+        "0" : 10419,
+        "1" : 8741
+      },
+      "members" : 3,
+      "at_us" : 1795826800995977
+    }, {
+      "total" : 31847,
+      "partitions" : {
+        "2" : 12115,
+        "0" : 10694,
+        "1" : 9038
+      },
+      "members" : 3,
+      "at_us" : 1795826810714457
+    }, {
+      "total" : 32542,
+      "partitions" : {
+        "2" : 12265,
+        "0" : 11010,
+        "1" : 9267
+      },
+      "members" : 3,
+      "at_us" : 1795826821258829
+    }, {
+      "total" : 33348,
+      "partitions" : {
+        "2" : 12539,
+        "0" : 11268,
+        "1" : 9541
+      },
+      "members" : 3,
+      "at_us" : 1795826830977535
+    }, {
+      "total" : 34040,
+      "partitions" : {
+        "2" : 12864,
+        "0" : 11499,
+        "1" : 9677
+      },
+      "members" : 3,
+      "at_us" : 1795826840715108
+    }, {
+      "total" : 34760,
+      "partitions" : {
+        "2" : 13124,
+        "0" : 11749,
+        "1" : 9887
+      },
+      "members" : 3,
+      "at_us" : 1795826850973493
+    }, {
+      "total" : 35370,
+      "partitions" : {
+        "2" : 13304,
+        "0" : 11966,
+        "1" : 10100
+      },
+      "members" : 3,
+      "at_us" : 1795826860859888
+    }, {
+      "total" : 36047,
+      "partitions" : {
+        "2" : 13678,
+        "0" : 12080,
+        "1" : 10289
+      },
+      "members" : 3,
+      "at_us" : 1795826871138951
+    }, {
+      "total" : 36696,
+      "partitions" : {
+        "2" : 14023,
+        "0" : 12082,
+        "1" : 10591
+      },
+      "members" : 3,
+      "at_us" : 1795826880895408
+    }, {
+      "total" : 37334,
+      "partitions" : {
+        "2" : 14269,
+        "0" : 12339,
+        "1" : 10726
+      },
+      "members" : 3,
+      "at_us" : 1795826890975442
+    }, {
+      "total" : 37964,
+      "partitions" : {
+        "2" : 14555,
+        "0" : 12500,
+        "1" : 10909
+      },
+      "members" : 3,
+      "at_us" : 1795826900753654
+    }, {
+      "total" : 37894,
+      "partitions" : {
+        "2" : 14555,
+        "0" : 12430,
+        "1" : 10909
+      },
+      "members" : 3,
+      "at_us" : 1795826903106096
+    }, {
+      "total" : 37328,
+      "partitions" : {
+        "2" : 14317,
+        "0" : 12315,
+        "1" : 10696
+      },
+      "members" : 3,
+      "at_us" : 1795826915109234
+    }, {
+      "total" : 36991,
+      "partitions" : {
+        "2" : 14245,
+        "0" : 12212,
+        "1" : 10534
+      },
+      "members" : 3,
+      "at_us" : 1795826927118805
+    }, {
+      "total" : 36781,
+      "partitions" : {
+        "2" : 14173,
+        "0" : 12209,
+        "1" : 10399
+      },
+      "members" : 3,
+      "at_us" : 1795826939383667
+    }, {
+      "total" : 36219,
+      "partitions" : {
+        "2" : 14115,
+        "0" : 12090,
+        "1" : 10014
+      },
+      "members" : 3,
+      "at_us" : 1795826951202020
+    }, {
+      "total" : 36052,
+      "partitions" : {
+        "2" : 14022,
+        "0" : 12025,
+        "1" : 10005
+      },
+      "members" : 3,
+      "at_us" : 1795826963054631
+    }, {
+      "total" : 35428,
+      "partitions" : {
+        "2" : 13869,
+        "0" : 11636,
+        "1" : 9923
+      },
+      "members" : 3,
+      "at_us" : 1795826975023545
+    }, {
+      "total" : 34947,
+      "partitions" : {
+        "2" : 13556,
+        "0" : 11592,
+        "1" : 9799
+      },
+      "members" : 3,
+      "at_us" : 1795826986970215
+    }, {
+      "total" : 34787,
+      "partitions" : {
+        "2" : 13538,
+        "0" : 11481,
+        "1" : 9768
+      },
+      "members" : 3,
+      "at_us" : 1795826998805430
+    }, {
+      "total" : 34038,
+      "partitions" : {
+        "2" : 13266,
+        "0" : 11416,
+        "1" : 9356
+      },
+      "members" : 3,
+      "at_us" : 1795827010719564
+    }, {
+      "total" : 33535,
+      "partitions" : {
+        "2" : 13252,
+        "0" : 11295,
+        "1" : 8988
+      },
+      "members" : 3,
+      "at_us" : 1795827022705724
+    }, {
+      "total" : 33167,
+      "partitions" : {
+        "2" : 13180,
+        "0" : 11009,
+        "1" : 8978
+      },
+      "members" : 3,
+      "at_us" : 1795827034588689
+    }, {
+      "total" : 32680,
+      "partitions" : {
+        "2" : 13134,
+        "0" : 10802,
+        "1" : 8744
+      },
+      "members" : 3,
+      "at_us" : 1795827046662503
+    }, {
+      "total" : 32526,
+      "partitions" : {
+        "2" : 13023,
+        "0" : 10780,
+        "1" : 8723
+      },
+      "members" : 3,
+      "at_us" : 1795827058519501
+    }, {
+      "total" : 31992,
+      "partitions" : {
+        "2" : 12864,
+        "0" : 10484,
+        "1" : 8644
+      },
+      "members" : 3,
+      "at_us" : 1795827070560697
+    }, {
+      "total" : 31864,
+      "partitions" : {
+        "2" : 12773,
+        "0" : 10472,
+        "1" : 8619
+      },
+      "members" : 3,
+      "at_us" : 1795827082407922
+    }, {
+      "total" : 31149,
+      "partitions" : {
+        "2" : 12554,
+        "0" : 10240,
+        "1" : 8355
+      },
+      "members" : 3,
+      "at_us" : 1795827094615982
+    }, {
+      "total" : 30468,
+      "partitions" : {
+        "2" : 12349,
+        "0" : 10131,
+        "1" : 7988
+      },
+      "members" : 3,
+      "at_us" : 1795827106448109
+    }, {
+      "total" : 30018,
+      "partitions" : {
+        "2" : 12225,
+        "0" : 9924,
+        "1" : 7869
+      },
+      "members" : 3,
+      "at_us" : 1795827118632941
+    }, {
+      "total" : 29708,
+      "partitions" : {
+        "2" : 12054,
+        "0" : 9861,
+        "1" : 7793
+      },
+      "members" : 3,
+      "at_us" : 1795827130497756
+    }, {
+      "total" : 29321,
+      "partitions" : {
+        "2" : 11913,
+        "0" : 9690,
+        "1" : 7718
+      },
+      "members" : 3,
+      "at_us" : 1795827142502879
+    }, {
+      "total" : 29096,
+      "partitions" : {
+        "2" : 11854,
+        "0" : 9534,
+        "1" : 7708
+      },
+      "members" : 3,
+      "at_us" : 1795827154311806
+    }, {
+      "total" : 28717,
+      "partitions" : {
+        "2" : 11661,
+        "0" : 9447,
+        "1" : 7609
+      },
+      "members" : 3,
+      "at_us" : 1795827166150236
+    }, {
+      "total" : 28521,
+      "partitions" : {
+        "2" : 11621,
+        "0" : 9375,
+        "1" : 7525
+      },
+      "members" : 3,
+      "at_us" : 1795827178120319
+    }, {
+      "total" : 27962,
+      "partitions" : {
+        "2" : 11558,
+        "0" : 9252,
+        "1" : 7152
+      },
+      "members" : 3,
+      "at_us" : 1795827190044286
+    }, {
+      "total" : 27824,
+      "partitions" : {
+        "2" : 11550,
+        "0" : 9124,
+        "1" : 7150
+      },
+      "members" : 3,
+      "at_us" : 1795827201867268
+    }, {
+      "total" : 27099,
+      "partitions" : {
+        "2" : 11420,
+        "0" : 8986,
+        "1" : 6693
+      },
+      "members" : 3,
+      "at_us" : 1795827213957289
+    }, {
+      "total" : 26973,
+      "partitions" : {
+        "2" : 11355,
+        "0" : 8956,
+        "1" : 6662
+      },
+      "members" : 3,
+      "at_us" : 1795827225794362
+    }, {
+      "total" : 26592,
+      "partitions" : {
+        "2" : 11250,
+        "0" : 8878,
+        "1" : 6464
+      },
+      "members" : 3,
+      "at_us" : 1795827237749783
+    }, {
+      "total" : 26167,
+      "partitions" : {
+        "2" : 11060,
+        "0" : 8703,
+        "1" : 6404
+      },
+      "members" : 3,
+      "at_us" : 1795827249920034
+    }, {
+      "total" : 25911,
+      "partitions" : {
+        "2" : 11043,
+        "0" : 8636,
+        "1" : 6232
+      },
+      "members" : 3,
+      "at_us" : 1795827261749677
+    }, {
+      "total" : 25467,
+      "partitions" : {
+        "2" : 10945,
+        "0" : 8427,
+        "1" : 6095
+      },
+      "members" : 3,
+      "at_us" : 1795827273880232
+    }, {
+      "total" : 25066,
+      "partitions" : {
+        "2" : 10848,
+        "0" : 8255,
+        "1" : 5963
+      },
+      "members" : 3,
+      "at_us" : 1795827285950657
+    }, {
+      "total" : 24838,
+      "partitions" : {
+        "2" : 10768,
+        "0" : 8162,
+        "1" : 5908
+      },
+      "members" : 3,
+      "at_us" : 1795827297962852
+    }, {
+      "total" : 24490,
+      "partitions" : {
+        "2" : 10589,
+        "0" : 8085,
+        "1" : 5816
+      },
+      "members" : 3,
+      "at_us" : 1795827309992385
+    }, {
+      "total" : 23817,
+      "partitions" : {
+        "2" : 10432,
+        "0" : 7812,
+        "1" : 5573
+      },
+      "members" : 3,
+      "at_us" : 1795827322131489
+    }, {
+      "total" : 23269,
+      "partitions" : {
+        "2" : 10235,
+        "0" : 7686,
+        "1" : 5348
+      },
+      "members" : 3,
+      "at_us" : 1795827333946840
+    }, {
+      "total" : 22780,
+      "partitions" : {
+        "2" : 10043,
+        "0" : 7511,
+        "1" : 5226
+      },
+      "members" : 3,
+      "at_us" : 1795827345904862
+    }, {
+      "total" : 22375,
+      "partitions" : {
+        "2" : 9992,
+        "0" : 7232,
+        "1" : 5151
+      },
+      "members" : 3,
+      "at_us" : 1795827357755464
+    }, {
+      "total" : 21900,
+      "partitions" : {
+        "2" : 9784,
+        "0" : 7138,
+        "1" : 4978
+      },
+      "members" : 3,
+      "at_us" : 1795827369768597
+    }, {
+      "total" : 21417,
+      "partitions" : {
+        "2" : 9744,
+        "0" : 6831,
+        "1" : 4842
+      },
+      "members" : 3,
+      "at_us" : 1795827381667012
+    }, {
+      "total" : 21022,
+      "partitions" : {
+        "2" : 9409,
+        "0" : 6821,
+        "1" : 4792
+      },
+      "members" : 3,
+      "at_us" : 1795827393489457
+    }, {
+      "total" : 20593,
+      "partitions" : {
+        "2" : 9318,
+        "0" : 6537,
+        "1" : 4738
+      },
+      "members" : 3,
+      "at_us" : 1795827405543500
+    }, {
+      "total" : 19537,
+      "partitions" : {
+        "2" : 9104,
+        "0" : 5999,
+        "1" : 4434
+      },
+      "members" : 3,
+      "at_us" : 1795827417670612
+    }, {
+      "total" : 19320,
+      "partitions" : {
+        "2" : 8982,
+        "0" : 5938,
+        "1" : 4400
+      },
+      "members" : 3,
+      "at_us" : 1795827429534897
+    }, {
+      "total" : 18615,
+      "partitions" : {
+        "2" : 8791,
+        "0" : 5588,
+        "1" : 4236
+      },
+      "members" : 3,
+      "at_us" : 1795827441573119
+    }, {
+      "total" : 18215,
+      "partitions" : {
+        "2" : 8729,
+        "0" : 5429,
+        "1" : 4057
+      },
+      "members" : 3,
+      "at_us" : 1795827453513979
+    }, {
+      "total" : 17751,
+      "partitions" : {
+        "2" : 8646,
+        "0" : 5248,
+        "1" : 3857
+      },
+      "members" : 3,
+      "at_us" : 1795827465789354
+    }, {
+      "total" : 17544,
+      "partitions" : {
+        "2" : 8622,
+        "0" : 5139,
+        "1" : 3783
+      },
+      "members" : 3,
+      "at_us" : 1795827477628925
+    }, {
+      "total" : 17332,
+      "partitions" : {
+        "2" : 8605,
+        "0" : 4998,
+        "1" : 3729
+      },
+      "members" : 3,
+      "at_us" : 1795827489476902
+    } ],
+    "export_at_us" : 1795827499717464,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "transient_failures" : 3,
+      "transient_ratio" : 0.01,
+      "seed" : 230,
+      "payload_bytes" : 1024,
+      "permanent_ratio" : 0.0,
+      "warmup_seconds" : 120,
+      "rate" : 100.0,
+      "seconds" : 600,
+      "keys" : 600,
+      "topic" : "bench.messages.v1"
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:50865",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 72000,
+    "acked" : 72000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 100.0,
+      "messages" : 60000,
+      "window_start_us" : 1795826299572237,
+      "window_end_us" : 1795826899572237,
+      "window_seconds" : 600,
+      "sent_in_window" : 60000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 100.0,
+      "behind_schedule_us" : {
+        "count" : 60000,
+        "max" : 10143,
+        "p50" : 73,
+        "p99" : 241
+      }
+    },
+    "finished_us" : 1795826899563995,
+    "finished_monotonic_ns" : 15429208469676706
+  },
+  "window" : {
+    "start_us" : 1795826299572237,
+    "end_us" : 1795826899572237,
+    "seconds" : 600.0
+  },
+  "counts" : {
+    "requested" : 72000,
+    "requested_measure" : 60000,
+    "acked" : 72000,
+    "ack_failed" : 0,
+    "received" : 55292,
+    "attempts" : 56647,
+    "failed_attempts" : 1358,
+    "completed" : 55279,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 100.0,
+    "acked_per_s" : 100.0,
+    "received_per_s" : 36.73166666666667,
+    "completed_per_s" : 36.72666666666667,
+    "failed_attempts_per_s" : 1.1266666666666667,
+    "acked_minus_completed_per_s" : 63.27333333333333
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 60000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 633,
+      "p95" : 1096,
+      "p99" : 2101,
+      "p999" : 12679,
+      "mean" : 730.7507333333333,
+      "max" : 24943,
+      "curve" : [ [ 0.0, 384 ], [ 10.0, 530 ], [ 25.0, 573 ], [ 50.0, 633 ], [ 75.0, 729 ], [ 90.0, 908 ], [ 95.0, 1096 ], [ 99.0, 2101 ], [ 99.5, 3501 ], [ 99.9, 12679 ], [ 99.99, 19439 ], [ 100.0, 24943 ] ],
+      "histogram" : {
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "broker" : {
+      "count" : 43292,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 370933759,
+      "p95" : 730333183,
+      "p99" : 799014911,
+      "p999" : 819986431,
+      "mean" : 3.7496856255444425E8,
+      "max" : 820510719,
+      "curve" : [ [ 0.0, 123 ], [ 10.0, 75628543 ], [ 25.0, 175374335 ], [ 50.0, 370933759 ], [ 75.0, 565182463 ], [ 90.0, 703594495 ], [ 95.0, 730333183 ], [ 99.0, 799014911 ], [ 99.5, 817364991 ], [ 99.9, 819986431 ], [ 99.99, 820510719 ], [ 100.0, 820510719 ] ],
+      "histogram" : {
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "processing" : {
+      "count" : 43289,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 7503,
+      "p95" : 11143,
+      "p99" : 7041023,
+      "p999" : 7053311,
+      "mean" : 81290.48247822773,
+      "max" : 7155711,
+      "curve" : [ [ 0.0, 4396 ], [ 10.0, 6287 ], [ 25.0, 6823 ], [ 50.0, 7503 ], [ 75.0, 8463 ], [ 90.0, 9735 ], [ 95.0, 11143 ], [ 99.0, 7041023 ], [ 99.5, 7045119 ], [ 99.9, 7053311 ], [ 99.99, 7098367 ], [ 100.0, 7155711 ] ],
+      "histogram" : {
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 42839,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 370933759,
+      "p95" : 730333183,
+      "p99" : 799014911,
+      "p999" : 819986431,
+      "mean" : 3.749166118583534E8,
+      "max" : 820510719,
+      "curve" : [ [ 0.0, 7712 ], [ 10.0, 75694079 ], [ 25.0, 175112191 ], [ 50.0, 370933759 ], [ 75.0, 564658175 ], [ 90.0, 703594495 ], [ 95.0, 730333183 ], [ 99.0, 799014911 ], [ 99.5, 817364991 ], [ 99.9, 819986431 ], [ 99.99, 820510719 ], [ 100.0, 820510719 ] ],
+      "histogram" : {
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 450,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 381681663,
+      "p95" : 731906047,
+      "p99" : 799539199,
+      "p999" : 821035007,
+      "mean" : 3.8524049635555553E8,
+      "max" : 821035007,
+      "curve" : [ [ 0.0, 7041024 ], [ 10.0, 79233023 ], [ 25.0, 187039743 ], [ 50.0, 381681663 ], [ 75.0, 573571071 ], [ 90.0, 695205887 ], [ 95.0, 731906047 ], [ 99.0, 799539199 ], [ 99.5, 813170687 ], [ 99.9, 821035007 ], [ 99.99, 821035007 ], [ 100.0, 821035007 ] ],
+      "histogram" : {
+        "data" : "HISTFAAAAfR4nC2SP4sUQRDFu1/3XDMOw7AMy7CMiyzHBoscInKIiCyiRofBIUYXHn4Ic8HAcBEDQzUyMDLyExhdIBj4HQTB0MRf1czOTHV3/XnvVfVef3XoQ0iPw/RL8xrN/Dx8DPs/k+P3ryjVCvp0TR+ivkX9i7o60ueoc71L5nsd9UO60BvpSrqpL1FPtNZBeqB7eht1qu9RnW7pb9QLVfoq7TXqqZ5lvdSxtkoQ7HWiDWmX2uX3UQ2sve6DcUMLvo1W2oF+oYI95xl0puecClgbMi4pLnrEPkFZWAP1LXk9aEm3EZX0EAEDAit8OzALWWv2I7uK+Jkz1/AO7O4S7dk3aDghfsy5paukpe64bVBTYN/CPuLryNiSGcBe8o3UjGQOuceaksrPLqmFqBN5SzsPmrkLbBgDL561Bq52KY37k5MRsF7ClN/yLDyy8uaWCrmwD/hMdkBkIS3XTtrhro2X88ovYEvBymV17jHAYlPIBjKrnudUTF/vw1hwXHpbg4sfcvGYDacianEbx2L2tT5yk0eBtQeWiWmoqzOviQ+uLpvP2qty7RIsvZrXQFqm7+CRSry132DljkauzpGKXJ/PMJs3Tf/p5ODFd/DXSrnGVrlVNjAf1REcE3yxquR403UsJuXBh2UaelwddmAd/Prtrv4DxrsxkQ==",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "e2e_all" : {
+      "count" : 43279,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 370933759,
+      "p95" : 730333183,
+      "p99" : 792723455,
+      "p999" : 819986431,
+      "mean" : 3.749148835757758E8,
+      "max" : 821035007,
+      "curve" : [ [ 0.0, 2650 ], [ 10.0, 75694079 ], [ 25.0, 175374335 ], [ 50.0, 370933759 ], [ 75.0, 564658175 ], [ 90.0, 703594495 ], [ 95.0, 730333183 ], [ 99.0, 792723455 ], [ 99.5, 816840703 ], [ 99.9, 819986431 ], [ 99.99, 820510719 ], [ 100.0, 821035007 ] ],
+      "histogram" : {
+        "data" : "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",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI",
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 54839,
+      "1" : 1,
+      "2" : 2,
+      "3" : 450
+    },
+    "retried_messages" : 453,
+    "retry_succeeded" : 450,
+    "retry_success_rate" : 0.9933774834437086
+  },
+  "integrity" : {
+    "lost" : 16721,
+    "lost_sample" : [ "df60a998-b5cb-4022-a6b6-5f849401ec30", "14122a4a-2097-4875-8417-46742146f3c1", "7ff7cb0a-c1d6-4f96-bb82-f63af6d84451", "5f7de485-b2a8-48b7-a06f-4d676f604d7c", "6423f382-1ba1-4a95-bc2c-4d62613e837a", "ba2ef8e1-6353-48bc-abfe-54fba31bcd81", "d42acc99-0b28-49ea-bb5b-5401d12cc3f7", "22776bec-2bf9-4f30-9e16-507b89a41f37", "01cf91cd-111d-48d8-ab2d-83c2b7f84741", "04ef3bba-77dc-4e1d-bab7-c5c663fbd31a", "90930562-0ac8-4b94-8624-9c9c594c35cd", "7c12a0f8-2fe4-43cb-aeae-a10e806a3b93", "0ae21972-a6d7-427a-acd2-18aa091abaf6", "b0b5709a-b519-4c8f-b2bd-2f58c2320e9a", "b1d65a3c-7473-4746-8e75-44744ae82b4f", "37247c71-cc82-49d0-95a4-9bfd9d9e8f64", "42b463b3-f310-4198-b009-522b0d27363e", "35f6fadb-ef15-47d1-b6a3-d17bdee67ecd", "f81ae34f-1b02-4e22-a98b-f17aa9f771f0", "80ca49fd-2da0-4855-9e7a-f52537eb65b6" ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795826179572237,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 12,
+    "measure_to_bucket" : 71,
+    "requested" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "acked" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "received" : [ 955, 1045, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 292, 809, 229, 467, 168, 398, 320, 278, 179, 575, 430, 135, 469, 445, 358, 186, 647, 534, 768, 276, 442, 434, 65, 544, 475, 497, 280, 540, 343, 135, 65, 233, 401, 256, 583, 404, 604, 332, 213, 237, 214, 345, 544, 500, 248, 228, 551, 734, 387, 390, 50, 292, 228, 287, 305, 327, 393, 337, 253, 380, 543, 230, 212, 198, 562, 167, 236, 656, 256, 117, 738, 443, 412, 319, 195, 173, 493, 150, 468, 414, 566, 564, 144, 175, 408, 235, 173, 294, 461, 138, 247, 568, 150, 267, 428, 233, 236, 410, 298, 149, 348, 442, 647, 421, 207, 458, 432, 461, 257, 447, 377, 804, 217, 577, 478, 316, 220, 185, 233, 568, 32 ],
+    "completed" : [ 954, 1046, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 289, 809, 229, 467, 168, 399, 319, 278, 180, 575, 429, 136, 469, 445, 357, 186, 647, 534, 768, 276, 442, 434, 65, 545, 474, 497, 280, 541, 342, 135, 65, 233, 401, 256, 583, 404, 604, 332, 213, 237, 214, 345, 544, 500, 248, 228, 553, 732, 388, 389, 50, 293, 227, 287, 305, 327, 394, 336, 254, 379, 543, 230, 212, 198, 562, 167, 236, 656, 256, 117, 739, 442, 412, 319, 195, 174, 492, 150, 468, 414, 566, 564, 144, 175, 410, 233, 173, 295, 460, 138, 248, 567, 150, 268, 428, 233, 235, 410, 299, 148, 349, 442, 647, 420, 207, 458, 434, 459, 258, 446, 377, 804, 217, 578, 477, 316, 220, 185, 234, 568, 21 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 9, 13, 11, 11, 10, 14, 10, 12, 10, 12, 12, 9, 13, 12, 10, 11, 10, 12, 10, 12, 11, 10, 11, 13, 11, 10, 11, 11, 13, 12, 11, 12, 11, 10, 12, 12, 11, 9, 14, 12, 10, 11, 11, 14, 9, 9, 10, 12, 12, 13, 10, 12, 14, 10, 10, 12, 12, 10, 14, 9, 13, 11, 11, 12, 12, 11, 10, 13, 11, 9, 12, 11, 12, 13, 9, 12, 14, 10, 9, 10, 11, 14, 10, 11, 14, 11, 11, 13, 12, 9, 12, 14, 9, 12, 12, 12, 12, 10, 13, 11, 11, 10, 12, 12, 11, 10, 12, 12, 11, 11, 10, 10, 11, 12, 11, 13, 10, 13, 10, 3 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ ],
+  "files" : {
+    "published.csv" : "2abb65ca41cf2cadbefdaae43aa88845d2c56f314e293a188d9cc9324ab9001b",
+    "attempts-1795826168230-257401.csv" : "36a567ae3ee449997f7cd2ae1f656a0783ce179555ac16f928c6fa59a474e0b0",
+    "bench_message.tsv" : "6e5d14d115044c3cf1b9fef2a5178f8a65850d055edbb4be177407b775a05ebd",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "636b4bcbdabd67cb16c84e09272693570afe373aef0fe3cbef18fbc06cfb710a",
+    "run.json" : "959e1e804f75a9e9ef87d4e7f4e427d20d3f243fb630cf882d02e351e0abdba0"
+  }
+}

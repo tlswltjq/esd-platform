@@ -1,0 +1,359 @@
+{
+  "applications": {
+    "auth": {
+      "image_id": "sha256:fb1b9bd729a1c8f56c6f554c923bfe7998c9d5081362fbb6b823dc38d43de7ec",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "web-bff": {
+      "image_id": "sha256:1139cf47e83316a3d822f9c7ee8b41f8f8fb12d6a484f9199fad6a2cc9296da6",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "gateway": {
+      "image_id": "sha256:82fa77011c50a8472e0759cd4068972eba7fa23cd85a800b76dee8b20300799b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "studio": {
+      "image_id": "sha256:0e9b010fca0aa95b2e2d572423bff4f87d26fe271214e2c144019254987bf06b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "review": {
+      "image_id": "sha256:086e3f679455d70ccf1eeca63fbfe1146d5dbf5b5c42b9e7368a0d9521d5454d",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "catalog": {
+      "image_id": "sha256:087ebc3f2c3c3549955888433f9949f2d9ee2a0df825af79f0a75170909ea2d9",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "store": {
+      "image_id": "sha256:c7f787894de575cd4b073a94ee0392b48e91b51ff95ed998a338ff6c5394e0fa",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "order": {
+      "image_id": "sha256:e6fa65efdc87c46a7ab849d50b9e7f0a2198c133e02ae4d72bd96204a586c233",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "payment": {
+      "image_id": "sha256:2d462c93dd0dd693f9f585c396179fd34c5efafb25cbd252d2b0fbfc500d72fc",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "license": {
+      "image_id": "sha256:0b76b234c0cdd1eb3d15faa47d80097fc4c05abe8b6f5444cfed31ed558d8d3b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "download": {
+      "image_id": "sha256:f71c19a635229960f233991fc87476f0a17ab92718dd7917f27a46156ee56a01",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "settlement": {
+      "image_id": "sha256:f2707b32e2e54c085c9c36653f3ad768e206566a92083f400d1147b3e96cb021",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "mock-pg": {
+      "image_id": "sha256:55fbfbe9dfaeab71d82bea735578c508d07d3bc866a06dbce7af274c9ff0ad06",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "UTC",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    }
+  },
+  "phases": [],
+  "port_offset": 11000,
+  "complete": true,
+  "app_env": [],
+  "started_at": "2026-11-27T19:08:20.518212+00:00",
+  "host": "Linux-5.15.0-1081-oracle-aarch64-with-glibc2.29",
+  "command": [
+    "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/tools/verification/verify-jib.py",
+    "--measure",
+    "--load-rate",
+    "6",
+    "--load-duration",
+    "900",
+    "--load-warmup",
+    "300",
+    "--load-buyers",
+    "20",
+    "--skip-build"
+  ],
+  "project": "messaging-measure-ax1__bqz",
+  "measurement": {
+    "rate": 6.0,
+    "duration_seconds": 900,
+    "warmup_seconds": 300,
+    "buyers": 20,
+    "planned": 5400,
+    "accepted": 5400,
+    "http_p95_ms": 54.606101,
+    "late_start_max_ms": 12.389218,
+    "journey": {
+      "completed": 5400,
+      "incomplete": 0,
+      "failed": 0,
+      "created_to_basis": {
+        "p50_ms": 1155.425,
+        "p95_ms": 1714.244,
+        "p99_ms": 1814.065,
+        "max_ms": 2015.153
+      },
+      "paid_to_basis": {
+        "p50_ms": 307.817,
+        "p95_ms": 442.566,
+        "p99_ms": 495.629,
+        "max_ms": 621.691
+      }
+    },
+    "broker": {
+      "license-paid-order": {
+        "count": 5400,
+        "negative": 0,
+        "p50_ms": 49.681,
+        "p95_ms": 110.994,
+        "p99_ms": 148.116,
+        "max_ms": 217.421
+      },
+      "order-license-grant": {
+        "count": 5400,
+        "negative": 0,
+        "p50_ms": 26.357,
+        "p95_ms": 71.415,
+        "p99_ms": 95.438,
+        "max_ms": 160.381
+      },
+      "order-payment-result": {
+        "count": 5400,
+        "negative": 0,
+        "p50_ms": 34.153,
+        "p95_ms": 85.491,
+        "p99_ms": 119.538,
+        "max_ms": 193.075
+      },
+      "payment-order-request": {
+        "count": 5400,
+        "negative": 0,
+        "p50_ms": 13.06,
+        "p95_ms": 47.766,
+        "p99_ms": 75.206,
+        "max_ms": 143.775
+      },
+      "settlement-paid-order": {
+        "count": 5400,
+        "negative": 0,
+        "p50_ms": 95.876,
+        "p95_ms": 191.958,
+        "p99_ms": 232.115,
+        "max_ms": 332.776
+      }
+    },
+    "order": {
+      "license-paid-order": {
+        "keys": 5400,
+        "events": 5400,
+        "pairs": 0,
+        "violations": 0
+      },
+      "order-license-grant": {
+        "keys": 5400,
+        "events": 5400,
+        "pairs": 0,
+        "violations": 0
+      },
+      "order-payment-result": {
+        "keys": 5400,
+        "events": 5400,
+        "pairs": 0,
+        "violations": 0
+      },
+      "payment-order-request": {
+        "keys": 5400,
+        "events": 5400,
+        "pairs": 0,
+        "violations": 0
+      },
+      "settlement-paid-order": {
+        "keys": 5400,
+        "events": 5400,
+        "pairs": 0,
+        "violations": 0
+      }
+    },
+    "refunds": {
+      "requested": 0,
+      "rejected": 0,
+      "unfinished": 0
+    },
+    "refund_diagnosis": null,
+    "redeliveries": {
+      "by_group": {
+        "catalog-project-release": 1
+      },
+      "unreadable": []
+    },
+    "db_load": {
+      "idle_per_second": {
+        "Com_select": 75.2,
+        "Questions": 246.6,
+        "seconds": 10.08
+      },
+      "load_run_per_second": {
+        "Com_select": 482.1,
+        "Questions": 1085.9,
+        "seconds": 1318.55
+      }
+    },
+    "resources": {
+      "interval_seconds": 2.0,
+      "idle": {
+        "kafka": {
+          "samples": 3,
+          "cpu_percent_mean": 11.97,
+          "cpu_percent_max": 19.77,
+          "memory_mib_mean": 324.0,
+          "memory_mib_max": 327.6
+        },
+        "mysql": {
+          "samples": 3,
+          "cpu_percent_mean": 7.72,
+          "cpu_percent_max": 11.87,
+          "memory_mib_mean": 532.1,
+          "memory_mib_max": 532.2
+        }
+      },
+      "load_run": {
+        "kafka": {
+          "samples": 292,
+          "cpu_percent_mean": 36.83,
+          "cpu_percent_max": 180.48,
+          "memory_mib_mean": 886.8,
+          "memory_mib_max": 1003.0
+        },
+        "mysql": {
+          "samples": 292,
+          "cpu_percent_mean": 33.0,
+          "cpu_percent_max": 52.66,
+          "memory_mib_mean": 601.9,
+          "memory_mib_max": 638.9
+        }
+      },
+      "stats_failures": 0,
+      "stats_partial": 0,
+      "disk": {
+        "kafka": {
+          "before_kib": 1044,
+          "after_kib": 48768,
+          "growth_kib": 47724
+        },
+        "mysql": {
+          "before_kib": 233764,
+          "after_kib": 595136,
+          "growth_kib": 361372
+        }
+      },
+      "disk_errors": {
+        "before": {},
+        "after": {}
+      }
+    },
+    "broker_restart": null,
+    "generator": {
+      "startEpochUs": 1795807024429019,
+      "endEpochUs": 1795807924429019,
+      "seconds": 900,
+      "sentInWindow": 5400,
+      "sentAfterWindow": 0,
+      "achievedRate": 6.0
+    },
+    "timeseries": {
+      "rates": {
+        "offered_per_s": 6.0,
+        "completed_per_s": 6.001111111111111,
+        "completed_over_offered": 1.0001851851851853
+      },
+      "measured_orders": {
+        "requested": 5400,
+        "completed_in_window": 5394,
+        "completed_after_window": 6,
+        "failed": 0,
+        "rejected": 0,
+        "unresolved": 0
+      },
+      "totals": {
+        "completed": 7200,
+        "failed": 0,
+        "rejected": 0,
+        "unresolved": 0
+      },
+      "unresolved": 0,
+      "outstanding_drain_seconds": 0.755,
+      "backlog_drain_seconds": 5.578,
+      "clock_check": {
+        "finish_before_start": 0
+      },
+      "observation": {
+        "wait_secs": 600,
+        "timed_out": false
+      }
+    },
+    "load_ended_us": 1795807924264797,
+    "faults": null,
+    "validity": {
+      "valid": true,
+      "reasons": [],
+      "instrument": [],
+      "business": [],
+      "http_failures": 0,
+      "late_starts": 0
+    }
+  },
+  "normal_shutdown_count": 13,
+  "original_containers_preserved": true,
+  "finished_at": "2026-11-27T19:33:48.173799+00:00"
+}

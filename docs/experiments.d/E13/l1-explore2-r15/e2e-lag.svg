@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" font-family="sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="70" y="18" font-size="14" font-weight="bold">층 1 소비 지연</text>
+<line x1="70" y1="370" x2="710" y2="370" stroke="#333"/>
+<line x1="70" y1="30" x2="70" y2="370" stroke="#333"/>
+<text x="64" y="374.0" text-anchor="end">0</text>
+<text x="64" y="289.0" text-anchor="end">250</text>
+<text x="64" y="204.0" text-anchor="end">500</text>
+<text x="64" y="119.0" text-anchor="end">750</text>
+<text x="64" y="34.0" text-anchor="end">1000</text>
+<text x="70.0" y="386" text-anchor="middle">0</text>
+<text x="198.0" y="386" text-anchor="middle">88</text>
+<text x="326.0" y="386" text-anchor="middle">176</text>
+<text x="454.0" y="386" text-anchor="middle">265</text>
+<text x="582.0" y="386" text-anchor="middle">353</text>
+<text x="710.0" y="386" text-anchor="middle">441</text>
+<text x="390" y="408" text-anchor="middle">첫 표본 뒤 초</text>
+<polyline fill="none" stroke="#0072B2" stroke-width="2" points="70.0,370.0 89.8,370.0 109.1,370.0 143.9,356.1 179.0,182.7 219.5,299.6 252.4,222.8 284.4,261.5 316.9,263.9 344.0,293.2 368.2,364.2 393.8,364.6 417.1,362.2 439.5,367.6 461.6,367.6 483.3,360.8 504.8,362.2 526.6,365.6 548.1,363.9 568.4,358.8 589.8,362.5 610.7,368.0 631.1,357.8 651.5,362.2 672.6,365.2 691.4,370.0 710.0,370.0"/>
+<line x1="725" y1="40" x2="743" y2="40" stroke="#0072B2" stroke-width="2"/>
+<text x="749" y="44">소비 지연 합(건, 브로커 커밋 offset 기준)</text></svg>

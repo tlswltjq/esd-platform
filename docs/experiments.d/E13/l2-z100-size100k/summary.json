@@ -1,0 +1,668 @@
+{
+  "schema" : 1,
+  "run" : {
+    "name" : "l2-z100-size100k",
+    "recovery" : "quarantine",
+    "kills_us" : [ ],
+    "conditions" : {
+      "rate" : 100.0,
+      "warmup_seconds" : 120,
+      "seconds" : 180,
+      "size" : 102400,
+      "keys" : 600,
+      "partitions" : 3,
+      "concurrency" : "기본값(결정 212: 3)",
+      "transient_ratio" : 0.0,
+      "transient_failures" : 1,
+      "permanent_ratio" : 0.0,
+      "dlt_max_message_bytes" : null,
+      "producer" : "운영과 같음(acks=all·enable.idempotence=true·retries=3, linger.ms·batch.size·압축 지정 없음)",
+      "consumer" : "운영과 같음(enable-auto-commit=false·ack-mode record·auto-offset-reset earliest, max.poll.records 지정 없음)",
+      "serialization" : "키·값 StringSerializer/StringDeserializer, 값은 UTF-8 JSON 본문(운영과 같음)",
+      "retry" : "1·2·4초 총 4회(ConsumerRetryPolicy)",
+      "hikari_maximum_pool_size" : 20,
+      "isolation" : "READ COMMITTED(RecordBenchMessage)",
+      "app_jvm" : "JVM 기본값",
+      "generator_jvm" : "JVM 기본값"
+    },
+    "environment" : {
+      "host" : {
+        "cpus" : 4,
+        "memory_kib" : 24564652,
+        "kernel" : "5.15.0-1081-oracle",
+        "machine" : "aarch64"
+      },
+      "java" : [ "openjdk version \"21.0.12\" 2026-07-21 LTS", "OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)", "OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode, sharing)" ],
+      "git_commit" : "832baea961f502215f8a02e1e37f97d5a2c934c5",
+      "git_dirty" : false,
+      "images" : {
+        "apache/kafka:3.9.0" : "sha256:7c2b3f20cec5b5c41e29bc3107e51689b45844b8433289aea4a9884a5b1097e1",
+        "mysql:8.0" : "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+      },
+      "disk" : {
+        "docker_storage_driver" : "overlay2",
+        "run_dir" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/home/ubuntu/.kiro/crew"
+        },
+        "docker_root" : {
+          "device" : "/dev/sda1",
+          "type" : "ext4",
+          "size_kib" : 203034800,
+          "mount" : "/"
+        }
+      }
+    },
+    "started_at" : "2026-11-28T02:13:21.609594+00:00",
+    "load_started_us" : 1795832036438332,
+    "load_ended_us" : 1795832337151371,
+    "observation_deadline_us" : 1795832937151371,
+    "settled_us" : 1795832341039535,
+    "timed_out" : false,
+    "metrics" : {
+      "jvm_gc_pause_seconds_sum" : 0.359,
+      "jvm_gc_pause_seconds_count" : 165.0,
+      "stove_kafka_consumer_failed_deliveries_total" : null,
+      "stove_kafka_consumer_recovered_total" : null,
+      "stove_kafka_consumer_recovery_failures_total" : null,
+      "stove_kafka_dead_lettered_total" : null,
+      "stove_consumer_quarantine_records_total" : null,
+      "stove_inbox_duplicates_total" : null,
+      "hikaricp_connections_pending" : 0.0,
+      "process_cpu_time_ns_total" : 1.1149E11
+    },
+    "resources" : {
+      "containers" : {
+        "kafka" : {
+          "samples" : 68,
+          "cpu_percent_mean" : 57.82,
+          "cpu_percent_max" : 217.54,
+          "memory_mib_mean" : 871.2,
+          "memory_mib_max" : 1043.5
+        },
+        "mysql" : {
+          "samples" : 68,
+          "cpu_percent_mean" : 26.88,
+          "cpu_percent_max" : 56.21,
+          "memory_mib_mean" : 410.2,
+          "memory_mib_max" : 417.4
+        }
+      },
+      "sampler_failures" : 0,
+      "sampler_partial" : 0,
+      "disk" : {
+        "kafka" : {
+          "before_kib" : 736,
+          "after_kib" : 3010656,
+          "growth_kib" : 3009920
+        },
+        "mysql" : {
+          "before_kib" : 206376,
+          "after_kib" : 253404,
+          "growth_kib" : 47028
+        }
+      },
+      "disk_errors" : { },
+      "app" : {
+        "samples" : 32,
+        "cpu_seconds" : 110.13,
+        "cpu_percent_mean" : 36.43,
+        "rss_mib_max" : 572.0
+      }
+    },
+    "lag" : [ {
+      "total" : 91,
+      "partitions" : {
+        "0" : 26,
+        "1" : 27,
+        "2" : 38
+      },
+      "members" : 3,
+      "at_us" : 1795832038608587
+    }, {
+      "total" : 19,
+      "partitions" : {
+        "0" : 2,
+        "1" : 1,
+        "2" : 16
+      },
+      "members" : 3,
+      "at_us" : 1795832049629260
+    }, {
+      "total" : 7,
+      "partitions" : {
+        "0" : 1,
+        "1" : 2,
+        "2" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795832060345605
+    }, {
+      "total" : 28,
+      "partitions" : {
+        "0" : 9,
+        "1" : 4,
+        "2" : 15
+      },
+      "members" : 3,
+      "at_us" : 1795832069483047
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 0,
+        "1" : 3,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832078768277
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 1,
+        "1" : 2,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832089010876
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 1,
+        "1" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832098653712
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "0" : 0,
+        "1" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832109124945
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "0" : 1,
+        "1" : 4,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832119140254
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "0" : 0,
+        "1" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832129045362
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "0" : 1,
+        "1" : 4,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832138685600
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "0" : 0,
+        "1" : 0,
+        "2" : 5
+      },
+      "members" : 3,
+      "at_us" : 1795832148826619
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 2,
+        "1" : 0,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832158995054
+    }, {
+      "total" : 39,
+      "partitions" : {
+        "0" : 7,
+        "1" : 9,
+        "2" : 23
+      },
+      "members" : 3,
+      "at_us" : 1795832168979104
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "0" : 2,
+        "1" : 0,
+        "2" : 4
+      },
+      "members" : 3,
+      "at_us" : 1795832178628139
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "0" : 2,
+        "1" : 1,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832188748231
+    }, {
+      "total" : 45,
+      "partitions" : {
+        "0" : 11,
+        "1" : 21,
+        "2" : 13
+      },
+      "members" : 3,
+      "at_us" : 1795832198998662
+    }, {
+      "total" : 6,
+      "partitions" : {
+        "0" : 1,
+        "1" : 3,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832208479672
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "0" : 2,
+        "1" : 0,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832218520376
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 2,
+        "1" : 1,
+        "2" : 1
+      },
+      "members" : 3,
+      "at_us" : 1795832228567662
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "0" : 0,
+        "1" : 0,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832238592417
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 0,
+        "1" : 2,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832248552246
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "0" : 0,
+        "1" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832258514489
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 1,
+        "1" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832268667442
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 1,
+        "1" : 0,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832278776261
+    }, {
+      "total" : 4,
+      "partitions" : {
+        "0" : 4,
+        "1" : 0,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832288916228
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "0" : 0,
+        "1" : 0,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832299405025
+    }, {
+      "total" : 3,
+      "partitions" : {
+        "0" : 0,
+        "1" : 1,
+        "2" : 2
+      },
+      "members" : 3,
+      "at_us" : 1795832308941550
+    }, {
+      "total" : 5,
+      "partitions" : {
+        "0" : 0,
+        "1" : 2,
+        "2" : 3
+      },
+      "members" : 3,
+      "at_us" : 1795832318750011
+    }, {
+      "total" : 21,
+      "partitions" : {
+        "0" : 12,
+        "1" : 1,
+        "2" : 8
+      },
+      "members" : 3,
+      "at_us" : 1795832328771897
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "0" : 0,
+        "1" : 0,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832338644825
+    }, {
+      "total" : 0,
+      "partitions" : {
+        "0" : 0,
+        "1" : 0,
+        "2" : 0
+      },
+      "members" : 3,
+      "at_us" : 1795832340941171
+    } ],
+    "export_at_us" : 1795832341800476,
+    "app_exit_code" : 143
+  },
+  "generator" : {
+    "options" : {
+      "transient_failures" : 1,
+      "transient_ratio" : 0.0,
+      "seed" : 230,
+      "payload_bytes" : 102400,
+      "permanent_ratio" : 0.0,
+      "warmup_seconds" : 120,
+      "rate" : 100.0,
+      "seconds" : 180,
+      "keys" : 600,
+      "topic" : "bench.messages.v1"
+    },
+    "producer" : {
+      "acks" : "all",
+      "bootstrap.servers" : "127.0.0.1:34835",
+      "enable.idempotence" : "true",
+      "key.serializer" : "org.apache.kafka.common.serialization.StringSerializer",
+      "retries" : "3",
+      "value.serializer" : "org.apache.kafka.common.serialization.StringSerializer"
+    },
+    "sent" : 30000,
+    "acked" : 30000,
+    "ack_failed" : 0,
+    "measured" : {
+      "target_rate" : 100.0,
+      "messages" : 18000,
+      "window_start_us" : 1795832157159136,
+      "window_end_us" : 1795832337159136,
+      "window_seconds" : 180,
+      "sent_in_window" : 18000,
+      "sent_after_window" : 0,
+      "achieved_rate" : 100.0,
+      "behind_schedule_us" : {
+        "count" : 18000,
+        "max" : 44639,
+        "p50" : 73,
+        "p99" : 337
+      }
+    },
+    "finished_us" : 1795832337151371,
+    "finished_monotonic_ns" : 15434646057046678
+  },
+  "window" : {
+    "start_us" : 1795832157159136,
+    "end_us" : 1795832337159136,
+    "seconds" : 180.0
+  },
+  "counts" : {
+    "requested" : 30000,
+    "requested_measure" : 18000,
+    "acked" : 30000,
+    "ack_failed" : 0,
+    "received" : 30000,
+    "attempts" : 30000,
+    "failed_attempts" : 0,
+    "completed" : 30000,
+    "quarantined_failed" : 0,
+    "quarantined_key_stopped" : 0,
+    "dead_lettered" : 0,
+    "dlt_records" : 0,
+    "completed_without_attempt_record" : 0,
+    "attempt_log_malformed_lines" : 0,
+    "attempt_log_duplicate_lines" : 0
+  },
+  "rates" : {
+    "requested_per_s" : 100.0,
+    "acked_per_s" : 100.0,
+    "received_per_s" : 100.0,
+    "completed_per_s" : 100.0,
+    "failed_attempts_per_s" : 0.0,
+    "acked_minus_completed_per_s" : 0.0
+  },
+  "latency_us" : {
+    "ack" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 1002,
+      "p95" : 2465,
+      "p99" : 161151,
+      "p999" : 439039,
+      "mean" : 5247.854833333334,
+      "max" : 557567,
+      "curve" : [ [ 0.0, 537 ], [ 10.0, 788 ], [ 25.0, 860 ], [ 50.0, 1002 ], [ 75.0, 1248 ], [ 90.0, 1679 ], [ 95.0, 2465 ], [ 99.0, 161151 ], [ 99.5, 274943 ], [ 99.9, 439039 ], [ 99.99, 527871 ], [ 100.0, 557567 ] ],
+      "histogram" : {
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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"
+      }
+    },
+    "broker" : {
+      "count" : 17961,
+      "negative" : 39,
+      "overflow" : 0,
+      "p50" : 1336,
+      "p95" : 642559,
+      "p99" : 1557503,
+      "p999" : 1800191,
+      "mean" : 75184.69444908413,
+      "max" : 1872895,
+      "curve" : [ [ 0.0, 1 ], [ 10.0, 989 ], [ 25.0, 1112 ], [ 50.0, 1336 ], [ 75.0, 1845 ], [ 90.0, 8671 ], [ 95.0, 642559 ], [ 99.0, 1557503 ], [ 99.5, 1656831 ], [ 99.9, 1800191 ], [ 99.99, 1868799 ], [ 100.0, 1872895 ] ],
+      "histogram" : {
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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"
+      }
+    },
+    "processing" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 6995,
+      "p95" : 10719,
+      "p99" : 14615,
+      "p999" : 537087,
+      "mean" : 9212.60688888889,
+      "max" : 1327103,
+      "curve" : [ [ 0.0, 4460 ], [ 10.0, 6211 ], [ 25.0, 6507 ], [ 50.0, 6995 ], [ 75.0, 8167 ], [ 90.0, 9543 ], [ 95.0, 10719 ], [ 99.0, 14615 ], [ 99.5, 21407 ], [ 99.9, 537087 ], [ 99.99, 1200127 ], [ 100.0, 1327103 ] ],
+      "histogram" : {
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAABS94nD1Vz4/jNBROXt3U4/V4gycEY7wmmw0hlCiaLVUoVSmldEspZRh1q2oYjYY5rBBaLeKEBHc4IA4IrRDihBBIiCNCnBAHjvwBICEO/Atw4MSF53REUifP3/vp1/izef/+ged1bnm7q3X59t3jt/tfe8/9tQN+uAnX4SMf2vAwwD4AtKCDo43PKzhDwQPYCY3KI218kxY43CM7bav54djDuQeBR4jT7BO0axQE0I00YgBAPEAAnYNGR0hAAo9CgCAL8AkUKIIYnnkBFQA8pCSghFLGIKQoMcEpD7iQlHEpBUc3TrXkSjIRxpGQOo2jKFRaW8lirrS1pTKpVMYUeWHTOCvTJFW9Mh8Py7Ks0m5i6iypsqLs94vpqCp647oYDKu6Xi4nyWA0G82ns9FqOpkMJnU9OTwdL49W59Pl8Xo4my8mw9PJ6dFsOh8u14vtvcFydHe+PVkcnR0vLxbvro6OTjcX2+2b/dX58Xx8d3N+b75ere+s7203m/PF4uL8je3qcLbo39meHV9ML9Z1uRlvltP1yWRxMTk7ubPZrsZns9OT7fF8vVgcDUeDVT3qn66PJ9N6Oa3H9eZoNT5eDYfVrBgeTifHo96odzg9HB31q2oxGHbXw/4sXYyrUYGLLIphnZVV3a8O52Vdlr1qlJSDbjbu1d1BfzA+LDNb2SLpVYnOB1WedVVWFdb0i7RbV92qm/VTlcWZ6qU2MabMVaZyGydRGiWliYpcZqmKpTVGm8iGWlqqTGES01U6ieIwj5S1kYkUGqlERqExIg1lwqxi1ppci1jkVsdU4f+XijBNI6sjmYtIa2WUkULEibCx0qGMCyFTi2GM1IlSOkoYC2UhjZaIhIkOeaisEVpZKaUNY8NZHEdGGhXmMkllYhL8WFwFcRTHVvfz7jStet0U+1IObJXgapUtulk57KZZlo5qbfXY6NJOkrTE3ug8zQw2pCqLHMWySKooLk2a2n5W5UWW2iLOpclKq0wSRdiw1Fij80Jnscqk1HGCgFCaC6N1mGE1MrYhtgdbxRm2RCkViciiHMSUSaF4iB+5EEzGigsuqOSWijAULOQBobhOGomQaZzjLQPhLs45DSSNI25D1GJbKBMSnUXAKKM8DAM0DCVGxQ7SQBCOGA0DxokgQUA5oyGl6IibMQgQZ7EA3H1oyrnHAuqiUOqmxG1WhrWAEBHixOMeagijHqqIh0W6H1oBwZ3OcbMDwSyMAHdkAAHzGGrAQ9HjbucDQy0lSBKMoMZzDhgIeSPAIMElW7gLWQTNG3Kijl5cGgSpY5wmT4BkhPMONGYBGqLac6zUYu0Agzq5maM1PtHCc2zmCM1zJXtAkeKQvlroB8GeY7MdD7oRtN2s3TBdQBrXBm/s3Y0uO/7sXLKqS0M6LnGzLg+uNiSKqVrNMhqKbCBoWNfbkXKLuOEM/4cd3e6Y2SN7yMUtchVNMXZ7Z90E9Boa7zRU7Qj7QUfNTUCk//Yl1IIHUH4UsBZA4Ap0MKA7H64QF+E6jo5L3W6Oiobj8bpKrqGDM/TQ7CGHXweM1CEHzYGyj2eMS/sY3IDX4RpqbsEr8ATc9+FZtP23BZ/78BI8DU/C3z58yuGTFnwF8AhiX+7BHwAvwqsYFhM+heAXflPqnz7KbfjQd7X+6prxmQ/f+/CLD68htA8vwO8+vIO2j8MBRsCK4DZm6GARH/jwTHOivYW1fOca9zI63USXb314Gz72MdsN+NmH5+E2eQ9+cr340ccU9zHIAXzjk7/b8I8P/wHGQrT/"
+      }
+    },
+    "e2e_no_retry" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 9511,
+      "p95" : 761343,
+      "p99" : 1587199,
+      "p999" : 1843199,
+      "mean" : 89478.81322222222,
+      "max" : 1886207,
+      "curve" : [ [ 0.0, 6692 ], [ 10.0, 8343 ], [ 25.0, 8775 ], [ 50.0, 9511 ], [ 75.0, 11079 ], [ 90.0, 24943 ], [ 95.0, 761343 ], [ 99.0, 1587199 ], [ 99.5, 1685503 ], [ 99.9, 1843199 ], [ 99.99, 1880063 ], [ 100.0, 1886207 ] ],
+      "histogram" : {
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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"
+      }
+    },
+    "e2e_with_retry" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI"
+      }
+    },
+    "e2e_all" : {
+      "count" : 18000,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : 4081,
+      "p95" : 718335,
+      "p99" : 1563647,
+      "p999" : 1801215,
+      "mean" : 82008.21888888889,
+      "max" : 1875967,
+      "curve" : [ [ 0.0, 2692 ], [ 10.0, 3333 ], [ 25.0, 3623 ], [ 50.0, 4081 ], [ 75.0, 4859 ], [ 90.0, 13831 ], [ 95.0, 718335 ], [ 99.0, 1563647 ], [ 99.5, 1666047 ], [ 99.9, 1801215 ], [ 99.99, 1872895 ], [ 100.0, 1875967 ] ],
+      "histogram" : {
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "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"
+      }
+    },
+    "final_failure" : {
+      "count" : 0,
+      "negative" : 0,
+      "overflow" : 0,
+      "p50" : null,
+      "p95" : null,
+      "p99" : null,
+      "p999" : null,
+      "mean" : null,
+      "max" : null,
+      "curve" : [ ],
+      "histogram" : {
+        "unit" : "us",
+        "lowest" : 1,
+        "encoding" : "HdrHistogram V2 compressed, base64",
+        "significant_digits" : 3,
+        "highest" : 3600000000,
+        "data" : "HISTFAAAAB94nJNpmSzMwMDAyAABzFAazL82eQmD/QeoCABVgwSI"
+      }
+    }
+  },
+  "retries" : {
+    "messages_by_retries" : {
+      "0" : 30000
+    },
+    "retried_messages" : 0,
+    "retry_succeeded" : 0,
+    "retry_success_rate" : null
+  },
+  "integrity" : {
+    "lost" : 0,
+    "lost_sample" : [ ],
+    "duplicate_delivered_messages" : 0,
+    "duplicate_deliveries" : 0,
+    "duplicate_applied" : 0,
+    "order_violations" : 0,
+    "keys_with_order_violation" : 0,
+    "expected_final_failures" : 0,
+    "injected_but_completed" : 0,
+    "unexpected_final_failures" : 0,
+    "held_behind_stopped_key" : 0,
+    "completed_and_failed" : 0,
+    "unacked_but_delivered" : 0
+  },
+  "timeseries_10s" : {
+    "origin_us" : 1795832037159136,
+    "bucket_us" : 10000000,
+    "measure_from_bucket" : 12,
+    "measure_to_bucket" : 29,
+    "requested" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 ],
+    "acked" : [ 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 971, 1029, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 ],
+    "received" : [ 957, 1035, 1008, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 851, 1149, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 838, 1162, 1000, 1000, 1000 ],
+    "completed" : [ 957, 1035, 1008, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 851, 1149, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 838, 1162, 1000, 1000, 1000 ],
+    "failed_attempts" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "quarantined" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    "dead_lettered" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+  },
+  "limits" : [ ],
+  "files" : {
+    "published.csv" : "736f61cb6c39a605f4e7eb92b45b2c26ab1f4de25eda1229387d340f0252c7d8",
+    "attempts-1795832025966-417612.csv" : "45bcf2ab3d6080ce656d49d993cd4073dc0b6c96fa5b72a04eee012592b8b540",
+    "bench_message.tsv" : "813b33ce5bab0ee1e310a1e794b2468bde49a05c5020d69623c24282e3fb623f",
+    "quarantine.tsv" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dlt.csv" : "2916b38167258d9487f4fd49d245bd6d51375da55a1b83b809dd82e7ca55d73d",
+    "generator.json" : "c3e667404bd9b657baa949ee56c1cd883a89c2981608352decd4eac442871fc9",
+    "run.json" : "8667c5365bfa88bda19373ef80c68b1f5212baeee1bfdfc7e718a698b175f1ee"
+  }
+}

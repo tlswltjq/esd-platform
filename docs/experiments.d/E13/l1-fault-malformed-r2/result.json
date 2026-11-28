@@ -1,0 +1,413 @@
+{
+  "applications": {
+    "auth": {
+      "image_id": "sha256:fb1b9bd729a1c8f56c6f554c923bfe7998c9d5081362fbb6b823dc38d43de7ec",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "web-bff": {
+      "image_id": "sha256:1139cf47e83316a3d822f9c7ee8b41f8f8fb12d6a484f9199fad6a2cc9296da6",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "gateway": {
+      "image_id": "sha256:82fa77011c50a8472e0759cd4068972eba7fa23cd85a800b76dee8b20300799b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "studio": {
+      "image_id": "sha256:0e9b010fca0aa95b2e2d572423bff4f87d26fe271214e2c144019254987bf06b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "review": {
+      "image_id": "sha256:086e3f679455d70ccf1eeca63fbfe1146d5dbf5b5c42b9e7368a0d9521d5454d",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "catalog": {
+      "image_id": "sha256:087ebc3f2c3c3549955888433f9949f2d9ee2a0df825af79f0a75170909ea2d9",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "store": {
+      "image_id": "sha256:c7f787894de575cd4b073a94ee0392b48e91b51ff95ed998a338ff6c5394e0fa",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "order": {
+      "image_id": "sha256:e6fa65efdc87c46a7ab849d50b9e7f0a2198c133e02ae4d72bd96204a586c233",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "payment": {
+      "image_id": "sha256:2d462c93dd0dd693f9f585c396179fd34c5efafb25cbd252d2b0fbfc500d72fc",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "license": {
+      "image_id": "sha256:0b76b234c0cdd1eb3d15faa47d80097fc4c05abe8b6f5444cfed31ed558d8d3b",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "download": {
+      "image_id": "sha256:f71c19a635229960f233991fc87476f0a17ab92718dd7917f27a46156ee56a01",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "settlement": {
+      "image_id": "sha256:f2707b32e2e54c085c9c36653f3ad768e206566a92083f400d1147b3e96cb021",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "Asia/Seoul",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    },
+    "mock-pg": {
+      "image_id": "sha256:55fbfbe9dfaeab71d82bea735578c508d07d3bc866a06dbce7af274c9ff0ad06",
+      "healthy": true,
+      "user": "100:101",
+      "timezone": "UTC",
+      "restart_count": 0,
+      "shutdown_exit_code": 143
+    }
+  },
+  "phases": [],
+  "port_offset": 11000,
+  "complete": true,
+  "app_env": [],
+  "started_at": "2026-11-27T21:26:04.352959+00:00",
+  "host": "Linux-5.15.0-1081-oracle-aarch64-with-glibc2.29",
+  "command": [
+    "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/tools/verification/verify-jib.py",
+    "--measure",
+    "--load-rate",
+    "2",
+    "--load-duration",
+    "600",
+    "--load-warmup",
+    "60",
+    "--load-buyers",
+    "20",
+    "--fault",
+    "malformed:at=180,topic=stove.order.v1,count=1",
+    "--skip-build"
+  ],
+  "project": "messaging-measure-601piakp",
+  "measurement": {
+    "rate": 2.0,
+    "duration_seconds": 600,
+    "warmup_seconds": 60,
+    "buyers": 20,
+    "planned": 1200,
+    "accepted": 1200,
+    "http_p95_ms": 66.108188,
+    "late_start_max_ms": 7.175908,
+    "journey": {
+      "completed": 1200,
+      "incomplete": 0,
+      "failed": 0,
+      "created_to_basis": {
+        "p50_ms": 881.992,
+        "p95_ms": 1420.027,
+        "p99_ms": 1515.958,
+        "max_ms": 4725.999
+      },
+      "paid_to_basis": {
+        "p50_ms": 181.48,
+        "p95_ms": 297.558,
+        "p99_ms": 356.154,
+        "max_ms": 501.43
+      }
+    },
+    "broker": {
+      "license-paid-order": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 19.288,
+        "p95_ms": 54.102,
+        "p99_ms": 77.727,
+        "max_ms": 337.068
+      },
+      "order-license-grant": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 10.743,
+        "p95_ms": 32.041,
+        "p99_ms": 51.611,
+        "max_ms": 335.33
+      },
+      "order-payment-result": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 12.665,
+        "p95_ms": 34.415,
+        "p99_ms": 52.117,
+        "max_ms": 86.902
+      },
+      "payment-order-request": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 11.803,
+        "p95_ms": 32.243,
+        "p99_ms": 55.333,
+        "max_ms": 3102.972
+      },
+      "settlement-paid-order": {
+        "count": 1200,
+        "negative": 0,
+        "p50_ms": 49.138,
+        "p95_ms": 106.276,
+        "p99_ms": 146.08,
+        "max_ms": 260.407
+      }
+    },
+    "order": {
+      "license-paid-order": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "order-license-grant": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "order-payment-result": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "payment-order-request": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      },
+      "settlement-paid-order": {
+        "keys": 1200,
+        "events": 1200,
+        "pairs": 0,
+        "violations": 0
+      }
+    },
+    "refunds": {
+      "requested": 0,
+      "rejected": 0,
+      "unfinished": 0
+    },
+    "refund_diagnosis": null,
+    "redeliveries": {
+      "by_group": {
+        "catalog-project-release": 1
+      },
+      "unreadable": []
+    },
+    "db_load": {
+      "idle_per_second": {
+        "Com_select": 76.1,
+        "Questions": 249.3,
+        "seconds": 10.08
+      },
+      "load_run_per_second": {
+        "Com_select": 216.3,
+        "Questions": 534.7,
+        "seconds": 719.59
+      }
+    },
+    "resources": {
+      "interval_seconds": 2.0,
+      "idle": {
+        "kafka": {
+          "samples": 3,
+          "cpu_percent_mean": 6.27,
+          "cpu_percent_max": 6.53,
+          "memory_mib_mean": 323.4,
+          "memory_mib_max": 324.0
+        },
+        "mysql": {
+          "samples": 3,
+          "cpu_percent_mean": 8.4,
+          "cpu_percent_max": 11.34,
+          "memory_mib_mean": 535.5,
+          "memory_mib_max": 536.9
+        }
+      },
+      "load_run": {
+        "kafka": {
+          "samples": 160,
+          "cpu_percent_mean": 33.14,
+          "cpu_percent_max": 218.9,
+          "memory_mib_mean": 793.8,
+          "memory_mib_max": 985.6
+        },
+        "mysql": {
+          "samples": 160,
+          "cpu_percent_mean": 17.12,
+          "cpu_percent_max": 30.37,
+          "memory_mib_mean": 554.2,
+          "memory_mib_max": 569.7
+        }
+      },
+      "stats_failures": 0,
+      "stats_partial": 0,
+      "disk": {
+        "kafka": {
+          "before_kib": 1044,
+          "after_kib": 10200,
+          "growth_kib": 9156
+        },
+        "mysql": {
+          "before_kib": 233740,
+          "after_kib": 331364,
+          "growth_kib": 97624
+        }
+      },
+      "disk_errors": {
+        "before": {},
+        "after": {}
+      }
+    },
+    "broker_restart": null,
+    "generator": {
+      "startEpochUs": 1795815048039722,
+      "endEpochUs": 1795815648039722,
+      "seconds": 600,
+      "sentInWindow": 1200,
+      "sentAfterWindow": 0,
+      "achievedRate": 2.0
+    },
+    "timeseries": {
+      "rates": {
+        "offered_per_s": 2.0,
+        "completed_per_s": 2.0,
+        "completed_over_offered": 1.0
+      },
+      "measured_orders": {
+        "requested": 1200,
+        "completed_in_window": 1198,
+        "completed_after_window": 2,
+        "failed": 0,
+        "rejected": 0,
+        "unresolved": 0
+      },
+      "totals": {
+        "completed": 1320,
+        "failed": 0,
+        "rejected": 0,
+        "unresolved": 0
+      },
+      "unresolved": 0,
+      "outstanding_drain_seconds": 0.674,
+      "backlog_drain_seconds": 1.464,
+      "clock_check": {
+        "finish_before_start": 0
+      },
+      "observation": {
+        "wait_secs": 600,
+        "timed_out": false
+      }
+    },
+    "load_ended_us": 1795815647542114,
+    "faults": {
+      "load_started_us": 1795814988039722,
+      "faults": [
+        {
+          "kind": "malformed",
+          "options": {
+            "at": "180",
+            "topic": "stove.order.v1",
+            "count": "1"
+          },
+          "events": [
+            {
+              "event": "publish",
+              "at_us": 1795815170458673
+            }
+          ],
+          "facts": {
+            "key_prefix": "e13-malformed-601piakp",
+            "published": 1,
+            "subscribed_groups": [
+              "license-approval-correction",
+              "license-paid-order",
+              "license-purchase-refund",
+              "license-restoration",
+              "license-suspension",
+              "payment-order-expiry",
+              "payment-order-request",
+              "payment-refund-execution",
+              "settlement-paid-order"
+            ],
+            "expected_pairs": 9,
+            "quarantined_pairs": 9,
+            "missing_count": 0,
+            "missing_pairs": [],
+            "quarantined_groups": [
+              "license-approval-correction",
+              "license-paid-order",
+              "license-purchase-refund",
+              "license-restoration",
+              "license-suspension",
+              "payment-order-expiry",
+              "payment-order-request",
+              "payment-refund-execution",
+              "settlement-paid-order"
+            ]
+          },
+          "problems": []
+        }
+      ],
+      "problems": [],
+      "restore_unconfirmed": []
+    },
+    "validity": {
+      "valid": true,
+      "reasons": [],
+      "instrument": [],
+      "business": [],
+      "http_failures": 0,
+      "late_starts": 0,
+      "outcome": []
+    }
+  },
+  "normal_shutdown_count": 13,
+  "original_containers_preserved": true,
+  "finished_at": "2026-11-27T21:41:28.098737+00:00"
+}

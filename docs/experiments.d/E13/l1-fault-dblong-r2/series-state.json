@@ -1,0 +1,57 @@
+{
+  "stages": {
+    "r2": {
+      "rate": 2.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-dp632gny",
+      "seconds_taken": 1536,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": [
+          "구매 근거 미완료 10건",
+          "payment-order-request 소비 1200건(기대 1190)",
+          "order-payment-result 소비 1200건(기대 1190)",
+          "settlement-paid-order 소비 1200건(기대 1190)"
+        ],
+        "achieved_rate": 2.0,
+        "rates": {
+          "offered_per_s": 2.0,
+          "completed_per_s": 1.9833333333333334,
+          "completed_over_offered": 0.9916666666666667
+        },
+        "outstanding_drain_seconds": null,
+        "backlog_drain_seconds": null,
+        "unresolved": 10,
+        "paid_to_basis": {
+          "p50_ms": 197.022,
+          "p95_ms": 338.756,
+          "p99_ms": 20131.877,
+          "max_ms": 27024.898
+        },
+        "faults": [
+          {
+            "kind": "db-revoke",
+            "problems": []
+          }
+        ],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 600,
+  "warmup": 60,
+  "buyers": 20,
+  "faults": [
+    "db-revoke:at=180,for=30,table=stove_license.product_license"
+  ],
+  "rates": [
+    2.0
+  ]
+}

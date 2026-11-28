@@ -1,0 +1,80 @@
+{
+  "stages": {
+    "r7": {
+      "rate": 7.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-ss8fl3n4",
+      "seconds_taken": 1541,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 7.0,
+        "rates": {
+          "offered_per_s": 7.0,
+          "completed_per_s": 7.001111111111111,
+          "completed_over_offered": 1.0001587301587302
+        },
+        "outstanding_drain_seconds": 0.995,
+        "backlog_drain_seconds": 11.005,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 366.185,
+          "p95_ms": 525.206,
+          "p99_ms": 623.556,
+          "max_ms": 887.576
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    },
+    "r8": {
+      "rate": 8.0,
+      "evidence": "/home/ubuntu/.kiro/crew/workspace/esd-worktrees/kafka-baseline-measure/runs/messaging-measure-818c3bo0",
+      "seconds_taken": 1554,
+      "summary": {
+        "complete": true,
+        "error": null,
+        "valid": true,
+        "reasons": [],
+        "outcome": null,
+        "achieved_rate": 8.0,
+        "rates": {
+          "offered_per_s": 8.0,
+          "completed_per_s": 8.0,
+          "completed_over_offered": 1.0
+        },
+        "outstanding_drain_seconds": 1.208,
+        "backlog_drain_seconds": 14.591,
+        "unresolved": 0,
+        "paid_to_basis": {
+          "p50_ms": 415.405,
+          "p95_ms": 571.885,
+          "p99_ms": 629.501,
+          "max_ms": 987.022
+        },
+        "faults": [],
+        "restore_unconfirmed": [],
+        "exit_code": 0,
+        "guard": {
+          "exit_code": 0,
+          "output": "통과: 실행 전과 같다(컨테이너·볼륨·네트워크)"
+        }
+      }
+    }
+  },
+  "seconds": 900,
+  "warmup": 300,
+  "buyers": 20,
+  "faults": [],
+  "rates": [
+    7.0,
+    8.0
+  ]
+}
