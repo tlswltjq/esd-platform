@@ -12,7 +12,6 @@ EPHEMERAL_START = 32768
 OFFSETS = {
     # The 1000-wide slots above 24000 would cross the ephemeral range; new tools take free slots below 11000.
     "verify-jib": 11000,
-    "verify-catalog": 12000,
     "verify-download": 13000,
     "verify-g4-operations": 14000,
     # 15000 belongs to the :e2e LocalStack (LocalStack.DEFAULT_PORT_OFFSET in e2e/src/test); keep it free here.

@@ -80,6 +80,7 @@ final class LocalStack implements AutoCloseable {
     private final Map<StackApp, Process> processes = new EnumMap<>(StackApp.class);
     private final Map<String, Set<String>> credentialRecipients = new TreeMap<>();
     private final String settlementServiceKey = secret();
+    private boolean kafkaPaused;
     private final Thread shutdownHook = new Thread(this::stopProcesses, "local-stack-shutdown");
 
     private LocalStack(Path repository, Path directory, int offset, Set<StackApp> apps) {
@@ -174,6 +175,46 @@ final class LocalStack implements AutoCloseable {
         awaitReady(List.of(app), Duration.ofSeconds(180));
     }
 
+    /**
+     * 멈춘 앱을 띄우기만 하고 준비를 기다리지 않는다. 의존 대상이 죽어 있는 동안의 동작을 볼 때 쓰고, 뒤에
+     * {@link #awaitReady(StackApp)}로 기다린다.
+     */
+    void startWithoutWaiting(StackApp app, String... arguments) {
+        if (!apps.contains(app)) {
+            throw new IllegalArgumentException(app.module() + " 은 이 스택에 없다: " + apps);
+        }
+        launch(app, arguments);
+    }
+
+    void awaitReady(StackApp app) {
+        awaitReady(List.of(app), Duration.ofSeconds(180));
+    }
+
+    /** 이 실행에서 앱이 지금까지 남긴 로그(재시작해도 이어 쓴다). */
+    String log(StackApp app) {
+        try {
+            return Files.readString(directory.resolve(app.module() + ".log"));
+        } catch (IOException failure) {
+            throw new IllegalStateException(app.module() + " 로그를 읽지 못했다", failure);
+        }
+    }
+
+    /**
+     * 브로커를 무응답으로 만든다. 컨테이너를 멈추지 않고 얼린다 — 멈췄다 다시 띄우면 호스트 포트가 바뀌어 앱이 아는
+     * 주소로 돌아오지 않는다. 연결은 맺어지지만 응답이 없으므로 앱 쪽에서는 제한 시간 초과로 보인다.
+     */
+    void pauseKafka() {
+        kafka.getDockerClient().pauseContainerCmd(kafka.getContainerId()).exec();
+        kafkaPaused = true;
+    }
+
+    void resumeKafka() {
+        if (kafkaPaused) {
+            kafka.getDockerClient().unpauseContainerCmd(kafka.getContainerId()).exec();
+            kafkaPaused = false;
+        }
+    }
+
     /** 앱 프로세스를 실제로 내렸다가 다시 띄운다. 인자를 주지 않으면 기본 설정으로 뜬다. */
     void restart(StackApp app, String... arguments) {
         stop(app);
@@ -197,6 +238,7 @@ final class LocalStack implements AutoCloseable {
     @Override
     public void close() {
         stopProcesses();
+        resumeKafka();
         try {
             Runtime.getRuntime().removeShutdownHook(shutdownHook);
         } catch (IllegalStateException alreadyShuttingDown) {
