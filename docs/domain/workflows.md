@@ -27,7 +27,7 @@ flowchart LR
  S --> P
 ~~~
 
-[모델](models/studio.md) · [실행 예제](../../.kiro/specs/studio/design.md#사용-안내) ·
+[모델](models/studio.md) · [실행 예제](../../specs/studio/design.md#사용-안내) ·
 [인수 테스트](../../e2e/src/test/java/com/stove/e2e/StudioCreatorFlowTest.java)
 
 ## 심사자: Project 스냅샷을 판단한다
@@ -38,7 +38,7 @@ Studio는 같은 요청 ID·Project·버전의 승인·반려 결과를 자신�
 
 반려 후 재심사는 Studio가 새 요청 ID로 시작한다. 확정 판정은 변경하지 않으며 과거 자료·판정을 보존한다.
 심사 중 작업본이 수정되면 과거 승인 결과는 과거 요청에만 기록되고 현재 버전의 출시 요청 조건을 충족하지 않는다.
-[Review 실행·검증](../../.kiro/specs/review/design.md#사용-안내)은 실제 네 모듈과 Kafka로 이 흐름과 재시작 후 결과 전달을 확인한다.
+[Review 실행·검증](../../specs/review/design.md#사용-안내)은 실제 네 모듈과 Kafka로 이 흐름과 재시작 후 결과 전달을 확인한다.
 
 ## 방문자: 공개된 게임을 찾고 확인한다
 
@@ -53,7 +53,7 @@ Store 시작 전 공개 상품은 Catalog의 기존 목록·상세 HTTP API로 �
 
 초기 동기화 실패는 503으로 나타나고 원인 해결 후 Store를 재시작한다.
 준비된 Store는 Catalog가 잠시 중단돼도 자기 사본으로 조회한다. 구매·결제 가능 여부는 이 흐름의 범위가 아니다.
-[실행·수동 확인](../../.kiro/specs/store/design.md#사용-안내) · [독립 인수 테스트](../../e2e/src/test/java/com/stove/e2e/StorePublicationFlowTest.java)
+[실행·수동 확인](../../specs/store/design.md#사용-안내) · [독립 인수 테스트](../../e2e/src/test/java/com/stove/e2e/StorePublicationFlowTest.java)
 
 <a id="purchase-flow"></a>
 
@@ -86,7 +86,7 @@ flowchart LR
 
 Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추가 구매 확정 절차는 없다.
 실제 PG·환불·권한 회수·판매자 송금은 후속 범위다. Settlement는 OrderPaid를 받아 PG·Catalog 근거를 대조하고 매출·월 합계를 기록한다. 다운로드 URL 발급은 License·Catalog에 동기 조회하며 파일은 저장소가 전송한다.
-[주문 실행](../../.kiro/specs/order/design.md#사용-안내) · [Payment 검증](../../.kiro/specs/payment/design.md#사용-안내) · [License 조회·아홉 앱 검증](../../.kiro/specs/license/design.md#사용-안내) · [Download·열 앱 검증](../../.kiro/specs/download/design.md#사용-안내)
+[주문 실행](../../specs/order/design.md#사용-안내) · [Payment 검증](../../specs/payment/design.md#사용-안내) · [License 조회·아홉 앱 검증](../../specs/license/design.md#사용-안내) · [Download·열 앱 검증](../../specs/download/design.md#사용-안내)
 
 <a id="operations-flow"></a>
 
@@ -99,7 +99,7 @@ Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추
 5. ADMIN은 현재 KST 월보다 이전 월을 판매자별로 마감한다. CLOSED 이후 지연 매출은 현재 월에 기록하고 원래 saleMonth를 보존한다.
 
 PG 회차·플랫폼 모의 수령·판매자 월 마감은 별개의 주기와 상태다. 실제 은행 입금·판매자 송금·환불·계산서·재마감은 후속 범위다.
-실행·복구는 [정산 안내](../../.kiro/specs/settlement/design.md#사용-안내), 모델은 [정산 모델](models/settlement.md)을 따른다.
+실행·복구는 [정산 안내](../../specs/settlement/design.md#사용-안내), 모델은 [정산 모델](models/settlement.md)을 따른다.
 
 ## 이벤트를 업무 사실로 읽기
 
@@ -133,7 +133,7 @@ PG 회차·플랫폼 모의 수령·판매자 월 마감은 별개의 주기와 
 
 ## 모듈 간 돈 불변식 (결정 143 2부)
 
-이 절은 다음 단계인 불변식 검사기(`tools/verification/`)의 명세다. 행마다 하나의 검사가 된다. 새 정책이 아니라 main `7f3617e1`의 코드·이행 파일이 이미 지키는 것만 옮겼다([결정 143](../decisions.md#money-spec-first)). 지금 보장되지 않는 것은 표에 넣지 않고 아래 "확인되지 않은 것"에 적었다. 각 모듈 집합체의 상태와 전이는 [Payment](../../.kiro/specs/payment/design.md#상태이벤트-표-코드-기준-결정-143)·[Order](../../.kiro/specs/order/design.md#상태이벤트-표-코드-기준-결정-143)·[License](../../.kiro/specs/license/design.md#상태이벤트-표-코드-기준-결정-143)·[Settlement](../../.kiro/specs/settlement/design.md#상태이벤트-표-코드-기준-결정-143)의 상태×이벤트 표를 따른다.
+이 절은 다음 단계인 불변식 검사기(`tools/verification/`)의 명세다. 행마다 하나의 검사가 된다. 새 정책이 아니라 main `7f3617e1`의 코드·이행 파일이 이미 지키는 것만 옮겼다([결정 143](../decisions.md#money-spec-first)). 지금 보장되지 않는 것은 표에 넣지 않고 아래 "확인되지 않은 것"에 적었다. 각 모듈 집합체의 상태와 전이는 [Payment](../../specs/payment/design.md#상태이벤트-표-코드-기준-결정-143)·[Order](../../specs/order/design.md#상태이벤트-표-코드-기준-결정-143)·[License](../../specs/license/design.md#상태이벤트-표-코드-기준-결정-143)·[Settlement](../../specs/settlement/design.md#상태이벤트-표-코드-기준-결정-143)의 상태×이벤트 표를 따른다.
 
 - DB는 같은 MySQL 서버의 모듈별 스키마(`stove_order`·`stove_payment`·`stove_license`·`stove_settlement`)다. 아래 SQL은 모든 스키마를 읽을 수 있는 읽기 전용 계정에서 스키마 이름을 붙여 쓰며, 결과 행이 0이어야 통과다. 실제 실행으로 확인하지는 않았다.
 - 모듈 사이 반영은 이벤트 전달 뒤에 일어난다. 그래서 표는 "뒤 모듈의 기록이 있으면 앞 모듈의 근거가 있다"(역방향)를 적는다. "앞 모듈 기록이 있으면 뒤 모듈도 반드시 반영된다"(정방향)는 보장되지 않아 "확인되지 않은 것" U4에 둔다.

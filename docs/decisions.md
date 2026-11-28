@@ -1,6 +1,6 @@
 # 설계 결정 기록
 
-구조와 업무 정책을 정하며 **왜 그렇게 했고 무엇을 포기했는지**를 남긴다. 무엇을 했는지는 커밋·PR이, 현재 계약은 `.kiro/specs/<모듈>/`이 정본이다.
+구조와 업무 정책을 정하며 **왜 그렇게 했고 무엇을 포기했는지**를 남긴다. 무엇을 했는지는 커밋·PR이, 현재 계약은 `specs/<모듈>/`이 정본이다.
 각 결정은 [AGENTS.md](../AGENTS.md) 1절의 형식(문제·선택지·내 의견·선택·구분·결과)을 따른다. 버린 선택지와 감수한 비용은 "선택지"와 "선택"에 함께 적는다.
 "내 의견"은 사용자가 대화에 쓴 말의 원문 인용이다. `(선택지 선택만, 본인 발언 없음)`은 AI가 쓴 선택지를 고르기만 한 경우, `(대화 원본 미확인)`은 선택한 대화를 찾지 못한 경우이며 이때 구분은 `미확인`이다(AI 주도 리팩터링 시기의 결정일 수 있다). 추천이 없던 쟁점에서 고른 경우는 `사용자 선택(추천 없음)`으로 적는다.
 판단 이력 요약은 [judgment-index.md](judgment-index.md), 검증 결과는 [evidence.md](evidence.md)를 본다. 과거 기록의 `infrastructure` 패키지는 [결정 26](#26-외부-연동-구현-패키지를-adapter로-부른다), CI·E2E Compose 파일은 [결정 27](#27-compose는-기본-정의와-로컬-접속-오버라이드만-둔다) 이전의 명칭이다.
@@ -215,7 +215,7 @@
 - 내 의견: "License와 LicensePurchase가 일대다 관계여야만해? … 동일한 상품은 하나만 구매할 수 있다. 선물 등의 목적으로 추가 구매는 이후로 미룬다. → 통합하여 수정계획 수립"
 - 선택: B — 엔티티·저장소·지급 쓰기 경로가 하나가 된다. Order가 PENDING·PAID 유일 제약으로 중복 주문을 막고(License 조회는 비동기로 뒤처질 수 있어 근거로 쓰지 않는다), License도 상품별 유일 제약을 둔다. 비용: License 컬럼 증가, 선물은 후속.
 - 구분: 추천 수용
-- 결과: [License 스펙](../.kiro/specs/license/design.md), [통합 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획)
+- 결과: [License 스펙](../specs/license/design.md), [통합 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획)
 
 ## 26. 외부 연동 구현 패키지를 adapter로 부른다
 - 문제: `infrastructure`에 S3 같은 기술 연동과 다른 도메인 HTTP 호출이 섞여 이름으로 역할을 알기 어려웠다.
@@ -239,11 +239,11 @@
 - 내 의견: (대화 원본 미확인)
 - 선택: B — [결정 17](#17-추적-컨텍스트를-이벤트와-함께-저장한다)의 원칙을 내구 접수까지 확장한다. 재전달로 부모를 바꾸지 않고, 부모가 없으면 스케줄러 trace를 상속하지 않는 새 root다. 업무 입력·도메인에는 추적 라이브러리를 넣지 않는다(port/adapter/config). 비용: 접수당 작은 행 1건·시도당 조회 1회, TTL로 미확정 요청의 부모를 잃지 않게 결제 행과 함께 보존.
 - 구분: 미확인
-- 결과: [experiments.md](experiments.md), [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [experiments.md](experiments.md), [Payment 스펙](../specs/payment/design.md)
 
 <a id="full-refund-policy"></a>
 ## 29. 전액 환불의 접수·기한·접근 제한을 구분한다
-- 문제: 주문 한 건의 전액 환불을 추가하며 환불 자격·상품 접근·외부 PG 실행을 각각 판단하고, PG 결과 미확정과 확정 실패를 구분해야 했다. 현재 계약(상태·API·이벤트·경합 처리)은 [Order 스펙](../.kiro/specs/order/design.md)·[Payment 스펙](../.kiro/specs/payment/design.md)·[License 스펙](../.kiro/specs/license/design.md)이 정본이다.
+- 문제: 주문 한 건의 전액 환불을 추가하며 환불 자격·상품 접근·외부 PG 실행을 각각 판단하고, PG 결과 미확정과 확정 실패를 구분해야 했다. 현재 계약(상태·API·이벤트·경합 처리)은 [Order 스펙](../specs/order/design.md)·[Payment 스펙](../specs/payment/design.md)·[License 스펙](../specs/license/design.md)이 정본이다.
 - 선택지(대표 쟁점): A License가 지급 전 정지 의도를 먼저 보관 / B Order가 지급 확인을 기다렸다가 정지 요청. (추천: A)
 - 내 의견: "라이선스와 페이먼트는 별개의 서비스라 신뢰하지 않도록 하는것이 기본전재일텐데 그렇다면 외부에서 마구잡이로 들어오는 환불요청에 대해서 계속 메시지 큐나 어딘가에 들고 보관해야하잖아. … 근거를 order가 이미 가지고 있으므로 Order가 지급확인을 기다리는 방식이 좋을것같은데"
 - 선택: B — 검증한 주문을 가진 Order에 대기·재개 책임을 모은다. 비용: 지급부터 정지 반영까지 짧은 접근 틈이 남고, 지급 확인의 지연·누락이 환불을 지연시킨다. 발행자 인증·임의 식별자 폭주는 이 선택으로 막았다고 주장하지 않는다.
@@ -320,7 +320,7 @@
 - 문제: 같은 주문 재결제가 최초 가격·할인을 유지하므로 미결제 주문이 조건을 무기한 유지하지 않게 기한이 필요했다. 그런데 기한을 넘긴 실제 승인을 어떻게 볼지가 쟁점이었다.
 - 선택지: A 기한 뒤 실제 승인은 자동 승인 취소(PG 승인 시각을 절대 마감으로) / B 30분은 서버가 상태·기한·금액을 검사하고 승인 진행을 확정·기록하는 기한, 그 뒤의 처리·통신 지연은 서비스가 부담. (추천: A였다가 B로 전환)
 - 내 의견: "우리서버의 시간, 즉 Order가 만료된 상태가 아니라면 외부승인요청까지의 텀은 서비스 제공자의 부담이 아닐까 생각하는데 이전 결정과 부딛히는 지점이 무엇이지?"
-- 선택: B — 유효한 주문으로 서버 검사를 통과한 고객에게 처리 지연 때문에 재주문을 요구하지 않는다(환불 기한 판정과 같은 원칙). 비용: 승인 진행의 내구 기록, 만료와의 경합·중복 요청·응답 유실 처리, 미확정 중 새 결제 제한. 상태·전이는 [Order 스펙](../.kiro/specs/order/design.md).
+- 선택: B — 유효한 주문으로 서버 검사를 통과한 고객에게 처리 지연 때문에 재주문을 요구하지 않는다(환불 기한 판정과 같은 원칙). 비용: 승인 진행의 내구 기록, 만료와의 경합·중복 요청·응답 유실 처리, 미확정 중 새 결제 제한. 상태·전이는 [Order 스펙](../specs/order/design.md).
 - 구분: AI 주장 정정
 - 결과: [구현·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/order-payment-lifecycle-plan.md)
 - 하위 결정:
@@ -339,7 +339,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음)
 - 선택: A — 자동 복구한다. 3시간부터는 POST 없이 GET만 하고 시간만으로 실패·새 키를 만들지 않는다. 비용: 키·본문·준비 시각의 내구 저장(본문·토큰 암호화, 종결 뒤 암호문 제거)과 작업자 중복 제어. B는 구현 위험이 작지만 미접수 건이 계속 대기해 사람이 확인해야 한다.
 - 구분: 추천 수용
-- 결과: [서버 승인 작업 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-confirmation-plan.md), [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [서버 승인 작업 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-confirmation-plan.md), [Payment 스펙](../specs/payment/design.md)
 
 <a id="provider-discount-payment-amounts"></a>
 ## 34. PG 할인과 고객 실결제액을 주문 금액과 별도로 보존한다
@@ -348,7 +348,7 @@
 - 내 의견: (대화 원본 미확인)
 - 선택: A — 주문·OrderPaid 금액을 바꾸지 않고 `pgPaidAmount`·`pgDiscountAmount`를 따로 둔다. PG 할인을 PG 비용이나 판매자 부담으로 간주하지 않는다. READY의 `amount.paid`만으로 성공을 만들지 않는다.
 - 구분: 미확인
-- 결과: [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [Payment 스펙](../specs/payment/design.md)
 
 <a id="provider-discount-full-refund"></a>
 ## 35. 할인 거래는 제공사 전액 취소 계약에 따라 반환하고 혜택 재사용은 제공사 정책을 따른다
@@ -357,7 +357,7 @@
 - 내 의견: "A"
 - 선택: A — 이유 미기재. 주문 총액을 고객 현금으로 간주하거나 할인 24원 전체를 포인트로 추정하지 않는다. 요청 숫자는 공식 기술 계약으로 확인한다.
 - 구분: 추천 수용
-- 결과: [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [Payment 스펙](../specs/payment/design.md)
 
 <a id="refund-amount-details"></a>
 ## 36. 고객·관리자 환불 상세에 주문·승인 금액과 확인된 반환 구성을 함께 제공한다
@@ -366,7 +366,7 @@
 - 내 의견: "A"
 - 선택: A — 확인하지 못한 값은 NULL로 두고, 금액 상세 미확인이 환불 COMPLETED를 되돌리지 않는다. 조회 시 외부 호출 없이 이벤트 사본을 쓴다. 비용: 사본 전달 지연.
 - 구분: 추천 수용
-- 결과: [구현 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g2-refund-amount-details-implementation.md), [Order 스펙](../.kiro/specs/order/design.md)
+- 결과: [구현 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g2-refund-amount-details-implementation.md), [Order 스펙](../specs/order/design.md)
 
 <a id="license-event-recovery"></a>
 ## 37. 지급·지급 확인의 재시도 소진 건은 기존 이벤트 복구 경로와 운영 절차를 먼저 완성한다
@@ -384,7 +384,7 @@
 - 내 의견: "정산도메인을 변경하는것도 고려가능 → 2 진행"
 - 선택: ② — 판매자 배분과 PG 비용의 확정 근거가 다르다. PG 비용 전액 플랫폼 부담을 유지하고 비용 확인 때문에 판매자 배분을 다시 계산하지 않는다. 비용: 초기 모델·스키마·조회 정비 범위가 커진다. 도메인 변경 허용을 자료 삭제 승인으로 넓히지 않는다.
 - 구분: 직접 제안
-- 결과: [책임 분리 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md), [Settlement 스펙](../.kiro/specs/settlement/design.md)
+- 결과: [책임 분리 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md), [Settlement 스펙](../specs/settlement/design.md)
 
 <a id="seller-close-independent-of-pg-cost"></a>
 ## 39. 판매자 금액을 마감하고 PG 비용·대사는 별도로 진행한다
@@ -473,7 +473,7 @@
 - 내 의견: (대화 원본 미확인)
 - 선택: B — 판매 가능 = 판매자 ON_SALE ∧ 관리자 제한 없음. 한쪽 해제가 다른 쪽을 풀지 않고 재출시도 해제 명령이 아니다. 상품 행 잠금·catalogVersion·감사·Outbox를 한 트랜잭션에 둔다.
 - 구분: 미확인
-- 결과: [Catalog 스펙](../.kiro/specs/catalog/design.md)
+- 결과: [Catalog 스펙](../specs/catalog/design.md)
 
 <a id="platform-restriction-pending-order-admission"></a>
 ## 49. 관리자 판매 제한은 기존 미결제 주문의 새 승인 접수도 차단한다
@@ -518,7 +518,7 @@
 - 내 의견: "A"
 - 선택: A — 확정 기준은 상태·감사·결과 Outbox의 커밋이며 버튼 클릭·Studio 접수·잠금 획득 시각이 아니다. B는 확정된 판정을 소급해 뒤집어 기각했다.
 - 구분: 추천 수용
-- 결과: [분석 문서](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/project-review-withdrawal-analysis.md#5-철회와-승인반려의-경쟁), [Review 스펙](../.kiro/specs/review/design.md)
+- 결과: [분석 문서](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/project-review-withdrawal-analysis.md#5-철회와-승인반려의-경쟁), [Review 스펙](../specs/review/design.md)
 
 <a id="review-withdrawal-async-acceptance"></a>
 ## 54. 심사 철회는 내구 접수 후 응답하고 최종 결과는 별도로 확인한다
@@ -572,7 +572,7 @@
 - 내 의견: "내가 심사와 출시 요청을 혼합해서 생각한 것 같은데 전체 흐름을 정리해 설명하고 앞선 결정이 적절한 논의로 결정된것인지 점검해줘 → A"
 - 선택: A — 새 명령·새 요청 ID로 정상 심사한다. 자료 변경을 재신청 조건으로 삼지 않으므로 그 조건만을 위한 해시 비교기를 만들지 않는다. 검사 결과 재사용은 별도 설계다.
 - 구분: 추천 수용
-- 결과: [Studio 스펙](../.kiro/specs/studio/design.md)
+- 결과: [Studio 스펙](../specs/studio/design.md)
 
 <a id="review-withdrawal-until-final-decision"></a>
 ## 60. 심사 검토에 착수한 뒤에도 최종 판정 전까지 철회를 허용한다
@@ -635,7 +635,7 @@
 - 내 의견: "일반적인 msa eda환경에서도 수동적인 갱신을해? 시스템문제가 발생해 사람의 개입이 필요료하는 불가피한 일이 아니라면 갱신이 적재적소에 맞게 갱신되어야할텐데"
 - 선택: B — 수동 API가 정상 운영 경로가 되지 않게 한다. 운영자는 자동 처리의 상태·근거·실패를 보고 안전한 판단이 불가능한 예외에 개입한다.
 - 구분: AI 주장 정정
-- 결과: [자동 동기화·복구 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-auto-reconciliation-plan.md), [Store 스펙](../.kiro/specs/store/design.md)
+- 결과: [자동 동기화·복구 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-auto-reconciliation-plan.md), [Store 스펙](../specs/store/design.md)
 
 <a id="store-canonical-same-version-repair"></a>
 ## 67. Store의 동일 버전 내용 차이는 검증한 Catalog 정본으로 자동 교정한다
@@ -724,7 +724,7 @@
 - 내 의견: "심사는 하나의 프로젝트에서 하나만 진행할 수 있도록 하고 명시적 철회 > 재심사 요청의 흐름을 갖도록 하는것에 대해서는 어떻게 생각하는지 의견"
 - 선택: 프로젝트별 진행 중 심사 1건 + 명시적 철회 후 재심사 — 이 흐름 위에서 결정 53~61이 이어졌다.
 - 구분: 직접 제안
-- 결과: [Studio 스펙](../.kiro/specs/studio/design.md)
+- 결과: [Studio 스펙](../specs/studio/design.md)
 
 ## 77. MVP 재작성의 보안은 업무 권한까지 갖추고 DB 계정 분리 등은 후속으로 둔다
 - 문제: Store MVP 재작성 중 AI가 서비스별 전용 DB 계정 분리 등을 필수 보완으로 제시했다.
@@ -780,7 +780,7 @@
 - 내 의견: "B" / "30분에 똑같이 답으로 가자"
 - 선택: B, 30분·동일 응답 — 미가입 여부를 응답으로 드러내지 않는다. 비용: 실제 메일 연동 전까지 복구 경로가 완결되지 않는다.
 - 구분: 추천 수용
-- 결과: [Auth 스펙](../.kiro/specs/auth/design.md)
+- 결과: [Auth 스펙](../specs/auth/design.md)
 
 ## 84. 운영자 계정 관리는 상태와 역할을 함께 다루고 전환 시 토큰을 즉시 끊는다
 - 문제: 계정 관리 범위와 상태 전환 시 발급된 토큰 처리.
@@ -788,7 +788,7 @@
 - 내 의견: "대안 B로 가자 (상태+역할 관리)" / "규칙 전환에 즉시 끊기로 가자"
 - 선택: B + 즉시 끊기 — 정지·역할 변경이 기존 토큰 만료까지 미뤄지지 않게 한다. 비용: 전환마다 세션·토큰 무효화를 처리해야 한다.
 - 구분: 추천 수용
-- 결과: [Auth 스펙](../.kiro/specs/auth/design.md)
+- 결과: [Auth 스펙](../specs/auth/design.md)
 
 ## 85. Store 동기화 경보는 초기화 10분·실패 5분 임계값으로 시작한다
 - 문제: Store 자동 동기화·대조가 멈췄을 때 경보 기준.
@@ -796,7 +796,7 @@
 - 내 의견: "무엇을 위한 경보지? → 추천 임계값으로 설정"
 - 선택: 추천 임계값 — 자동 복구가 회복하지 못한 경우에만 사람이 개입하게 한다([결정 66](#store-automatic-reconciliation-first)).
 - 구분: 추천 수용
-- 결과: [Store 스펙](../.kiro/specs/store/design.md)
+- 결과: [Store 스펙](../specs/store/design.md)
 
 ## 86. 배포 비밀값은 배포 환경에서 외부 주입한다
 - 문제: 단일 호스트 배포를 준비하며 비밀값 보관 방식을 정해야 했다.

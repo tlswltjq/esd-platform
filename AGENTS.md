@@ -1,6 +1,6 @@
 # 작업 기준
 
-Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트가 따르는 공통 규칙이다. (`CLAUDE.md`는 이 파일을 불러온다.)
+Claude Code·Codex 등 이 저장소에서 일하는 모든 에이전트가 따르는 공통 규칙이다. (`CLAUDE.md`는 이 파일을 불러온다.)
 
 ## 1. 일하는 방식 — 판단은 사용자, 실행은 에이전트
 
@@ -37,8 +37,8 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 | 무엇 | 어디에 |
 |---|---|
-| 현재 계약·업무 규칙·남은 작업 | `.kiro/specs/<모듈>/` (`requirements.md`·`design.md`·`tasks.md`) |
-| 모듈 둘 이상에 걸친 계약(이벤트의 사실·소유자·소비자·키·순서·멱등, 모듈 간 흐름, 돈 불변식, 품질 목표)과 그 남은 작업 | `.kiro/specs/platform/` (같은 세 파일). 모듈 스펙은 이 행을 링크하고 다시 적지 않는다([결정 151](docs/decisions.md#platform-spec)) |
+| 현재 계약·업무 규칙·남은 작업 | `specs/<모듈>/` (`requirements.md`·`design.md`·`tasks.md`) |
+| 모듈 둘 이상에 걸친 계약(이벤트의 사실·소유자·소비자·키·순서·멱등, 모듈 간 흐름, 돈 불변식, 품질 목표)과 그 남은 작업 | `specs/platform/` (같은 세 파일). 모듈 스펙은 이 행을 링크하고 다시 적지 않는다([결정 151](docs/decisions.md#platform-spec)) |
 | 왜 그렇게 했고 무엇을 버렸나 | [docs/decisions.md](docs/decisions.md) |
 | 사용자의 판단 이력 | [docs/judgment-index.md](docs/judgment-index.md) |
 | 검증 결과 (날짜·대상·수치·근거) | PR의 `docs/evidence.d/<PR번호>.md`에 **한 행** → 접기 PR이 [docs/evidence.md](docs/evidence.md)로 옮긴다 |
@@ -69,18 +69,18 @@ Claude Code·Codex·Kiro 등 이 저장소에서 일하는 모든 에이전트�
 
 | 모듈 | 책임 |
 |---|---|
-| [auth](.kiro/specs/auth/) | 계정·역할·OAuth2/OIDC 토큰, 비밀번호 복구, 운영자 계정 관리 |
-| [web-bff](.kiro/specs/web-bff/) | 브라우저의 유일한 입구: BFF 로그인·세션·토큰 보관·릴레이·CSRF, 외부 자격 증명 거절 |
-| [gateway](.kiro/specs/gateway/) | 내부 API 게이트웨이: BFF가 릴레이한 Bearer 검증, 역할별 경로 규칙·라우팅, 내부 API 차단 |
-| [studio](.kiro/specs/studio/) | 출시 상세·빌드, 심사/출시 요청·재요청·철회. 소유자는 JWT `sub`로 식별 |
-| [review](.kiro/specs/review/) | 불변 Project 스냅샷의 수동 승인·반려와 결과 발행 |
-| [catalog](.kiro/specs/catalog/) | 출시 스냅샷을 공개본으로 확정, 공개 상품·판매/노출 상태의 정본 |
-| [store](.kiro/specs/store/) | 공개 상품 조회 사본·검색, 자동 동기화·대조·복구 |
-| [order](.kiro/specs/order/) | 주문 스냅샷·청구액, 30분 승인 진행 기한, 결제 결과 반영, 환불 접수·자격 |
-| [payment](.kiro/specs/payment/) | 결제 접수·PG 승인/조회·미확정 재개, 웹훅, 환불 실행 |
-| [license](.kiro/specs/license/) | 구매 근거·보유권·라이브러리, 정지/복구 |
-| [download](.kiro/specs/download/) | 보유권·현재 공개 빌드 확인, ZIP 만료 URL |
-| [settlement](.kiro/specs/settlement/) | 매출 배분·PG 비용·월 마감·환불 조정·PG 대사. Payment를 경유하지 않음 |
+| [auth](specs/auth/) | 계정·역할·OAuth2/OIDC 토큰, 비밀번호 복구, 운영자 계정 관리 |
+| [web-bff](specs/web-bff/) | 브라우저의 유일한 입구: BFF 로그인·세션·토큰 보관·릴레이·CSRF, 외부 자격 증명 거절 |
+| [gateway](specs/gateway/) | 내부 API 게이트웨이: BFF가 릴레이한 Bearer 검증, 역할별 경로 규칙·라우팅, 내부 API 차단 |
+| [studio](specs/studio/) | 출시 상세·빌드, 심사/출시 요청·재요청·철회. 소유자는 JWT `sub`로 식별 |
+| [review](specs/review/) | 불변 Project 스냅샷의 수동 승인·반려와 결과 발행 |
+| [catalog](specs/catalog/) | 출시 스냅샷을 공개본으로 확정, 공개 상품·판매/노출 상태의 정본 |
+| [store](specs/store/) | 공개 상품 조회 사본·검색, 자동 동기화·대조·복구 |
+| [order](specs/order/) | 주문 스냅샷·청구액, 30분 승인 진행 기한, 결제 결과 반영, 환불 접수·자격 |
+| [payment](specs/payment/) | 결제 접수·PG 승인/조회·미확정 재개, 웹훅, 환불 실행 |
+| [license](specs/license/) | 구매 근거·보유권·라이브러리, 정지/복구 |
+| [download](specs/download/) | 보유권·현재 공개 빌드 확인, ZIP 만료 URL |
+| [settlement](specs/settlement/) | 매출 배분·PG 비용·월 마감·환불 조정·PG 대사. Payment를 경유하지 않음 |
 
 외부 모의 PG(`simulators/mock-pg`)는 독립 공급자이며 업무 모듈 수에 포함하지 않는다.
 
