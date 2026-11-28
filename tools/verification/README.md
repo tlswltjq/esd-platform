@@ -22,7 +22,7 @@ python3 tools/verification/verify-jib.py --help
 | `support/boot_jars.py` · `test_boot_jars.py` | plain·test-fixtures를 제외한 실행 JAR 선택. 누락·복수 후보는 실패 |
 | `support/ports.py` · `test_ports.py` | 도구별 앱 포트 간격(1000 간격, 모두 32768 아래). 시작 전 사용 중·임시 포트 범위를 확인하고 실패하면 바로 멈춤. 기존 `*_PORT_OFFSET` 환경 변수로 바꿀 수 있음. [결정 105](../../docs/decisions.md#verification-tool-ports) |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
-| `support/payment_fault.py` | Payment를 검증 전용 장애 설정(`PaymentFaultConfiguration`)으로 띄우는 실행 인자. 운영 어댑터는 항상 승인하므로([결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)) 거절·응답 유실은 이 설정으로만 만든다 |
+| `support/payment_fault.py` | Payment를 검증 전용 장애 설정(`PaymentFaultConfiguration`)으로 띄우는 실행 인자(`:e2e`의 `PaymentFault`가 같은 값을 쓴다). 운영 어댑터는 항상 승인하므로([결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)) 거절·응답 유실은 이 설정으로만 만든다 |
 
 검증 도구는 인프라와 앱을 실행하고 검증 데이터를 생성한다. 이번 분리는 코드 위치와 진입점만 정리하며, 각 검증의 포트·DB·컨테이너 격리, 결과 저장 위치, 정리 절차는 유지한다. 검증 로직 수정은 이 디렉터리에서 수행한다.
 

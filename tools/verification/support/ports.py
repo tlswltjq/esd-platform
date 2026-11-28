@@ -16,7 +16,6 @@ OFFSETS = {
     "verify-g4-operations": 14000,
     # 15000 belongs to the :e2e LocalStack (LocalStack.DEFAULT_PORT_OFFSET in e2e/src/test); keep it free here.
     "verify-license": 16000,
-    "verify-payment": 18000,
 }
 
 

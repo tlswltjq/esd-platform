@@ -23,8 +23,6 @@ import com.stove.common.contract.Topics;
 import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.contract.payload.OrderPlacedEvent;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -38,13 +36,18 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /** Eight actual apps; process faults are supplied only by the OCI runner's test classpath. */
 @Tag("payment")
+@ExtendWith(LocalStackExtension.class)
+@LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY, StackApp.REVIEW, StackApp.CATALOG,
+        StackApp.STORE, StackApp.ORDER, StackApp.PAYMENT})
 class PaymentPurchaseFlowTest {
-    private static Path evidence() { return Path.of(System.getProperty("stove.e2e.payment-evidence")); }
-    private static ObjectNode saved() throws Exception { return (ObjectNode)JSON.readTree(Files.readString(evidence())); }
-    private static void save(ObjectNode s) throws Exception { Files.writeString(evidence(),JSON.writeValueAsString(s)); }
+    /** 앞 걸음이 만든 주문·결제. 예전에는 실행기가 걸음마다 테스트를 따로 불러 파일로 넘겼다. */
+    private static String state;
+    private static ObjectNode saved() throws Exception { return (ObjectNode)JSON.readTree(state); }
+    private static void save(ObjectNode s) throws Exception { state = JSON.writeValueAsString(s); }
     private static Account buyer(JsonNode s) throws Exception { return login(s.path("buyerEmail").asText(),"creator-password-1234"); }
     private static Account buyer(JsonNode s, String name) throws Exception {
         return name.equals("approved") ? buyer(s) : login(s.path(name + "BuyerEmail").asText(), "creator-password-1234");
@@ -76,7 +79,7 @@ class PaymentPurchaseFlowTest {
         assertThat(payment.path("provider").asText()).isEqualTo("SIMULATED");
         s.set(name+"Payment",payment); s.set(name+"Order",order); save(s);
     }
-    @Test void prepareReceiptWithoutProcessing() throws Exception {
+    private static void prepareReceiptWithoutProcessing() throws Exception {
         ReviewJourney.Account creator=account(true); ReviewJourney.Account buyer=account(false); ReviewJourney.Account other=account(false);
         ReviewJourney.Account reviewer=login(REVIEWER_EMAIL,REVIEWER_PASSWORD); ReviewJourney.Project project=project(creator);
         long review=request(project.id(),creator,reviewer);
@@ -101,45 +104,45 @@ class PaymentPurchaseFlowTest {
         assertThat(list.data().path("totalElements").asInt()).isEqualTo(1);
         assertThat(list.data().toString()).doesNotContain("buyerSubject","requestEventId","resultEventId","providerTransactionId");
     }
-    @Test void approvesDurableReceiptAfterRestart() throws Exception {
+    private static void approvesDurableReceiptAfterRestart() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s); finalState(s,"approved",buyer,"PAID");
         assertThat(s.path("approvedPayment").path("paymentId")).isEqualTo(s.path("pendingPayment").path("paymentId"));
     }
-    @Test void explicitDeclineUpdatesOrderAndPreservesEarlierApproval() throws Exception {
+    private static void explicitDeclineUpdatesOrderAndPreservesEarlierApproval() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=newBuyer(s,"declined"); create(s,"declined",buyer); finalState(s,"declined",buyer,"FAILED");
         assertThat(s.path("declinedPayment").path("failureReasonCode").asText()).isEqualTo("DECLINED");
         assertThat(get("payments",number(s,"approved"),buyer(s))).isEqualTo(s.path("approvedPayment"));
     }
-    @Test void losesResponseAfterSupplierCommit() throws Exception {
+    private static void losesResponseAfterSupplierCommit() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"declined"); s.put("lostBuyerEmail",s.path("declinedBuyerEmail").asText()); create(s,"lost",buyer);
         s.set("lostPending",state("payments",number(s,"lost"),buyer,"PENDING")); save(s);
         assertThat(get("orders",number(s,"lost"),buyer).path("status").asText()).isEqualTo("PENDING");
     }
-    @Test void recoversLostResponseAfterProcessRestart() throws Exception {
+    private static void recoversLostResponseAfterProcessRestart() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"lost"); finalState(s,"lost",buyer,"PAID");
         assertThat(s.path("lostPayment").path("paymentId")).isEqualTo(s.path("lostPending").path("paymentId"));
     }
-    @Test void rollsBackResultAfterOutboxInsertion() throws Exception {
+    private static void rollsBackResultAfterOutboxInsertion() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=newBuyer(s,"rollback"); create(s,"rollback",buyer);
         s.set("rollbackPending",state("payments",number(s,"rollback"),buyer,"PENDING")); save(s);
         assertThat(get("orders",number(s,"rollback"),buyer).path("status").asText()).isEqualTo("PENDING");
     }
-    @Test void recoversResultTransactionAfterProcessRestart() throws Exception {
+    private static void recoversResultTransactionAfterProcessRestart() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"rollback"); finalState(s,"rollback",buyer,"PAID");
         assertThat(s.path("rollbackPayment").path("paymentId")).isEqualTo(s.path("rollbackPending").path("paymentId"));
     }
-    @Test void preparesReceiptBeforeOrderAndCatalogStop() throws Exception {
+    private static void preparesReceiptBeforeOrderAndCatalogStop() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=newBuyer(s,"offline"); create(s,"offline",buyer);
         state("payments",number(s,"offline"),buyer,"PENDING");
     }
-    @Test void paysWithoutOrderOrCatalogAndReadsWhileBrokerDown() throws Exception {
+    private static void paysWithoutOrderOrCatalogAndReadsWhileBrokerDown() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"offline");
         JsonNode payment=state("payments",number(s,"offline"),buyer,"PAID");
         s.set("offlinePayment",payment); save(s);
         assertThat(Stove.gateway.get("/api/v1/payments",buyer.headers()).data().path("totalElements").asInt()).isEqualTo(1);
         assertThat(get("payments",number(s,"approved"),buyer(s))).isEqualTo(s.path("approvedPayment"));
     }
-    @Test void catchesUpOriginalResultAndReplaysOriginalEvents() throws Exception {
+    private static void catchesUpOriginalResultAndReplaysOriginalEvents() throws Exception {
         ObjectNode s=saved(); ReviewJourney.Account buyer=buyer(s,"offline"); finalState(s,"offline",buyer,"PAID");
         assertThat(get("payments",number(s,"approved"),buyer(s))).isEqualTo(s.path("approvedPayment"));
         HashMap<String, Object> config=new HashMap<String,Object>(); config.put("bootstrap.servers",System.getProperty("stove.e2e.kafka-brokers"));
@@ -170,12 +173,98 @@ class PaymentPurchaseFlowTest {
         }
         s.put("replayedRequestEventId",placed.eventId()).put("replayedResultEventId",result.eventId()); save(s);
     }
-    @Test void preservesAllResultsAfterReplayAndRestart() throws Exception {
+    private static void preservesAllResultsAfterReplayAndRestart() throws Exception {
         ObjectNode s=saved();
         for(String name:List.of("approved","declined","lost","rollback","offline")) {
             Account buyer=buyer(s,name);
             assertThat(get("payments",number(s,name),buyer)).isEqualTo(s.path(name+"Payment"));
             assertThat(get("orders",number(s,name),buyer)).isEqualTo(s.path(name+"Order"));
+        }
+    }
+
+    private static String count(LocalStack stack, String schema, String table, String condition) {
+        return stack.sql("SELECT COUNT(*) FROM " + schema + "." + table + (condition.isEmpty() ? "" : " WHERE " + condition));
+    }
+
+    private static void awaitCount(LocalStack stack, String schema, String table, String condition, int expected,
+            String description) {
+        Awaitility.await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() ->
+                assertThat(count(stack, schema, table, condition)).as(description).isEqualTo(Integer.toString(expected)));
+    }
+
+    /**
+     * 결제 접수, 승인·거절, 공급자 응답 유실, 결과 트랜잭션 롤백, 실제 재시작, 브로커·Order·Catalog 정지 중 동작과 원본
+     * 이벤트 재전달을 한 흐름으로 본다. 테스트가 앱과 브로커를 직접 멈추고 되살리며, 거절·유실은 검증 전용 장애
+     * 설정({@link PaymentFault})으로 만든다(결정 e2e-stack-in-junit).
+     */
+    @Test
+    void paymentsSurviveSupplierFaultsRestartsAndOutages(LocalStack stack) throws Exception {
+        // 처리를 끈 Payment: 접수만 하고 승인하지 않는다.
+        stack.restart(StackApp.PAYMENT, "--stove.payment.processing-enabled=false");
+        prepareReceiptWithoutProcessing();
+        stack.restart(StackApp.PAYMENT);
+        approvesDurableReceiptAfterRestart();
+
+        PaymentFault.restart(stack, PaymentFault.DECLINE);
+        explicitDeclineUpdatesOrderAndPreservesEarlierApproval();
+
+        // 공급자는 승인했지만 응답을 잃는다.
+        PaymentFault.restart(stack, PaymentFault.LOSE_RESPONSE_AFTER_PROVIDER);
+        losesResponseAfterSupplierCommit();
+        awaitCount(stack, "stove_payment", "purchase_payment", "status='PENDING' AND last_error_code='PG_UNAVAILABLE'", 1,
+                "공급자는 승인했고 응답은 잃었다");
+        assertThat(count(stack, "stove_payment", "outbox_event", "")).isEqualTo("2");
+        stack.restart(StackApp.PAYMENT);
+        recoversLostResponseAfterProcessRestart();
+
+        // 결과를 Outbox에 넣은 뒤 트랜잭션이 롤백된다.
+        PaymentFault.restart(stack, PaymentFault.FAIL_AFTER_OUTBOX);
+        rollsBackResultAfterOutboxInsertion();
+        awaitCount(stack, "stove_payment", "purchase_payment", "status='PENDING' AND last_error_code='RESULT_UNCONFIRMED'",
+                1, "결과 트랜잭션이 롤백됐다");
+        assertThat(count(stack, "stove_payment", "outbox_event", "")).isEqualTo("3");
+        stack.restart(StackApp.PAYMENT);
+        recoversResultTransactionAfterProcessRestart();
+
+        // Order·Catalog 없이, 릴레이를 끈 채로 승인한다.
+        stack.restart(StackApp.PAYMENT, "--stove.payment.processing-enabled=false");
+        preparesReceiptBeforeOrderAndCatalogStop();
+        stack.stop(StackApp.ORDER);
+        stack.stop(StackApp.CATALOG);
+        stack.restart(StackApp.PAYMENT, "--stove.outbox.relay-enabled=false");
+        awaitCount(stack, "stove_payment", "purchase_payment", "status='PAID'", 4, "Order·Catalog 없이 받은 공급자 결과");
+        awaitCount(stack, "stove_payment", "outbox_event", "status='SENT'", 4, "앞선 결과는 모두 나갔다");
+        String original = stack.sql("SELECT event_id FROM stove_payment.outbox_event WHERE status='PENDING'");
+        assertThat(original).as("아직 나가지 않은 결과 이벤트").isNotBlank();
+
+        // 브로커가 응답하지 않는 동안 다시 뜬 Payment: 조회는 되고 결과 이벤트는 그대로 남는다.
+        stack.stop(StackApp.PAYMENT);
+        stack.pauseKafka();
+        try {
+            stack.start(StackApp.PAYMENT, "--stove.outbox.relay-enabled=false");
+            paysWithoutOrderOrCatalogAndReadsWhileBrokerDown();
+            assertThat(stack.sql("SELECT event_id FROM stove_payment.outbox_event WHERE status='PENDING'"))
+                    .as("같은 결과 이벤트가 그대로 남아 있다").isEqualTo(original);
+            assertThat(stack.sql("SELECT retry_count FROM stove_payment.outbox_event WHERE status='PENDING'"))
+                    .isEqualTo("0");
+        } finally {
+            stack.resumeKafka();
+        }
+        stack.start(StackApp.ORDER);
+        stack.restart(StackApp.PAYMENT);
+        catchesUpOriginalResultAndReplaysOriginalEvents();
+        awaitCount(stack, "stove_payment", "outbox_event", "status='SENT'", 5, "원래 결과 이벤트가 나갔다");
+        assertThat(stack.sql("SELECT status FROM stove_payment.outbox_event WHERE event_id='" + original + "'"))
+                .isEqualTo("SENT");
+        // 재전달된 이벤트를 재시작 전에 소비하게 한다. 행 수가 그대로면 두 Inbox가 걸러 낸 것이다.
+        awaitCount(stack, "stove_order", "processed_event", "", 5, "Order가 받은 최종 결과 다섯 건");
+        stack.restart(StackApp.ORDER);
+        stack.restart(StackApp.PAYMENT);
+        preservesAllResultsAfterReplayAndRestart();
+        for (String[] table : List.of(new String[] {"stove_order", "purchase_order"},
+                new String[] {"stove_order", "processed_event"}, new String[] {"stove_payment", "purchase_payment"},
+                new String[] {"stove_payment", "processed_event"}, new String[] {"stove_payment", "outbox_event"})) {
+            assertThat(count(stack, table[0], table[1], "")).as(table[0] + "." + table[1]).isEqualTo("5");
         }
     }
 }

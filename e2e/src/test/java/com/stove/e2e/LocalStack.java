@@ -215,6 +215,25 @@ final class LocalStack implements AutoCloseable {
         }
     }
 
+    /**
+     * 앱을 실행 JAR 대신 검증 전용 클래스패스로 다시 띄운다. 그 앱의 {@code writeVerificationClasspath} 태스크가 쓴
+     * {@code build/verification-classpath.txt}(통합 테스트 소스셋의 실행 클래스패스)를 쓰므로, bootJar에 없는 검증 전용
+     * 설정(장애 주입)을 {@code --spring.main.sources}로 얹을 수 있다.
+     */
+    void restartFromVerificationClasspath(StackApp app, String mainClass, String... arguments) {
+        if (!apps.contains(app)) {
+            throw new IllegalArgumentException(app.module() + " 은 이 스택에 없다: " + apps);
+        }
+        stop(app);
+        Path classpath = repository.resolve("apps").resolve(app.module()).resolve("build/verification-classpath.txt");
+        try {
+            launch(app, List.of("-cp", Files.readString(classpath).strip(), mainClass), arguments);
+        } catch (IOException failure) {
+            throw new IllegalStateException(app.module() + " 의 검증 전용 클래스패스가 없다(" + classpath + ")", failure);
+        }
+        awaitReady(List.of(app), Duration.ofSeconds(180));
+    }
+
     /** 앱 프로세스를 실제로 내렸다가 다시 띄운다. 인자를 주지 않으면 기본 설정으로 뜬다. */
     void restart(StackApp app, String... arguments) {
         stop(app);
@@ -368,15 +387,19 @@ final class LocalStack implements AutoCloseable {
     }
 
     private void launch(StackApp app, String... arguments) {
+        launch(app, List.of("-jar", applicationJar(app).toString()), arguments);
+    }
+
+    private void launch(StackApp app, List<String> entry, String... arguments) {
         Map<String, String> selected = new LinkedHashMap<>(ServiceCredentials.environmentFor(app, environment));
         if (app == StackApp.CATALOG || app == StackApp.SETTLEMENT) {
             selected.put("CATALOG_SETTLEMENT_SERVICE_KEY", settlementServiceKey);
         }
         credentialRecipients.put(app.module(), ServiceCredentials.credentialNames(selected));
         List<String> command = new ArrayList<>(List.of(
-                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                "-Xmx256m", "-jar", applicationJar(app).toString(),
-                "--server.address=127.0.0.1", "--server.port=" + (app.port() + offset)));
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-Xmx256m"));
+        command.addAll(entry);
+        command.addAll(List.of("--server.address=127.0.0.1", "--server.port=" + (app.port() + offset)));
         command.addAll(List.of(arguments));
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(repository.toFile());
