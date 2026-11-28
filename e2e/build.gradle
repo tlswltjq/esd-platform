@@ -53,6 +53,7 @@ def localStackApps = ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog
 //   expected : 실행 건수. 다르거나 건너뜀이 있으면 failure 문구로 실패한다. 없으면 세지 않는다
 //   localStack: 테스트가 스택을 직접 띄운다(LocalStackExtension). 값은 그 여정이 띄우는 앱 목록이고(@LocalStackApps 와 같게 둔다),
 //               그 앱의 bootJar 와 MinIO 이미지를 먼저 준비한다
+//   verificationClasspath: 검증 전용 설정(장애 주입)으로 다시 띄울 앱. 그 앱의 검증 전용 클래스패스를 먼저 쓴다
 def suites = [
     // 열두 앱. 테스트가 스택을 띄우고 내린다(결정 e2e-stack-in-junit, 시범 1)
     [task: 'ownershipE2eTest', tag: 'ownership',
@@ -104,9 +105,9 @@ def suites = [
      expected: 1, failure: 'Order verification requires one executed check without skips'],
     // 여덟 앱. 실제 Payment 작업자
     [task: 'paymentE2eTest', tag: 'payment',
-     description: '주문·결제·결과 반영과 응답 유실·재시작·발행 복구를 검증한다',
-     props: ['kafka-brokers', 'payment-evidence'],
-     phase: [test: 'PaymentPurchaseFlowTest', property: 'payment-phase', first: 'prepareReceiptWithoutProcessing'],
+     description: '주문·결제·결과 반영과 응답 유실·재시작·발행 복구를 검증한다 (스택을 직접 띄운다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order', 'payment'],
+     verificationClasspath: ['payment'],
      expected: 1, failure: 'Payment verification requires one executed check without skips'],
     // 아홉 앱
     [task: 'licenseE2eTest', tag: 'license',
@@ -229,6 +230,7 @@ suites.each { suite ->
         }
         if (suite.localStack) {
             suite.localStack.each { app -> dependsOn ":apps:${app}:bootJar" }
+            (suite.verificationClasspath ?: []).each { app -> dependsOn ":apps:${app}:writeVerificationClasspath" }
             systemProperty 'stove.e2e.repo-root', rootDir.absolutePath
             // 기동 시간 같은 숫자를 콘솔에 남긴다.
             testLogging.showStandardStreams = true
