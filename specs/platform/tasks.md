@@ -311,6 +311,11 @@
 - [ ] **T43. `e2e`의 옛 `e2eTest` 여정이 지금 없는 API를 부른다** ([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters))
   - 어디서: `TrackBCommerceFlowTest`·`TrackCFulfillmentFlowTest`·`PaymentFailurePathTest`(`/api/v1/payments/callback`, 앞의 둘은 `/api/v1/settlements/orders/*`도), `PaymentSimulatorE2eTest`·`PromotionOperationsE2eTest`(`/api/v1/payments/simulator/*`, 뒤쪽은 `/payments/{orderNo}/prepare`·`/settlements/orders/*`도). payment·settlement 컨트롤러에 이 경로가 없다.
   - 목표: 지금 API로 옮길 수 없는 여정은 지우고 `e2eTest` 태스크·`testing.md` L6 행(건수)을 맞춘다. `E2eClient`의 콜백 서명(`PG_CALLBACK_SECRET`)도 함께 정리한다.
+- [ ] **T44. `verify-gateway-ownership.py`의 구매 픽스처가 License 제약에 걸려 실패한다**
+  - 어디서: `tools/verification/support/gateway_ownership.py`가 `stove_license.product_license`에 `status='ACTIVE'`를 넣는다. License V10(2026-11-06, `chk_product_license_status`)은 `STORED`·`REGISTERED`·`SUSPENDED`·`REFUNDED`만 받는다.
+  - 확인: 2026-11-28 PR #268 로컬 실행에서 `ERROR 3819 ... Check constraint 'chk_product_license_status' is violated`. PG 제거와 무관하다(License와 이 픽스처는 바꾸지 않았다).
+  - 할 일: 픽스처 상태를 현재 스키마 값으로 고치고 스크립트를 끝까지 통과시킨다. [로드맵 0절](../../docs/roadmap.md#scope-freeze)의 "가입·로그인, 역할별 진입" 확인 경로다.
+
 
 ## CI·PR 도구
 
