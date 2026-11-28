@@ -257,6 +257,7 @@
 - **증상** 필수 헤더·쿼리 파라미터 누락, 경로 변수 타입 불일치, 깨진 JSON이 전부 500이었다. 클라이언트가 재시도하고 5xx 알람·스택 트레이스가 실제 장애 신호를 묻는다.
 - **원인** `BusinessException`·`MethodArgumentNotValidException`·`ConstraintViolationException` 외에는 `Exception` 핸들러로 흘렀다.
 - **수정** `MissingRequestHeaderException`·`MissingServletRequestParameterException`·`MethodArgumentTypeMismatchException`·`HttpMessageNotReadableException`을 400으로 묶고 `log.warn`, 스택 트레이스 없음. `common:web`이라 9개 서비스에 한 번에 적용.
+- **이후** 예외를 나열하는 대신 `ResponseEntityExceptionHandler`를 상속해 표준 MVC 예외 전체를 제 상태로 답한다([결정 mvc-standard-exceptions](decisions.md#mvc-standard-exceptions)). `StandardMvcExceptionStatusTest`가 405·415·413과 위 네 예외의 400을 지킨다.
 
 ---
 
