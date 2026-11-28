@@ -328,7 +328,7 @@
     - [x] `verify-store.py` → `storeE2eTest` — PR #283
     - [x] `verify-order.py` → `orderE2eTest` — PR #284
     - [x] `verify-payment.py` → `paymentE2eTest` — PR #285
-    - [ ] `verify-license.py` → `licenseE2eTest`
+    - [x] `verify-license.py` → `licenseE2eTest` — PR #286
     - [ ] `verify-download.py` → `downloadE2eTest`
     - [ ] `verify-g4-operations.py` → `g4OperationsE2eTest`
     - [ ] `verify-tracing.py` → `tracingE2eTest`

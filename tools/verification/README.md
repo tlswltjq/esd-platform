@@ -5,7 +5,7 @@
 저장소 루트에서 실행한다.
 
 ```bash
-python3 tools/verification/verify-license.py
+./gradlew :e2e:licenseE2eTest          # 모듈 여정은 테스트가 스택을 직접 띄운다(docs/testing.md의 색인)
 python3 tools/verification/verify-jib.py --help
 ```
 
