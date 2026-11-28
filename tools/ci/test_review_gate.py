@@ -61,7 +61,7 @@ class ReviewTableTest(unittest.TestCase):
 
     def test_user_verdicts_without_confirmation_fail_the_required_check(self):
         """결정 112·PR #232 P4: 사용자 판정 대상은 병합 도구만이 아니라 필수 검사에서도 막는다."""
-        for row in ('| R1 무엇 | 부분 반영 | 이유 |', '| R1 무엇 | 기각 | 이유 |', '| R1 (high) 무엇 | 채택 (AI 판정) | 이유 |',
+        for row in ('| R1 무엇 | 부분 반영 | 이유 |', '| R1 무엇 | 기각 | 이유 |', '| R1 (high) 무엇 | 부분 반영 (AI 판정) | 이유 |',
                     '| R1 (low) 재시도 정책을 바꿔야 함 | 채택 | 이유 |', '| R1 무엇 | 기각 (사용자 확정: "") | 이유 |'):
             with self.subTest(row=row):
                 errors = review_gate.check(body([row]), CODE)
@@ -69,6 +69,23 @@ class ReviewTableTest(unittest.TestCase):
                 self.assertIn('사용자 판정이 남은 지적', errors[0])
         self.assertEqual(review_gate.check(body(['| R1 (high) 무엇 | 채택 (사용자 확정: "채택해") | 이유 |']), CODE), [])
         self.assertEqual(review_gate.check(body(['| R1 무엇 | 기각 |']), DOCS), [])
+
+    def test_adopted_high_is_judged_by_ai(self):
+        # 결정 ai-judges-adopted-high: AI가 채택해 고치는 high는 사용자 판정 대상이 아니다.
+        self.assertEqual(review_gate.check(body(['| R1 (high) 무엇 | 채택 (AI 판정) | 고쳤다 |']), CODE), [])
+        self.assertEqual(len(review_gate.check(body(['| R1 (high) 정책을 바꿔야 함 | 채택 | 이유 |']), CODE)), 1)
+
+    def test_rereview_findings_moved_to_tasks(self):
+        # 결정 rereview-cap-two: 재리뷰 2회 뒤 medium·low는 옮긴 위치와 함께 `할 일로 이관`으로 적는다.
+        for verdict in ('할 일로 이관 — `specs/order/tasks.md`', '할 일로 이관 (D-063)'):
+            with self.subTest(verdict=verdict):
+                self.assertEqual(review_gate.check(body(['| 재리뷰 3 R1 (medium) 무엇 | ' + verdict + ' | 이유 |']), CODE), [])
+        errors = review_gate.check(body(['| 재리뷰 3 R1 (medium) 무엇 | 할 일로 이관 | 이유 |']), CODE)
+        self.assertEqual(1, len(errors))
+        self.assertIn('옮긴 위치', errors[0])
+        errors = review_gate.check(body(['| 재리뷰 3 R1 (high) 무엇 | 할 일로 이관 — specs/order/tasks.md | 이유 |']), CODE)
+        self.assertEqual(1, len(errors))
+        self.assertIn('high는 이관하지 않는다', errors[0])
 
     def test_finding_without_verdict_fails_and_names_the_finding(self):
         errors = review_gate.check(body(['| R1 잠금 전 읽기 | 채택 | 이유 |', '| R2 옛 환불 잔류 |  | 검토 중 |']), CODE)

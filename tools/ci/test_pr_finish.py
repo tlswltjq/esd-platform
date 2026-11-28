@@ -69,9 +69,10 @@ class PendingUserVerdictsTest(unittest.TestCase):
                              ['R3 (medium) 무엇', '채택 (AI 판정)', '이유']])
         self.assertEqual(['R1 (medium) 무엇', 'R2 (low) 무엇'], review_gate.pending_user_verdicts(body))
 
-    def test_high_needs_user_confirmation_even_if_adopted(self):
-        body = verdict_body([['R1 (high) 무엇', '채택', '이유']])
-        self.assertEqual(['R1 (high) 무엇'], review_gate.pending_user_verdicts(body))
+    def test_adopted_high_is_ai_judged(self):
+        # 결정 ai-judges-adopted-high: 채택해 고치는 high는 AI 판정, 부분 반영·기각 high는 사용자 판정.
+        body = verdict_body([['R1 (high) 무엇', '채택', '이유'], ['R2 (high) 무엇', '부분 반영 (AI 판정)', '이유']])
+        self.assertEqual(['R2 (high) 무엇'], review_gate.pending_user_verdicts(body))
 
     def test_user_confirmed_rows_pass(self):
         body = verdict_body([['R1 (high) 무엇', '채택 (사용자 확정: "채택")', '이유'],
@@ -90,7 +91,8 @@ class PendingUserVerdictsTest(unittest.TestCase):
                              ['R3 (high) 무엇', '채택 (사용자 확정: "', '이유'],
                              ['R4 (high) 무엇', '채택 (사용자 확정: "", 메모: "대기")', '이유'],
                              ['R5 (high) 무엇', '채택 (사용자 확정: "  ")', '이유']])
-        self.assertEqual(['R1 (high) 무엇', 'R2 (high) 무엇', 'R3 (high) 무엇', 'R4 (high) 무엇', 'R5 (high) 무엇'],
+        # 확정 표시를 쓰다 만 판정은 남은 판정이다. 이유 칸의 언급(R1)은 표시가 아니고, 채택한 high라 AI 판정이다.
+        self.assertEqual(['R2 (high) 무엇', 'R3 (high) 무엇', 'R4 (high) 무엇', 'R5 (high) 무엇'],
                          review_gate.pending_user_verdicts(body))
 
     def test_policy_rows_need_user_confirmation(self):
@@ -102,10 +104,16 @@ class PendingUserVerdictsTest(unittest.TestCase):
 
     def test_reasoning_level_high_in_reviewer_is_not_severity(self):
         # PR #226: "리뷰어: Codex gpt-6.1-sol high"의 high를 심각도로 읽어 병합을 막았다.
-        body = verdict_body([['재리뷰(리뷰어: Codex `gpt-6.1-sol` high, `a..b`): R8 해소, 새 지적 R10', '채택 (AI 판정)', '아래'],
-                             ['R8 (high, 리뷰어: Codex) 무엇', '채택 (AI 판정)', '이유'],
-                             ['R9 ( High ) 무엇', '채택', '이유']])
-        self.assertEqual(['R8 (high, 리뷰어: Codex) 무엇', 'R9 ( High ) 무엇'], review_gate.pending_user_verdicts(body))
+        # 심각도 high만 이관할 수 없다(결정 rereview-cap-two).
+        moved = '할 일로 이관 — specs/order/tasks.md'
+        body = verdict_body([['재리뷰(리뷰어: Codex `gpt-6.1-sol` high, `a..b`): R8 해소, 새 지적 R10', moved, '아래'],
+                             ['R8 (high, 리뷰어: Codex) 무엇', moved, '이유'],
+                             ['R9 ( High ) 무엇', moved, '이유']])
+        errors = review_gate.check(body, ['tools/ci/x.py'])
+        self.assertEqual(2, len(errors), errors)
+        self.assertTrue(all('high는 이관하지 않는다' in error for error in errors))
+        self.assertIn('R8', errors[0])
+        self.assertIn('R9', errors[1])
 
     def test_word_high_inside_other_words_is_not_severity(self):
         body = verdict_body([['R1 (low) highlight 문구', '채택', '이유']])
