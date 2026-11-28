@@ -403,7 +403,8 @@ final class LocalStack implements AutoCloseable {
         }
     }
 
-    private String address(StackApp app) {
+    /** 이 스택에서 앱이 듣는 주소. Gateway를 거치지 않고 앱의 상태를 직접 볼 때 쓴다. */
+    String address(StackApp app) {
         return "http://127.0.0.1:" + (app.port() + offset);
     }
 
