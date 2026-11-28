@@ -349,9 +349,7 @@
 - [x] **T46. "봉투"라는 용어를 걷어낸다** — PR #274 ([결정 remove-envelope-term](../../docs/decisions.md#remove-envelope-term))
   - 응답은 "공통 응답 형식", 이벤트 식별 값은 "헤더", 수신 단위는 "이벤트 메시지"(`EventMessage`, 옛 이름 `EventEnvelope`)로 쓴다. 지난 기록 문서(`docs/decisions.md`의 이전 결정, `docs/evidence.md`·`docs/evidence.d/`, `docs/experiments.md`)는 고치지 않았다.
 - [x] **T47. Studio `UploadExceptionHandler`가 413을 `INVALID_REQUEST` 코드로 답한다** — PR #291 ([결정 studio-upload-413-code](../../docs/decisions.md#studio-upload-413-code)): multipart 상한 초과의 `error.code`를 `PAYLOAD_TOO_LARGE`로 바꿨다.
-- [ ] **T53. Studio의 업무 상한(빌드 1GiB·썸네일 5MiB) 초과는 400 `INVALID_REQUEST`로 답한다** [결정 필요]
-  - 어디서: `studio:core/service/build/UploadFiles.java:43`(`stage`가 `limit`을 넘으면 `BusinessException(INVALID_REQUEST, "파일 최대 크기를 초과했습니다.")`). multipart 상한(1GB·1025MB)보다 작은 업무 상한(`stove.upload.max-artifact-bytes`, `stove.asset.max-thumbnail-bytes`)에 먼저 걸리면 같은 문구가 400으로 나간다. 예: 6MiB 썸네일은 400, 1GB를 넘는 요청은 413(T47).
-  - 정할 것: 업무 상한 초과도 413 `PAYLOAD_TOO_LARGE`로 맞출지. `specs/studio/design.md`는 표에 400과 413을 함께 적고 있고, 어느 상한이 어느 상태인지는 정하지 않았다.
+- [x] **T53. Studio의 업무 상한(빌드 1GiB·썸네일 5MiB) 초과는 400 `INVALID_REQUEST`로 답한다** — PR #291 ([결정 studio-business-limit-413](../../docs/decisions.md#studio-business-limit-413)): `UploadFiles.stage`의 상한 초과를 413 `PAYLOAD_TOO_LARGE`로 바꿨다. 빈 파일과 픽셀 상한은 400 그대로다.
 
 
 ## CI·PR 도구

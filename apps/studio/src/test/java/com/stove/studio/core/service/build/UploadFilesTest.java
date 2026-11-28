@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.stove.common.web.error.BusinessException;
+import com.stove.common.web.error.ErrorCode;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -42,9 +43,15 @@ class UploadFilesTest {
     @Test
     void rejectsEmptyAndOversizedStream() {
         assertThatThrownBy(() -> UploadFiles.stage(new ByteArrayInputStream(new byte[0]), 10))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOfSatisfying(BusinessException.class,
+                        failure -> assertThat(failure.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+        // 결정 studio-business-limit-413: 업무 상한을 넘은 파일도 multipart 상한 초과와 같은 413 PAYLOAD_TOO_LARGE다.
         assertThatThrownBy(() -> UploadFiles.stage(new ByteArrayInputStream(new byte[11]), 10))
-                .isInstanceOf(BusinessException.class);
+                .isInstanceOfSatisfying(BusinessException.class, failure -> {
+                    assertThat(failure.errorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE);
+                    assertThat(failure.errorCode().statusCode()).isEqualTo(413);
+                    assertThat(failure.getMessage()).isEqualTo("파일 최대 크기를 초과했습니다.");
+                });
     }
 
     private byte[] zip(String entry) throws IOException {
