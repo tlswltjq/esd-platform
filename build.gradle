@@ -3,11 +3,11 @@ import org.gradle.api.services.BuildServiceParameters
 
 plugins {
     id 'java'
-    id 'org.springframework.boot' version "${springBootVersion}" apply false
-    id 'io.spring.dependency-management' version '1.1.7' apply false
-    id 'com.google.cloud.tools.jib' version '3.5.4' apply false
+    alias(libs.plugins.spring.boot) apply false
+    alias(libs.plugins.dependency.management) apply false
+    alias(libs.plugins.jib) apply false
     // 뮤테이션 테스트. 기본 빌드에 얹지 않고 필요할 때만 돌린다 (아래 pitest 블록 참고)
-    id 'info.solidsoft.pitest' version '1.15.0' apply false
+    alias(libs.plugins.pitest) apply false
 }
 
 allprojects {
@@ -56,14 +56,14 @@ subprojects {
         }
     }
 
-    // Spring Boot BOM 의 testcontainers.version 을 덮어쓴다 (gradle.properties 참고)
-    ext['testcontainers.version'] = testcontainersVersion
+    // Spring Boot BOM 의 testcontainers.version 을 덮어쓴다 (gradle/libs.versions.toml 참고)
+    ext['testcontainers.version'] = rootProject.libs.versions.testcontainers.get()
 
     dependencyManagement {
         imports {
-            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
-            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
-            mavenBom "software.amazon.awssdk:bom:${awsSdkVersion}"
+            mavenBom "org.springframework.boot:spring-boot-dependencies:${rootProject.libs.versions.spring.boot.get()}"
+            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${rootProject.libs.versions.spring.cloud.get()}"
+            mavenBom "software.amazon.awssdk:bom:${rootProject.libs.versions.aws.sdk.get()}"
         }
     }
 
@@ -268,7 +268,7 @@ subprojects {
     apply plugin: 'info.solidsoft.pitest'
 
     pitest {
-        junit5PluginVersion = '1.2.1'
+        junit5PluginVersion = rootProject.libs.versions.pitest.junit5.plugin.get()
         // 소스셋을 가른 뒤에도 뮤테이션 판정은 두 쪽을 다 쓴다.
         // 기본값(test 만)으로 두면 L1 서비스 통합 테스트가 죽이던 뮤턴트가 전부 "생존"으로
         // 보고돼, 코드가 그대로인데 점수만 떨어진다 — 측정 도구의 사각지대를 다시 만드는 셈이다.

@@ -21,8 +21,8 @@ dependencies {
     // 운영 API(ops)는 common:web 이 없고 stove.messaging.ops.enabled=false 라 켜지지 않는다.
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.flywaydb:flyway-core'
-    // 지연 분포는 HdrHistogram으로 모은다(E13 지표 정의). 버전은 micrometer-core가 끌어오는 값(2.2.2)과 같게 둔다(Boot BOM이 관리하지 않는다).
-    implementation 'org.hdrhistogram:HdrHistogram:2.2.2'
+    // 지연 분포는 HdrHistogram으로 모은다(E13 지표 정의). 버전은 micrometer-core가 끌어오는 값과 같게 둔다(Boot BOM이 관리하지 않는다. gradle/libs.versions.toml).
+    implementation libs.hdrhistogram
     runtimeOnly 'org.flywaydb:flyway-mysql'
     runtimeOnly 'com.mysql:mysql-connector-j'
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'

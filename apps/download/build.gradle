@@ -2,7 +2,7 @@ dependencies {
     integrationTestRuntimeOnly 'io.micrometer:micrometer-registry-prometheus'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+    implementation libs.springdoc.webmvc.ui
 
     // 오브젝트 스토리지(MinIO / S3) 어댑터
     implementation 'software.amazon.awssdk:s3'

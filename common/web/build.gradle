@@ -14,7 +14,7 @@ dependencies {
     api 'io.micrometer:micrometer-tracing'
 
     // 문서 지원 코드는 여기 두고, 실제 OpenAPI starter는 각 Servlet 앱이 선택한다.
-    compileOnly "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+    compileOnly libs.springdoc.webmvc.ui
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     // 존재하지 않는 속성 요청을 400 으로 돌리는 안전망이 이 예외 타입을 참조한다(D-024).
@@ -26,7 +26,7 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-web'
     testImplementation 'org.springframework.boot:spring-boot-starter-validation'
     testImplementation 'org.springframework.security:spring-security-core'
-    testImplementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+    testImplementation libs.springdoc.webmvc.ui
 
     // 공용 라이브러리 방향 검증 (ArchUnit)
     testImplementation project(':common:archunit')

@@ -6,6 +6,7 @@ pluginManagement {
 }
 
 plugins {
+    // settings 플러그인은 버전 카탈로그를 읽을 수 없어 여기서 고정한다.
     id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
 }
 
