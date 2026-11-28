@@ -99,9 +99,8 @@ def suites = [
      expected: 1, failure: 'Store verification requires one executed check without skips'],
     // 일곱 앱. 격리 Order 검증에서 Payment 는 계약 픽스처다
     [task: 'orderE2eTest', tag: 'order',
-     description: '공개 상품 주문·결제 결과 계약·장애와 재시작을 검증한다',
-     props: ['kafka-brokers', 'order-evidence'],
-     phase: [test: 'OrderPurchaseFlowTest', property: 'order-phase', first: 'preparesOrdersWithRelayPaused'],
+     description: '공개 상품 주문·결제 결과 계약과 브로커·Catalog 장애, 재시작을 검증한다 (스택을 직접 띄운다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order'],
      expected: 1, failure: 'Order verification requires one executed check without skips'],
     // 여덟 앱. 실제 Payment 작업자
     [task: 'paymentE2eTest', tag: 'payment',
