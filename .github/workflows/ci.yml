@@ -65,13 +65,14 @@ jobs:
       - name: Build shards
         id: shards
         run: python3 -I -B tools/ci/build_shards.py --tasks "${{ steps.scope.outputs.tasks }}" >> "$GITHUB_OUTPUT"
-      # 결정 216: 검증·측정 도구의 Python 테스트는 Gradle 범위와 무관하게 늘 돈다(약 15초). Java가 필요 없다.
+      # 결정 216: 검증·측정·운영 도구의 Python 테스트는 Gradle 범위와 무관하게 늘 돈다(약 15초). Java가 필요 없다.
       # 이 경로만 바뀐 PR은 Gradle을 생략하므로(build_scope.py) 여기가 그 변경을 검증하는 유일한 곳이다.
       # tools/ci 테스트는 review-gate가 돌린다. Docker 장애는 통합 테스트에서 드러나므로 버전 출력 단계는 두지 않는다.
       - name: Python tool tests
         run: |
           python3 -B -m unittest discover -s tools/verification -p 'test_*.py'
           python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'
+          python3 -B -m unittest discover -s tools/operations -p 'test_*.py'
 
   gradle:
     name: gradle (${{ matrix.shard }})

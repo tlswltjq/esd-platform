@@ -27,7 +27,7 @@ include 'common:testcontainers'
 // 떠 있는 전체 스택을 밖에서 두드린다. 기본 빌드에 들어가지 않는다 (e2e/build.gradle 참고).
 include 'e2e'
 
-// ── 마이크로서비스 10종 + 게이트웨이 ─────────────────────────────────
+// ── 업무 모듈 12개(게이트웨이·웹 BFF 포함) ───────────────────────────
 include 'apps:gateway'
 include 'apps:web-bff'
 include 'apps:auth'

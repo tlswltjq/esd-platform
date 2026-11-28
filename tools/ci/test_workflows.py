@@ -175,7 +175,8 @@ class PythonToolTestsWiringTest(unittest.TestCase):
 
     NAME = "      - name: Python tool tests\n"
     COMMANDS = ("python3 -B -m unittest discover -s tools/verification -p 'test_*.py'",
-                "python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'")
+                "python3 -B -m unittest discover -s tools/measurement -p 'test_*.py'",
+                "python3 -B -m unittest discover -s tools/operations -p 'test_*.py'")
 
     def setUp(self):
         self.text = CI.read_text(encoding='utf-8')
