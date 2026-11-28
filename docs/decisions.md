@@ -2859,6 +2859,17 @@
 - 구분: 추천 수용
 - 결과: [PR #276](https://github.com/tlswltjq/esd-platform/pull/276)(기록), [PR #279](https://github.com/tlswltjq/esd-platform/pull/279)(구현, 플랫폼 T48) — 옛 가설 "Download는 License 없이도 내려받는다"는 지금 구조(사본 없이 License에 묻는다, Download R9.3)와 맞지 않아 "License 없이는 503으로 닫힌 채 실패한다"로 바꿔 세웠다(AI 해석). 근거 색인 2026-11-29 License 정지 장애 주입 행
 
+<a id="e2e-full-migration"></a>
+## 나머지 E2E 여정도 모두 `LocalStack`으로 옮기고, 기준선의 "매일 밤 확인" 조건은 뺀다
+- 문제: [결정 e2e-stack-in-junit](#e2e-stack-in-junit)의 시범 둘(소유권 격리 PR #277, Review 재시작 PR #278)과 장애 주입(PR #279)이 됐다. 남은 `verify-*.py` 여정 아홉 개(studio·catalog·store·order·payment·license·download·g4-operations·tracing)는 파이썬이 스택을 띄우고 단계마다 테스트 메서드를 따로 부른다. 두 방식이 함께 있고 앱별 비밀 허용 목록이 두 곳에 있다. [로드맵 0절](roadmap.md#scope-freeze)은 기준선 여정을 "매일 밤 CI가 확인한다"고 적었지만 야간에 도는 것은 구매 여정 하나뿐이다.
+- 선택지: A 여기서 멈춘다 / B 기준선 여정(`verify-g4-operations`)만 마저 옮기고 기준선 셋을 야간 CI에 잇는다 / C 아홉 개를 모두 옮긴다 (추천: B — 범위 동결의 완료 기준이 "기준선 여정 셋이 매일 밤 확인된다"이고 그 구멍을 메우는 가장 작은 일이다. 구조상 옳은 끝은 C라고 함께 적었다)
+- 내 의견: "C, 매일밤 확인된다는 조건은 제거"
+- 선택: C — 아홉 개를 모두 옮긴다(플랫폼 T52). 로드맵 0절의 기본 기능 완료 기준에서 "매일 밤 CI가 회귀를 확인한다"를 뺀다.
+  - 아래는 AI 해석이다. 조건을 뺀 것이므로 옮긴 여정을 야간 CI에 잇는 일은 하지 않는다. 지금 있는 야간 `stack E2E (verify-jib.py)` 작업은 건드리지 않는다(CI를 바꾸라는 지시가 아니라고 읽었다). 범위 동결(결정 201) 중이지만 사용자가 전면 이전을 골랐으므로 T52는 동결 범위 안의 일로 진행한다.
+  - 순서와 방법은 플랫폼 T52에 적는다: 스크립트 하나에 PR 하나, 작은 것부터. `verify-jib.py`는 옮기지 않는다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #280](https://github.com/tlswltjq/esd-platform/pull/280)(기록·로드맵). 구현은 플랫폼 T52의 PR들
+
 ---
 
 ## 검증하며 드러난 것
