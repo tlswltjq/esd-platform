@@ -17,32 +17,37 @@ import json
 import sys
 
 FULL = ['build']
-# (조각 이름, 태스크). 괄호 안은 프로파일 작업 시간(초).
+# (조각 이름, 태스크). 괄호 안은 2026-11-23 프로파일 작업 시간(초).
+# 2026-11-28(결정 ci-five-shards): PR #268 실행에서 조각 벽시계가 infra-catalog 435초·infra-order 338초·나머지 233~250초였다.
+# 다섯 조각으로 다시 나눠 가장 긴 조각을 order 통합 테스트 하나가 정하게 했다. payment 통합 테스트는
+# PG 어댑터 테스트를 지워(결정 remove-pg-adapters) 프로파일보다 짧다.
 INFRA_SHARDS = (
-    ('infra-payment', (
-        ':apps:payment:integrationTest',      # 405
-        ':apps:payment:migrationTest',        # 205
-        ':apps:store:integrationTest',        # 99
-    )),
     ('infra-order', (
         ':apps:order:integrationTest',        # 347
         ':apps:order:migrationTest',          # 171
-        ':apps:license:integrationTest',      # 198
         ':apps:download:integrationTest',     # 21
+    )),
+    ('infra-payment', (
+        ':apps:payment:integrationTest',      # 405(어댑터 테스트 삭제 전)
+        ':apps:payment:migrationTest',        # 205
     )),
     ('infra-catalog', (
         ':common:messaging-kafka:integrationTest',  # 156
         ':apps:catalog:integrationTest',      # 147
+        ':apps:store:integrationTest',        # 99
+    )),
+    ('infra-license', (
+        ':apps:license:integrationTest',      # 198
         ':apps:settlement:integrationTest',   # 134
-        ':apps:studio:integrationTest',       # 113
-        ':apps:auth:integrationTest',         # 83
         ':apps:web-bff:integrationTest',      # 63 (결정 223: BFF 세션 통합 테스트가 옮겨 옴)
     )),
     ('infra-messaging', (
+        ':apps:studio:integrationTest',       # 113
+        ':apps:auth:integrationTest',         # 83
         ':apps:review:integrationTest',       # 83
         ':common:testcontainers:integrationTest',      # 77
         ':common:messaging:integrationTest',  # 49
-        ':apps:gateway:integrationTest',      # GW-T18: 접근 기준 시각 Redis 통합 테스트(미측정, 가장 짧은 조각)
+        ':apps:gateway:integrationTest',      # GW-T18: 접근 기준 시각 Redis 통합 테스트(미측정)
     )),
 )
 

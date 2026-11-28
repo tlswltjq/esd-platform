@@ -2755,6 +2755,38 @@
 - 구분: 추천 수용
 - 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268)
 
+<a id="ci-five-shards"></a>
+## CI 통합·이행 테스트 조각을 다섯으로 다시 나눈다
+- 문제: PR 대기 시간을 줄이려 한다. 전체 빌드 PR의 CI 시간은 가장 긴 조각이 정하는데, PR #268 마지막 실행에서 `infra-catalog` 435초, `infra-order` 338초, 나머지 233~250초였다. payment 통합 테스트가 줄어([결정 remove-pg-adapters](#remove-pg-adapters)) `infra-payment`에는 여유가 생겼다.
+- 선택지: A 조각 4개 그대로 재배치(가장 긴 조각이 `infra-order` 수준) / B 조각을 5개로 늘려 재배치 (추천: B — 공개 저장소라 러너 비용이 없고 가장 긴 조각이 더 내려간다. 조각당 준비 약 10초가 는다)
+- 내 의견: "추천대로 모두 실행" (결정 전 발언: "게이트 점검말고 PR시 대기시간을 줄이고싶어")
+- 선택: B — 배치는 `tools/ci/build_shards.py`가 정본이다([결정 217](#ci-build-shards)의 나눔 규칙은 그대로).
+- 구분: 추천 수용
+- 결과: [PR #270](https://github.com/tlswltjq/esd-platform/pull/270), 근거 색인 행
+
+<a id="review-parallel-with-ci"></a>
+## 교차 리뷰를 CI가 끝나기를 기다리지 않고 push 직후에 시작한다
+- 문제: push → CI 대기 → 교차 리뷰 순서로 진행하면 리뷰 시간이 CI 시간 뒤에 그대로 더해진다. Codex는 테스트를 실행하지 않으므로([결정 145](#review-packet)) CI 결과가 없어도 리뷰를 시작할 수 있다.
+- 선택지: A 지금처럼 CI 뒤에 리뷰 / B push 직후 CI와 동시에 리뷰를 시작하고, CI가 실패해 고치면 그 차분을 재리뷰로 넘긴다
+- 내 의견: "추천대로 모두 실행"
+- 선택: B — 채팅에서 AI는 A·B의 득실만 적고 따로 추천을 정하지 않았다. 사용자가 세 방안을 모두 실행하라고 했다. 병합 조건(필수 검사 통과, 리뷰 판정 기록)은 그대로다. CI 실패를 고친 커밋은 재리뷰 횟수([결정 rereview-cap-two](#rereview-cap-two))에 그대로 센다.
+- 구분: 사용자 선택(추천 없음)
+- 결과: [PR #270](https://github.com/tlswltjq/esd-platform/pull/270)
+
+<a id="ci-scope-leaf-paths"></a>
+## e2e·benchmarks·루트 Compose·scripts만 바뀐 PR은 전체 빌드를 돌리지 않는다
+- 문제: [결정 207](#ci-build-scope)은 `apps/<앱>/` 밖의 경로가 하나라도 바뀌면 전체 빌드(통합·이행 테스트 전부)를 돌린다. `e2e/`만 고친 PR도 그렇다.
+- 선택지: A 그대로 / B 영향 범위를 Gradle 설정에서 확인할 수 있는 경로만 좁힌다 / C 공통 모듈·인프라까지 의존 그래프로 좁힌다
+- 내 의견: "추천대로 모두 실행"
+- 선택: B — 채팅에서 AI는 범위를 좁히는 방안의 득실만 적었고, 좁힐 경로는 구현하며 정했다(AI 해석). 대상은 넷이다.
+  - `e2e/`: 어느 모듈도 의존하지 않는다 → `:e2e:build`.
+  - `benchmarks/messaging/`: 어느 모듈도 의존하지 않는다 → `:benchmarks:messaging:build`.
+  - 저장소 루트의 `docker-compose*.yml`: `common/test`의 배포 계약 테스트만 읽는다 → `:common:test:test`.
+  - `scripts/`: Gradle 입력이 아니다 → Gradle 생략([결정 216](#ci-scope-non-gradle-paths)의 허용 목록에 더함). 그 Python 테스트는 `plan`이 늘 돌린다.
+  - 버린 것: C는 `common/`·`infra/`가 어느 앱에 닿는지 경로로 알 수 없어 잘못 좁히면 깨진 변경이 main에서야 드러난다. main push는 지금처럼 항상 전체를 돈다.
+- 구분: 사용자 선택(추천 없음)
+- 결과: [PR #270](https://github.com/tlswltjq/esd-platform/pull/270)
+
 ---
 
 ## 검증하며 드러난 것
