@@ -2,23 +2,23 @@
 
     wait   필수 검사가 등록될 때까지 기다린 뒤(push 직후 바로 감시하면 즉시 끝난다, PR #122),
            모두 끝날 때까지 기다린다. `--head-sha`를 주면 PR head가 그 커밋이 된 뒤부터 센다.
-           종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과. draft가 아닌 PR의 건너뛴 build는 draft 때의
-           지난 결과라 빼고 새 build를 기다린다(ci.yml은 draft에서만 건너뛴다, PR #244).
-    ready  draft PR을 `gh pr ready`로 바꾸고 wait한다. head가 같아 이전 결과(draft 때 SKIPPED build)가
-           남으므로, 바꾸기 전 검사 job 링크를 기록해 두고 ready가 다시 돌리는 `build`는 새 링크가 나올
-           때까지 기다린다. `review-gate`는 다시 돌지 않으니 같은 head의 최신 결과를 쓴다(PR #226 R8·R9).
+           종료 코드: 0 모두 pass, 1 실패·건너뜀·취소, 3 시간 초과. 같은 이름의 검사는 가장 최근 job만 본다.
+    ready  draft PR을 `gh pr ready`로 바꾸고 wait한다. 결정 build-on-draft로 draft에서도 build가 돌고 ready는
+           build를 다시 돌리지 않으므로, 같은 head의 결과로 판정한다.
     edit   `--body-file`로 본문을 바꾸고 wait한다. 본문 수정은 `review-gate`만 다시 돌린다. 본문이 글자 그대로
            같으면 보내지 않고 지금 결과로 wait한다. 보냈으면 공백만 달라도 새 review-gate를 기다린다.
-           (ci.yml은 ready_for_review에, review-gate.yml은 edited에 돈다. 트리거를 바꾸면 RERUN도 바꾼다.)
+           (review-gate.yml은 edited에 돈다. 트리거를 바꾸면 RERUN도 바꾼다.)
     check  병합 조건을 판정만 한다. 여러 PR을 주면 모두 판정한다.
     merge  주어진 순서대로 판정 → `gh pr merge --merge` → MERGED 확인을 하나씩 한다.
            한 PR이라도 조건을 못 채우거나 병합이 실패하면 거기서 멈춘다.
 
-병합 조건(결정 107·112·118·137):
-- 열린 PR이고 draft가 아니다(draft의 건너뛴 build는 CLEAN으로 보여도 통과가 아니다).
+병합 조건(결정 107·112·118·137·ai-judges-adopted-high·stop-merge-on-red-main):
+- main의 가장 최근에 끝난 push CI가 실패가 아니다. 실패면 본문에 그 run 번호(`actions/runs/<번호>`)를 적은,
+  그 실패를 고치는 PR만 병합한다.
+- 열린 PR이고 draft가 아니다(draft는 작업 중이다).
 - `mergeStateStatus`가 CLEAN이다.
 - head 커밋에서 가장 최근에 시작한 `build`·`review-gate` 검사가 모두 COMPLETED·SUCCESS다.
-- `리뷰 판정` 표에 사용자 판정이 남아 있지 않다: 판정이 부분 반영·기각이거나, 지적이 high이거나,
+- `리뷰 판정` 표에 사용자 판정이 남아 있지 않다: 판정이 부분 반영·기각이거나, 채택·이관하지 않은 high이거나,
   지적·판정·이유에 "정책"이 들어간 행은 **판정 칸**에 비어 있지 않은 `사용자 확정: "<원문>"`이 있어야 한다
   (`사용자 확정 대기`·이유 칸의 언급은 확정이 아니다, PR #226 R2). "정책" 낱말 검사는 정책 변경 지적을
   놓치지 않으려는 보수적 근사다(R3). 낱말 없이 정책을 바꾸는 지적은 사람이 확인한다.
@@ -40,7 +40,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import review_gate  # noqa: E402
 
 REQUIRED = ('build', 'review-gate')
-RERUN = {'ready': ('build',), 'edit': ('review-gate',)}
+RERUN = {'edit': ('review-gate',)}
+MAIN_FAILURES = ('failure', 'timed_out', 'startup_failure')
 VIEW_FIELDS = 'number,state,isDraft,mergeStateStatus,headRefOid,body,statusCheckRollup'
 
 
@@ -104,7 +105,7 @@ def fail(err):
 
 
 def ci_started(number, old_links=frozenset()):
-    """CI가 실제로 돌고 있다: 건너뛰지 않은(draft의 `skipping`이 아닌) plan·gradle 검사가 있고, old_links(이벤트 전
+    """CI가 실제로 돌고 있다: 건너뛰지 않은 plan·gradle 검사가 있고, old_links(이벤트 전
     링크)에 없다. 본문 수정은 커밋이 그대로라 이전 CI도 증거로 인정한다(old_links를 넘기지 않는다)."""
     return any((check.get('name') or '').startswith(STARTED) and check.get('bucket') != 'skipping'
                and check.get('link') not in old_links
@@ -149,33 +150,6 @@ def latest_generation(checks):
             if job_order(check) is None or job_order(check) >= newest[check.get('name') or '']]
 
 
-def without_draft_skips(number, checks):
-    """ci.yml은 draft에서만 build를 건너뛴다. draft가 아닌 PR의 skipping build는 draft 때의 지난 결과이므로, 그것과 같은
-    이름에서 그보다 앞선 job까지 모두 빼고 새 build를 기다린다. 예전 성공이 더 최근의 건너뜀을 대신하면 안 되고(PR #245
-    리뷰 1), 새 build는 조각이 끝난 뒤에야 등록되므로(결정 217) 건너뛴 build만 보고 실패로 끝내지도 않는다(PR #244).
-    건너뜀보다 뒤의 job과 링크가 없는 실행은 남긴다. draft면 그대로 둬 `gh pr ready` 안내로 끝낸다."""
-    checks = latest_generation(checks)
-    skipped = {}
-    unordered = set()
-    for check in checks:
-        name = check.get('name') or ''
-        if name.startswith('build') and check.get('bucket') == 'skipping':
-            if job_order(check) is None:
-                # 링크 없는 건너뜀은 세대를 알 수 없다. 그 이름은 아무것도 빼지 않아 예전 성공으로 통과하지 않는다(3차 재리뷰).
-                unordered.add(name)
-            else:
-                skipped[name] = max(skipped.get(name, -1), job_order(check))
-    if not skipped or view(number)['isDraft']:
-        return checks
-    def stale(check):
-        name = check.get('name') or ''
-        if name not in skipped or name in unordered:
-            return False
-        order = job_order(check)
-        return check.get('bucket') == 'skipping' or (order is not None and order < skipped[name])
-    return [check for check in checks if not stale(check)]
-
-
 def links(checks):
     return {check.get('link') for check in checks if check.get('link')}
 
@@ -195,9 +169,9 @@ def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
         checks = required_checks(args.number)
         if renew:
             checks = fresh(checks, renew, old_links)
-        checks = without_draft_skips(args.number, checks)
+        checks = latest_generation(checks)
         # 결정 217: 빠진 것이 늦게 등록되는 build뿐이고 이벤트 뒤 CI가 시작됐을 때만 등록 제한을 넘어 기다린다
-        # (PR #234 3차 리뷰: ready 전 plan·gradle은 old_all로, draft의 건너뛴 검사는 bucket으로 뺀다).
+        # (PR #234 3차 리뷰: 이벤트 전 plan·gradle은 old_all로, 건너뛴 검사는 bucket으로 뺀다).
         if not registered(checks) and time.time() > register_deadline and not (
                 missing_required(checks) == ['build'] and ci_started(args.number, old_all)):
             print('시간 초과: {}초 동안 필수 검사({})가 모두 등록되지 않았다.'.format(
@@ -210,10 +184,7 @@ def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
             if state == 'pass':
                 print('통과: 필수 검사 {}개'.format(len(checks)))
                 return 0
-            if view(args.number)['isDraft']:
-                print('실패: draft PR이라 build가 건너뛰었다. 검증을 마쳤으면 `gh pr ready`를 먼저 한다(결정 137).')
-            else:
-                print('실패: 통과하지 않은 필수 검사가 있다.')
+            print('실패: 통과하지 않은 필수 검사가 있다.')
             return 1
         if time.time() > deadline:
             print('시간 초과: {}초 안에 필수 검사가 끝나지 않았다.'.format(args.timeout))
@@ -223,12 +194,10 @@ def wait(args, renew=(), old_links=frozenset(), old_all=frozenset()):
 
 def ready(args):
     if not view(args.number)['isDraft']:
-        print('실패: draft PR이 아니다. ready가 build를 다시 돌리지 않으니 wait를 쓴다.')
+        print('실패: draft PR이 아니다. wait를 쓴다.')
         return 2
-    old = links(required_checks(args.number))
-    old_all = links(listed_checks(args.number, strict=True))
     gh(['pr', 'ready', str(args.number)])
-    return wait(args, RERUN['ready'], old, old_all)
+    return wait(args)
 
 
 def edit(args):
@@ -250,12 +219,33 @@ def latest(rollup, prefix):
     return max(runs, key=lambda item: item.get('startedAt') or '', default=None)
 
 
-def problems(pr):
+def main_ci_failure():
+    """결정 stop-merge-on-red-main: main의 가장 최근에 끝난 push CI가 실패면 {id, url, sha}, 아니면 None.
+    읽지 못하면 통과로 바꾸지 않고 멈춘다."""
+    code, out, err = gh(['run', 'list', '--workflow', 'ci.yml', '--branch', 'main', '--event', 'push',
+                         '--status', 'completed', '--limit', '1', '--json', 'databaseId,conclusion,headSha,url'],
+                        check=False)
+    if code != 0:
+        raise SystemExit('실패: main CI 상태를 읽지 못함: ' + err.strip())
+    runs = json.loads(out or '[]')
+    if not runs or runs[0].get('conclusion') not in MAIN_FAILURES:
+        return None
+    return {'id': runs[0]['databaseId'], 'url': runs[0].get('url'), 'sha': runs[0].get('headSha')}
+
+
+def fixes_main(pr, red):
+    return re.search(r'actions/runs/' + str(red['id']) + r'(?!\d)', pr.get('body') or '') is not None
+
+
+def problems(pr, red=None):
     found = []
+    if red is not None and not fixes_main(pr, red):
+        found.append('main CI가 실패해 있다(run {}, {}). 그 실패를 고치는 PR만 병합한다 — 고치는 PR은 본문에 '
+                     '`actions/runs/{}`를 적는다(결정 stop-merge-on-red-main)'.format(red['id'], red['url'], red['id']))
     if pr.get('state') != 'OPEN':
         found.append('열린 PR이 아니다: ' + str(pr.get('state')))
     if pr.get('isDraft'):
-        found.append('draft PR이다(`gh pr ready` 뒤 build를 다시 기다린다)')
+        found.append('draft PR이다(`pr_finish.py ready`로 바꾼다)')
     if pr.get('mergeStateStatus') != 'CLEAN':
         found.append('mergeStateStatus가 CLEAN이 아니다: ' + str(pr.get('mergeStateStatus')))
     for name in REQUIRED:
@@ -280,9 +270,10 @@ def report(pr, found):
 
 def check(args):
     failed = 0
+    red = main_ci_failure()
     for number in args.numbers:
         pr = view(number)
-        found = problems(pr)
+        found = problems(pr, red)
         report(pr, found)
         failed += bool(found)
     return 1 if failed else 0
@@ -302,7 +293,8 @@ def merged_state(number, attempts=5, delay=2):
 def merge(args):
     for number in args.numbers:
         pr = view(number)
-        found = problems(pr)
+        # 앞 PR을 병합한 뒤 main CI가 바뀔 수 있어 PR마다 다시 읽는다.
+        found = problems(pr, main_ci_failure())
         report(pr, found)
         if found:
             print('멈춤: #{}에서 멈췄다. 뒤 PR은 병합하지 않았다.'.format(number))

@@ -36,7 +36,7 @@ class ProblemsTest(unittest.TestCase):
         self.assertEqual([], pr_finish.problems(pr()))
 
     def test_draft_is_not_mergeable_even_when_clean(self):
-        # 결정 137: draft의 건너뛴 build는 CLEAN으로 보여도 통과가 아니다.
+        # 결정 137: draft는 작업 중이다. build가 통과해도 병합하지 않는다.
         found = pr_finish.problems(pr(isDraft=True))
         self.assertTrue(any('draft' in item for item in found))
 
@@ -61,6 +61,49 @@ class ProblemsTest(unittest.TestCase):
 
     def test_not_clean(self):
         self.assertTrue(pr_finish.problems(pr(mergeStateStatus='BLOCKED')))
+
+    def test_red_main_blocks_every_pr_but_the_one_that_names_the_failed_run(self):
+        # 결정 stop-merge-on-red-main: main CI가 실패해 있으면 그 run을 본문에 적은(고치는) PR만 병합한다.
+        red = {'id': 4611, 'url': 'https://github.com/o/r/actions/runs/4611', 'sha': 'c' * 40}
+        found = pr_finish.problems(pr(), red)
+        self.assertEqual(1, len(found))
+        self.assertIn('main CI가 실패해 있다', found[0])
+        self.assertIn('4611', found[0])
+        fixing = pr(body=pr()['body'] + '\nmain CI 복구: https://github.com/o/r/actions/runs/4611\n')
+        self.assertEqual([], pr_finish.problems(fixing, red))
+        # 숫자가 다른 run 번호의 일부로만 나오면 고치는 PR이 아니다.
+        self.assertTrue(pr_finish.problems(pr(body=pr()['body'] + '\nruns/46110\n'), red))
+        self.assertEqual([], pr_finish.problems(pr(), None))
+
+
+class MainCiTest(unittest.TestCase):
+    def test_reads_the_latest_completed_push_run_on_main(self):
+        listed = json.dumps([{'databaseId': 9, 'conclusion': 'failure', 'headSha': 'd' * 40, 'url': 'u9'}])
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')) as gh:
+            self.assertEqual({'id': 9, 'url': 'u9', 'sha': 'd' * 40}, pr_finish.main_ci_failure())
+        command = gh.call_args.args[0]
+        for part in (['--workflow', 'ci.yml'], ['--branch', 'main'], ['--event', 'push'], ['--status', 'completed']):
+            self.assertIn(' '.join(part), ' '.join(command))
+        for conclusion in ('success', 'cancelled', 'skipped'):
+            listed = json.dumps([{'databaseId': 9, 'conclusion': conclusion, 'headSha': 'd' * 40, 'url': 'u9'}])
+            with mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')):
+                self.assertIsNone(pr_finish.main_ci_failure(), conclusion)
+        with mock.patch.object(pr_finish, 'gh', return_value=(0, '[]', '')):
+            self.assertIsNone(pr_finish.main_ci_failure())
+
+    def test_unreadable_main_ci_stops_instead_of_passing(self):
+        with mock.patch.object(pr_finish, 'gh', return_value=(1, '', 'HTTP 502')):
+            with self.assertRaises(SystemExit):
+                pr_finish.main_ci_failure()
+
+    def test_merge_stops_on_red_main(self):
+        red = {'id': 4611, 'url': 'u', 'sha': 'c' * 40}
+        with mock.patch.object(pr_finish, 'main_ci_failure', return_value=red), \
+                mock.patch.object(pr_finish, 'view', return_value=pr()), \
+                mock.patch.object(pr_finish, 'gh') as gh, redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(1, pr_finish.merge(argparse.Namespace(numbers=[7])))
+        gh.assert_not_called()
+        self.assertIn('main CI가 실패해 있다', out.getvalue())
 
 
 class PendingUserVerdictsTest(unittest.TestCase):
@@ -124,6 +167,11 @@ class PendingUserVerdictsTest(unittest.TestCase):
 
 
 class MergeTest(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(pr_finish, 'main_ci_failure', return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_stops_at_first_unmergeable_pr_and_merges_nothing_after(self):
         # careers에서 draft #21 실패 뒤 #24가 먼저 병합된 사례.
         views = {1: pr(number=1, isDraft=True), 2: pr(number=2)}
@@ -184,18 +232,14 @@ class WaitTest(unittest.TestCase):
                 mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
 
-    def test_ready_waits_for_a_new_build_and_keeps_existing_review_gate(self):
-        # PR #226: ready 직후 draft 때의 SKIPPED build로 끝났다. R8: review-gate는 다시 돌지 않는다.
-        # R9: 시간이 아니라 이벤트 전 job 링크로 구분한다.
-        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
-        old_build = {'name': 'build (unit)', 'bucket': 'skipping', 'link': 'job/2'}
-        new_build = {'name': 'build (unit)', 'bucket': 'pass', 'link': 'job/3'}
-        sequence = [[gate, old_build], [gate, old_build], [gate, old_build, new_build]]
+    def test_ready_uses_the_build_that_already_ran_on_the_draft(self):
+        # 결정 build-on-draft: draft에서도 build가 돌고, ready는 build를 다시 돌리지 않는다. 같은 head의 결과로 판정한다.
+        checks = [{'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}, {'name': BUILD, 'bucket': 'pass', 'link': 'job/2'}]
         with mock.patch.object(pr_finish, 'view', return_value=pr(isDraft=True)), \
                 mock.patch.object(pr_finish, 'gh', return_value=(0, '', '')) as gh, \
-                mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), redirect_stdout(io.StringIO()):
+                mock.patch.object(pr_finish, 'required_checks', return_value=checks), redirect_stdout(io.StringIO()):
             self.assertEqual(0, pr_finish.ready(self.args()))
-        self.assertEqual(['pr', 'ready', '7'], gh.call_args.args[0])
+        self.assertEqual([['pr', 'ready', '7']], [call.args[0] for call in gh.call_args_list])
 
     def test_ready_refuses_a_non_draft(self):
         with mock.patch.object(pr_finish, 'view', return_value=pr()), \
@@ -232,36 +276,13 @@ class WaitTest(unittest.TestCase):
         self.assertEqual(1, sum(1 for call in gh.call_args_list if call.args[0][:2] == ['pr', 'edit']))
         Path(handle.name).unlink()
 
-    def test_skipping_build_is_failure_and_mentions_draft(self):
-        checks = [{'name': 'build', 'bucket': 'skipping'}, {'name': 'review-gate', 'bucket': 'pass'}]
+    def test_skipping_build_is_failure(self):
+        # 결정 build-on-draft: ci.yml은 PR에서 build를 건너뛰지 않는다. 건너뛴 build는 통과가 아니다.
+        checks = [{'name': BUILD, 'bucket': 'skipping'}, {'name': 'review-gate', 'bucket': 'pass'}]
         out = io.StringIO()
-        with mock.patch.object(pr_finish, 'required_checks', return_value=checks), \
-                mock.patch.object(pr_finish, 'view', return_value=pr(isDraft=True)), redirect_stdout(out):
+        with mock.patch.object(pr_finish, 'required_checks', return_value=checks), redirect_stdout(out):
             self.assertEqual(1, pr_finish.wait(self.args()))
-        self.assertIn('gh pr ready', out.getvalue())
-
-    def test_a_non_draft_ignores_the_skipped_build_from_its_draft_days(self):
-        # PR #244: ready 뒤 새 build가 등록되기 전(결정 217)에는 draft 때 건너뛴 build만 보인다. ci.yml은 draft에서만
-        # build를 건너뛰므로, draft가 아닌 PR의 skipping build는 지난 결과다. 실패로 끝내지 않고 새 build를 기다린다.
-        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
-        skipped = {'name': BUILD, 'bucket': 'skipping', 'link': 'job/2'}
-        new_build = {'name': BUILD, 'bucket': 'pass', 'link': 'job/3'}
-        sequence = [[gate, skipped], [gate, skipped], [gate, skipped, new_build]]
-        with mock.patch.object(pr_finish, 'required_checks', side_effect=sequence), \
-                mock.patch.object(pr_finish, 'view', return_value=pr()), \
-                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
-            self.assertEqual(0, pr_finish.wait(self.args(register_timeout=-1)))
-        # 새 build가 실패하면 그대로 실패다.
-        failed = {'name': BUILD, 'bucket': 'fail', 'link': 'job/3'}
-        with mock.patch.object(pr_finish, 'required_checks', side_effect=[[gate, skipped], [gate, skipped, failed]]), \
-                mock.patch.object(pr_finish, 'view', return_value=pr()), \
-                mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
-            self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
-        # 새 CI도 시작되지 않았으면 등록 시간 초과(3)다. 건너뛴 build를 실패(1)로 보고하지 않는다.
-        with mock.patch.object(pr_finish, 'required_checks', return_value=[gate, skipped]), \
-                mock.patch.object(pr_finish, 'view', return_value=pr()), \
-                mock.patch.object(pr_finish, 'ci_started', return_value=False), redirect_stdout(io.StringIO()):
-            self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1)))
+        self.assertNotIn('gh pr ready', out.getvalue())
 
     def test_an_older_success_does_not_stand_in_for_a_newer_skipped_build(self):
         # PR #245 리뷰 1: 같은 head에 예전 성공 build와 더 최근의 건너뛴 build가 함께 보이면, 건너뛴 것만 빼고 예전
@@ -277,7 +298,8 @@ class WaitTest(unittest.TestCase):
                 mock.patch.object(pr_finish, 'view', return_value=pr()), \
                 mock.patch.object(pr_finish, 'ci_started', return_value=True), redirect_stdout(io.StringIO()):
             self.assertEqual(1, pr_finish.wait(self.args(register_timeout=-1)))
-        self.assertEqual(3, reads.call_count)
+        # 결정 build-on-draft: 가장 최근 세대(건너뜀)로 바로 실패한다. 예전 성공으로 통과하지 않는다.
+        self.assertEqual(1, reads.call_count)
 
     def test_a_new_build_after_the_skip_is_judged_and_distinct_names_are_separate(self):
         # PR #245 2차 재리뷰: 건너뜀과 같은 초에 시작한 새 build도 job ID가 더 크면 버리지 않고 판정한다(시간 초과 3이 아님).
@@ -329,33 +351,7 @@ class WaitTest(unittest.TestCase):
                 mock.patch.object(pr_finish, 'gh', return_value=(0, listed, '')), redirect_stdout(io.StringIO()):
             self.assertEqual(3, pr_finish.wait(self.args(register_timeout=-1), (), frozenset(), {'job/old'}))
 
-    def test_ready_records_every_check_from_before_the_event(self):
-        gate = {'name': 'review-gate', 'bucket': 'pass', 'link': 'job/1'}
-        skipped_plan = json.dumps([{'name': 'plan (scope)', 'link': 'job/5'}, gate])
-        calls = []
-
-        def fake_gh(command, check=True):
-            calls.append(command)
-            return (0, skipped_plan, '') if command[:2] == ['pr', 'checks'] else (0, '', '')
-        with mock.patch.object(pr_finish, 'view', return_value=pr(isDraft=True)), \
-                mock.patch.object(pr_finish, 'gh', side_effect=fake_gh), \
-                mock.patch.object(pr_finish, 'required_checks', return_value=[gate]), redirect_stdout(io.StringIO()):
-            self.assertEqual(3, pr_finish.ready(self.args(register_timeout=-1)))
-        self.assertIn(['pr', 'ready', '7'], calls)
-
-    def test_a_failed_snapshot_before_the_event_stops_before_sending_it(self):
-        # PR #234 4차 리뷰: 이벤트 전 기록이 비면 이전 plan을 새 CI로 오인하므로 ready를 보내지 않고 멈춘다.
-        calls = []
-
-        def fake_gh(command, check=True):
-            calls.append(command)
-            return (1, '', 'HTTP 502') if command[:2] == ['pr', 'checks'] else (0, '', '')
-        with mock.patch.object(pr_finish, 'view', return_value=pr(isDraft=True)), \
-                mock.patch.object(pr_finish, 'gh', side_effect=fake_gh), \
-                mock.patch.object(pr_finish, 'required_checks', return_value=[]), redirect_stdout(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                pr_finish.ready(self.args())
-        self.assertNotIn(['pr', 'ready', '7'], calls)
+    def test_listed_checks_distinguishes_no_checks_from_errors(self):
         with mock.patch.object(pr_finish, 'gh', return_value=(1, '', 'no checks reported on the branch')):
             self.assertEqual([], pr_finish.listed_checks(7, strict=True))
         with mock.patch.object(pr_finish, 'gh', return_value=(1, '', 'HTTP 502')):
