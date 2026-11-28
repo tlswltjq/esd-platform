@@ -2,212 +2,35 @@ package com.stove.e2e;
 
 import static org.assertj.core.api.Assertions.fail;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 
 /**
- * 한 저니가 네 장을 이어 간다 — 트랙 A 가 만든 상품을 B 가 사고, B 가 만든 주문을 C 가 지급·환불한다.
- * 장 사이를 건너는 값은 인스턴스가 아니라 <b>시나리오</b>의 것이라 여기 static 으로 둔다
- * (테스트 JVM 하나, {@code maxParallelForks = 1}).
+ * 장애 주입 장({@link ServiceOutageChaosTest})이 쓰는 회원 세션 자리.
+ *
+ * <p>이 값을 채우던 옛 인수 여정(트랙 A·B·C)은 지금 없는 API를 불러 지웠다(플랫폼 T43). 지금은 세션을 만드는
+ * 곳이 없어 장애 주입 장은 선행 단계 실패로 끝난다. 다시 세울지는 플랫폼 tasks.md의 T48에서 정한다.
  *
  * <h2>건너뛴 것을 통과로 읽지 않는다</h2>
  *
- * <p>셸이 {@code require} 와 {@code EXPECTED_CHECKS} 로 막던 것이 <b>"통과처럼 읽히는 미실행"</b>
- * 이었다. 상품을 못 찾으면 트랙 B·C·3-B 38건이 통째로 빠지는데 요약은 "실패 1건" 만 보여줬다.
- *
- * <p>JUnit 으로 옮기면서 그 함정을 새 언어로 다시 파지 않는다 — <b>{@code Assumptions} 를 쓰지 않는다.</b>
- * 선행 단계가 값을 만들지 못했으면 뒤 장은 <i>건너뛴 것(skipped)</i> 이 아니라 <b>실패</b>다.
- * 스킵은 리포트에서 초록 옆에 조용히 앉지만, 실패는 이유를 말하며 빨개진다.
+ * <p><b>{@code Assumptions} 를 쓰지 않는다.</b> 선행 단계가 값을 만들지 못했으면 뒤 장은 <i>건너뛴 것(skipped)</i>
+ * 이 아니라 <b>실패</b>다. 스킵은 리포트에서 초록 옆에 조용히 앉지만, 실패는 이유를 말하며 빨개진다.
  */
 final class Journey {
 
-    /** settlement 의 {@code self-seller-id}(1) 가 아니므로 입점(PARTNER) 판매다 — 수수료 30% 가 붙는다. */
-    static final long SELLER = 1001L;
-
-    static final int PRICE = 18_000;
-    /** {@code partner-fee-rate} 기본값 0.3000. 셸이 그랬듯 기대값을 스스로 계산해 둔다. */
-    static final int FEE = PRICE * 30 / 100;
-    static final int NET = PRICE - FEE;
-
-    /**
-     * 실행마다 다른 값. <b>스택과 볼륨이 재사용된다</b> — 원격 스택은 계속 떠 있고 `down` 도 볼륨을
-     * 남기므로, 고정 코드를 쓰면 두 번째 실행부터 이전 실행의 데이터와 섞인다.
-     */
-    static final String STAMP = System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6);
-
-    static final String PRODUCT_CODE = "GAME-E2E-" + STAMP;
-    /**
-     * 제목에도 스탬프를 박는다. <b>검색은 이름만 본다</b> —
-     * {@code ProductSearchRepository.findByStatusAndNameContaining} 이고 {@code productCode} 는
-     * 대상이 아니다. 그래서 제목이 고정이면 회차마다 같은 이름의 상품이 쌓이고,
-     * 검색 결과 첫 장(20건)이 차는 순간부터 <b>이번 회차의 상품은 구조적으로 결과에 없다.</b>
-     * 실제로 2026-08-13 에 첫 장이 찼고 그 뒤 인수 시나리오가 계속 빨갰다.
-     */
-    static final String PRODUCT_TITLE = "인수 시나리오 게임 " + STAMP;
     static long MEMBER;
-    /** 미보유 회원. 다운로드 권한이 소유 검사에 걸리는지 보려면 사지 않은 사람이 하나 필요하다. */
-    static long OTHER_MEMBER;
 
-    /** 승인 경로의 PG 거래번호. 거절 경로는 사전등록이 돌려준 값을 써야 한다 — {@link #failPgTxId()}. */
-    static String PG_TX;
-
-    /**
-     * PG 멱등키. <b>같은 접미사면 같은 키가 나온다</b> — 중복 콜백 흡수를 확인하려면
-     * 트랙 C 가 트랙 B 와 똑같은 키로 다시 보낼 수 있어야 한다.
-     */
-    static String idempotencyKey(String suffix) {
-        return "IDEM-%s-%s".formatted(suffix, STAMP);
-    }
-
-    // ── 장 사이를 건너는 값 ────────────────────────────────────────
-    private static Long gameId;
-    private static Long productId;
-    private static String orderNo;
-    private static String buildChecksum;
-    private static boolean downloadVerified;
-    private static PromotionEvidence sellerPromotion;
-    private static PromotionEvidence platformPromotion;
-    private static String failOrderNo;
-    private static String failPgTxId;
-    private static String paymentTraceId;
-    private static Instant paidAt;
-    private static BffSession creator;
-    private static BffSession reviewer;
     private static BffSession member;
-    private static BffSession otherMember;
-    private static BffSession admin;
 
     private Journey() {
     }
 
-    static void gameId(Long value) {
-        gameId = value;
-    }
-
-    static long gameId() {
-        return require(gameId, "gameId", "1장 트랙 A 의 프로젝트 생성");
-    }
-
-    static void productId(Long value) {
-        productId = value;
-    }
-
-    static long productId() {
-        return require(productId, "productId", "1장 트랙 A 의 상품 마스터 생성");
-    }
-
-    static void orderNo(String value) {
-        orderNo = value;
-    }
-
-    static String orderNo() {
-        return require(orderNo, "orderNo", "2장 트랙 B 의 주문 생성");
-    }
-
-    static void buildChecksum(String value) { buildChecksum = value; }
-
-    static String buildChecksum() {
-        return require(buildChecksum, "빌드 SHA-256", "1장 트랙 A 의 실제 ZIP 업로드");
-    }
-
-    static void downloadVerified() { downloadVerified = true; }
-
-    static boolean isDownloadVerified() { return downloadVerified; }
-
-    record PromotionEvidence(long promotionId, String orderNo) {}
-
-    static void sellerPromotion(long id, String orderNo) {
-        sellerPromotion = new PromotionEvidence(id, orderNo);
-    }
-
-    static PromotionEvidence sellerPromotion() {
-        return require(sellerPromotion, "판매자 행사 주문", "운영 할인 판매자 부담 시나리오");
-    }
-
-    static void platformPromotion(long id, String orderNo) {
-        platformPromotion = new PromotionEvidence(id, orderNo);
-    }
-
-    static PromotionEvidence platformPromotion() {
-        return require(platformPromotion, "플랫폼 행사 주문", "운영 할인 플랫폼 부담 시나리오");
-    }
-
-    static void failOrderNo(String value) {
-        failOrderNo = value;
-    }
-
-    static String failOrderNo() {
-        return require(failOrderNo, "실패 검증용 orderNo", "3-B 의 주문 생성");
-    }
-
-    static void failPgTxId(String value) {
-        failPgTxId = value;
-    }
-
-    static String failPgTxId() {
-        return require(failPgTxId, "실패 검증용 pgTxId", "3-B 의 PG 사전등록");
-    }
-
-    /**
-     * 결제 승인이 확정된 순간과 그 요청의 traceId 를 함께 잡아 둔다.
-     *
-     * <p>둘 다 <b>같은 한 번의 콜백</b>에서 나와야 의미가 있다. 종단 지연은 이 시각부터
-     * 라이선스가 보이는 시각까지고, 트레이스 판정은 이 traceId 가 여섯 서비스에 걸치는지를 본다 —
-     * 팬아웃이 시작되는 지점이 하나이므로 기준점도 하나다.
-     */
-    static void paymentAccepted(String traceId) {
-        paymentTraceId = traceId;
-        paidAt = Instant.now();
-    }
-
-    static String paymentTraceId() {
-        return require(paymentTraceId, "결제 콜백의 traceId",
-                "2장 트랙 B 의 승인 콜백 (응답 헤더 X-Correlation-Id)");
-    }
-
-    /** 결제 승인부터 지금까지의 벽시계 시간. 사용자가 "샀는데 언제 받나" 로 느끼는 유일한 숫자다. */
-    static Duration sincePaid() {
-        return Duration.between(require(paidAt, "결제 승인 시각", "2장 트랙 B 의 승인 콜백"), Instant.now());
-    }
-
     /** The BFF session determines ownership; a caller-supplied member header has no authority. */
     static Map<String, String> asMember(long memberId) {
-        BffSession session = memberId == MEMBER ? member
-                : memberId == OTHER_MEMBER ? otherMember : null;
-        return require(session, "member BFF session", "트랙 A 회원 로그인").headers();
+        BffSession session = memberId == MEMBER ? member : null;
+        return require(session, "member BFF session", "회원 로그인").headers();
     }
 
     static void member(long id, BffSession session) { MEMBER = id; member = session; }
-
-    static void otherMember(long id, BffSession session) { OTHER_MEMBER = id; otherMember = session; }
-
-    static void admin(BffSession session) { admin = session; }
-
-    static Map<String, String> asAdmin() {
-        return require(admin, "admin BFF session", "트랙 A 운영자 로그인").headers();
-    }
-
-    static Map<String, String> asSeller() {
-        return asCreator();
-    }
-
-    static void creator(BffSession session) {
-        creator = session;
-    }
-
-    static void reviewer(BffSession session) {
-        reviewer = session;
-    }
-
-    static Map<String, String> asCreator() {
-        return require(creator, "creator BFF session", "트랙 A BFF 로그인").headers();
-    }
-
-    static Map<String, String> asReviewer() {
-        return require(reviewer, "reviewer BFF session", "트랙 A 운영자 BFF 로그인").headers();
-    }
 
     /**
      * 값이 없으면 <b>이 장을 실패시킨다.</b> 스킵이 아니다 — 위 클래스 주석 참고.
