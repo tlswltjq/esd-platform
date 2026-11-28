@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -68,15 +69,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                                              HttpStatusCode statusCode, WebRequest request) {
         if (statusCode.is5xxServerError()) {
             log.error("unhandled exception", e);
-            return envelope(e, ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.defaultMessage(), headers, request);
+            return failure(e, ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.defaultMessage(), headers, request);
         }
         ErrorCode code = clientErrorOf(statusCode);
-        return envelope(e, code, clientMessage(e, code), headers, request);
+        return failure(e, code, clientMessage(e, code), headers, request);
     }
 
-    private ResponseEntity<Object> envelope(Exception e, ErrorCode code, String message, HttpHeaders headers,
+    /**
+     * 오류 본문은 요청의 {@code Accept} 와 무관하게 JSON 이다. 형식을 정해 두지 않으면 응답 형식 협상이 다시 돌아,
+     * 제공하지 않는 형식을 요구한 요청(406)에는 쓸 수 있는 형식이 없어 본문이 사라진다.
+     */
+    private ResponseEntity<Object> failure(Exception e, ErrorCode code, String message, HttpHeaders headers,
                                             WebRequest request) {
-        return super.handleExceptionInternal(e, ApiResponse.fail(code, message), headers, code.status(), request);
+        HttpHeaders json = new HttpHeaders();
+        json.putAll(headers);
+        json.setContentType(MediaType.APPLICATION_JSON);
+        return super.handleExceptionInternal(e, ApiResponse.fail(code, message), json, code.status(), request);
     }
 
     /** Spring 이 정한 4xx 상태에 맞는 일반 오류 코드. 따로 둔 코드가 없는 4xx 는 잘못된 요청으로 답한다. */

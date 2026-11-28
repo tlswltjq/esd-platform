@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -64,6 +65,11 @@ class StandardMvcExceptionStatusTest {
             return file.getName();
         }
 
+        @GetMapping(value = "/json-only", produces = MediaType.APPLICATION_JSON_VALUE)
+        String jsonOnly() {
+            return "{}";
+        }
+
         @GetMapping("/too-large")
         String tooLarge() {
             throw new MaxUploadSizeExceededException(1024);
@@ -97,6 +103,17 @@ class StandardMvcExceptionStatusTest {
         mvc.perform(post("/body").contentType(MediaType.TEXT_PLAIN).content("name"))
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.error.code").value(ErrorCode.UNSUPPORTED_MEDIA_TYPE.name()));
+    }
+
+    @Test
+    @DisplayName("제공하지 않는 응답 형식을 요구하면 406 이고, 오류 본문은 JSON 으로 나간다")
+    void notAcceptable() throws Exception {
+        // 요청의 Accept 로 오류 본문 형식을 고르면 쓸 수 있는 형식이 없어 본문이 사라진다.
+        mvc.perform(get("/json-only").accept(MediaType.APPLICATION_XML))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value(ErrorCode.NOT_ACCEPTABLE.name()));
     }
 
     @Test
