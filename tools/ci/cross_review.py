@@ -5,13 +5,14 @@
 요청한 값과 실제로 돈 값이 다를 수 있으므로(2026-11-28: `kirocrew spawn --model gpt-6.1-terra`가
 Claude로 돌았고, `auto` 요청은 추론 수준 [low]로 풀렸다), 리뷰가 끝나면 Codex 세션 기록
 (`~/.codex/sessions/**/rollout-*-<thread>.jsonl`)의 모든 `turn_context`를 읽어 확인한다.
-그 세션의 사용자 입력에 이번 리뷰 묶음 원문이 있어야 한다(시험 호출·다른 작업 세션으로 리뷰어 줄을 받지 않는다).
+그 세션의 사용자 입력에 이번 리뷰 묶음 원문이 있어야 하고(시험 호출·다른 작업 세션으로 리뷰어 줄을 받지 않는다),
+세션이 끝난 기록(`task_complete`)의 마지막 답이 결과 파일과 같아야 한다(중간에 끊긴 세션·손으로 쓴 결과를 막는다).
 확인에 실패하면 결과 파일을 `<out>.unverified`로 옮기고 실패로 끝난다. 그 결과는 리뷰로 쓰지 않는다.
 
   # 리뷰 묶음(review_packet.py)을 넣어 리뷰를 받는다. 통과하면 PR 본문에 적을 리뷰어 줄을 출력한다.
   python3 tools/ci/cross_review.py run --packet <묶음> --out <결과.md> [--root <worktree>]
   # 이미 있는 세션을 확인한다.
-  python3 tools/ci/cross_review.py verify --session <thread id> --packet <그 세션에 넣은 묶음>
+  python3 tools/ci/cross_review.py verify --session <thread id> --packet <그 세션에 넣은 묶음> --result <그 세션의 결과>
 """
 import argparse
 import json
@@ -93,16 +94,34 @@ def packet_errors(session_lines, packet):
     return ['세션의 사용자 입력에 이번 리뷰 묶음이 없다']
 
 
+def completion_errors(session_lines, result):
+    """세션이 끝났고(task_complete) 그 마지막 답이 결과 파일과 같은지 본다."""
+    answers = []
+    for line in session_lines:
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        payload = record.get('payload') if isinstance(record, dict) else None
+        if record.get('type') == 'event_msg' and isinstance(payload, dict) and payload.get('type') == 'task_complete':
+            answers.append((payload.get('last_agent_message') or '').strip())
+    if not answers:
+        return ['세션이 끝난 기록(task_complete)이 없다']
+    if answers[-1] != result.strip():
+        return ['세션의 마지막 답이 결과 파일과 다르다']
+    return []
+
+
 def reviewer_line(model, thread):
     return '리뷰어: Codex {}, 추론 {}, {}, 세션 {}'.format(model, EFFORT, SANDBOX, thread)
 
 
-def verify(sessions, thread, model, packet):
+def verify(sessions, thread, model, packet, result):
     path = find_session(sessions, thread)
     if path is None:
         return ['세션 기록을 찾지 못했다: ' + thread + ' (' + str(sessions) + ')']
     lines = path.read_text(encoding='utf-8').splitlines()
-    return check(lines, model) + packet_errors(lines, packet)
+    return check(lines, model) + packet_errors(lines, packet) + completion_errors(lines, result)
 
 
 def default_codex():
@@ -140,10 +159,10 @@ def run(args):
         reasons.append('codex exec 종료 코드 ' + str(completed.returncode) + ': ' + completed.stderr.strip()[-500:])
     if thread is None:
         reasons.append('--json 출력에 thread.started가 없다')
-    else:
-        reasons.extend(verify(args.sessions, thread, args.model, packet))
     if not out.exists():
         reasons.append('결과 파일이 없다: ' + str(out))
+    elif thread is not None:
+        reasons.extend(verify(args.sessions, thread, args.model, packet, out.read_text(encoding='utf-8')))
     if reasons:
         return fail(reasons, out)
     print('통과: ' + reviewer_line(args.model, thread))
@@ -162,13 +181,15 @@ def main(argv=None):
     verify_parser = commands.add_parser('verify', help='이미 있는 세션의 모델·추론 수준·샌드박스를 확인한다')
     verify_parser.add_argument('--session', required=True, help='thread id')
     verify_parser.add_argument('--packet', required=True, help='그 세션에 넣은 리뷰 묶음')
+    verify_parser.add_argument('--result', required=True, help='그 세션의 결과(마지막 답) 파일')
     for sub in (run_parser, verify_parser):
         sub.add_argument('--model', default=MODEL)
         sub.add_argument('--sessions', default=str(SESSIONS), help='Codex 세션 기록 디렉터리')
         sub.add_argument('--codex', help='codex 명령(JSON 배열). 기본은 PATH 또는 ~/.npm-packages/bin/codex')
     args = parser.parse_args(argv)
     if args.action == 'verify':
-        reasons = verify(args.sessions, args.session, args.model, Path(args.packet).read_text(encoding='utf-8'))
+        reasons = verify(args.sessions, args.session, args.model, Path(args.packet).read_text(encoding='utf-8'),
+                         Path(args.result).read_text(encoding='utf-8'))
         if reasons:
             return fail(reasons)
         print('통과: ' + reviewer_line(args.model, args.session))

@@ -12,13 +12,16 @@ THREAD = '01a2206b-a434-7493-a311-12a515815057'
 PACKET = '# 리뷰 묶음\n'
 
 
-def session_lines(model='gpt-6.1-terra', effort='high', sandbox='read-only', turns=1, packet=PACKET):
+def session_lines(model='gpt-6.1-terra', effort='high', sandbox='read-only', turns=1, packet=PACKET,
+                  answer='지적 없음', complete=True):
     lines = [{'type': 'session_meta', 'payload': {'id': THREAD, 'originator': 'codex_exec'}},
              {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
                                                    'content': [{'type': 'input_text', 'text': packet}]}}]
     for _ in range(turns):
         lines.append({'type': 'turn_context', 'payload': {'model': model, 'effort': effort,
                                                           'sandbox_policy': {'type': sandbox}}})
+    if complete:
+        lines.append({'type': 'event_msg', 'payload': {'type': 'task_complete', 'last_agent_message': answer}})
     return [json.dumps(line) for line in lines]
 
 
@@ -89,6 +92,14 @@ class PacketTest(unittest.TestCase):
         self.assertTrue(cross_review.packet_errors(session_lines(packet='다른 작업'), PACKET))
 
 
+class CompletionTest(unittest.TestCase):
+    def test_session_must_complete_with_this_result(self):
+        # PR #257 재리뷰 R1: 묶음을 넣고 답 전에 끊긴 세션으로 리뷰어 줄을 받지 않는다.
+        self.assertEqual([], cross_review.completion_errors(session_lines(), '지적 없음\n'))
+        self.assertTrue(cross_review.completion_errors(session_lines(complete=False), '지적 없음'))
+        self.assertTrue(cross_review.completion_errors(session_lines(answer='다른 답'), '지적 없음'))
+
+
 class FindSessionTest(unittest.TestCase):
     def test_finds_by_thread_id_in_file_name(self):
         with tempfile.TemporaryDirectory() as sessions:
@@ -155,12 +166,15 @@ class RunTest(unittest.TestCase):
 
 
 class VerifyTest(unittest.TestCase):
-    def verify(self, sessions, packet_text):
+    def verify(self, sessions, packet_text, result_text='지적 없음'):
         packet = Path(sessions) / 'packet.md'
         packet.write_text(packet_text, encoding='utf-8')
+        result = Path(sessions) / 'result.md'
+        result.write_text(result_text, encoding='utf-8')
         buffer = io.StringIO()
         with redirect_stdout(buffer):
-            code = cross_review.main(['verify', '--session', THREAD, '--packet', str(packet), '--sessions', sessions])
+            code = cross_review.main(['verify', '--session', THREAD, '--packet', str(packet), '--result', str(result),
+                                      '--sessions', sessions])
         return code, buffer.getvalue()
 
     def test_verify_existing_session_with_its_packet(self):
@@ -176,6 +190,14 @@ class VerifyTest(unittest.TestCase):
             code, printed = self.verify(sessions, PACKET)
             self.assertEqual(1, code)
             self.assertNotIn('리뷰어:', printed)
+
+    def test_verify_rejects_unfinished_session_or_other_result(self):
+        with tempfile.TemporaryDirectory() as sessions:
+            write_session(sessions, session_lines(complete=False))
+            self.assertEqual(1, self.verify(sessions, PACKET)[0])
+        with tempfile.TemporaryDirectory() as sessions:
+            write_session(sessions, session_lines())
+            self.assertEqual(1, self.verify(sessions, PACKET, result_text='손으로 쓴 결과')[0])
 
 
 if __name__ == '__main__':
