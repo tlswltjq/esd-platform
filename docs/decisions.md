@@ -2688,7 +2688,7 @@
 - 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
 - 선택: B
 - 구분: 추천 수용
-- 결과: 미착수. 착수한 PR에서 이 줄을 채운다
+- 결과: [PR #266](https://github.com/tlswltjq/esd-platform/pull/266), 근거 색인 2026-11-28 버전 카탈로그 행
 
 <a id="e2e-task-table"></a>
 ## `e2e/build.gradle`의 Test 태스크를 표 하나에서 만든다

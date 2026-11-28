@@ -4,7 +4,7 @@ dependencies {
     implementation 'software.amazon.awssdk:s3'
     integrationTestImplementation 'org.testcontainers:minio'
     integrationTestRuntimeOnly 'io.micrometer:micrometer-registry-prometheus'
-    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+    implementation libs.springdoc.webmvc.ui
 
     implementation project(':common:security')
     implementation project(':common:web')
