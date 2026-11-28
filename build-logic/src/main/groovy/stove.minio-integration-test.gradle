@@ -1,0 +1,13 @@
+// MinIO를 사용하는 통합 테스트는 루트 build.gradle 이 정한 이미지 이름을 받는다. 소스로 만드는 이름이면 :infra:minio가 준비한다.
+plugins {
+    id 'stove.java-base'
+}
+
+def minioImageSelection = rootProject.ext.minioImageSelection
+
+tasks.named('integrationTest') {
+    environment 'STOVE_TEST_MINIO_IMAGE', minioImageSelection.testImage
+    if (minioImageSelection.fromSource) {
+        dependsOn ':infra:minio:tagTestImage'
+    }
+}

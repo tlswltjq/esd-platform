@@ -1,6 +1,9 @@
-apply plugin: 'java-library'
+plugins {
+    id 'stove.library'
+    id 'java-test-fixtures'
+}
+
 // 코어를 실 DB 로 띄우는 테스트 부트 앱·스키마(Flyway).
-apply plugin: 'java-test-fixtures'
 
 dependencies {
     api project(':common:jpa')

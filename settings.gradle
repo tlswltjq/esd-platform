@@ -1,4 +1,6 @@
 pluginManagement {
+    // 공통 빌드 로직(convention plugin)
+    includeBuild('build-logic')
     repositories {
         gradlePluginPortal()
         mavenCentral()

@@ -1,4 +1,6 @@
-apply plugin: 'java-library'
+plugins {
+    id 'stove.library'
+}
 
 // 이벤트 계약: 토픽·이벤트 종류·본문 타입과 봉투(EventEnvelope)·헤더 이름.
 // 메시징은 Kafka 단일 구현이라(결정 227) 봉투는 Kafka 레코드에서 바로 만든다. 그래서 Kafka 클라이언트(레코드·헤더 타입)만 안다.

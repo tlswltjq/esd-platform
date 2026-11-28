@@ -357,7 +357,7 @@ MySQL 기본 `max_connections` 는 151 이므로 **여덟 벌이면 벽이다.**
 실행 순서에 달려 회차마다 달랐다.
 
 ```groovy
-// 루트 build.gradle 의 integrationTest 태스크
+// build-logic 의 stove.java-base 플러그인, integrationTest 태스크
 systemProperty 'spring.datasource.hikari.maximum-pool-size', '5'
 ```
 
@@ -486,7 +486,7 @@ pitest 로 프로덕션 코드를 조금씩 바꿔 보고, 그래도 테스트�
   **한 번도 참여하지 못했다** — 전 모듈을 통틀어 뮤턴트를 죽인 테스트가
   `core.service` 와 `core.domain` 두 패키지에서만 나왔다.
   파사드가 지키는 규칙은 전부 "생존"으로 보고되고 있었고, 그건 테스트 공백이 아니라
-  **측정 도구의 사각지대**였다. 루트 `build.gradle` 에서 `targetTests = ['com.stove.*']` 로 고쳤다.
+  **측정 도구의 사각지대**였다. 공통 빌드 구성(지금은 `build-logic` 의 `stove.java-base`)에서 `targetTests = ['com.stove.*']` 로 고쳤다.
   (settlement 기준 31/40 → 33/40, `api.application` 테스트가 11개를 죽인다)
   뮤테이션 점수를 읽을 때는 **무엇이 측정에 포함됐는지**를 먼저 본다
 - **새 통합 테스트는 망가뜨려 본다**([결정 102](decisions.md#integration-test-break-check)).

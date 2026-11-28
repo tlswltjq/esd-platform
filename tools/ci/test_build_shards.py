@@ -28,10 +28,9 @@ class RepositoryContractTest(unittest.TestCase):
         self.assertEqual([], unknown, '없는 모듈의 작업이 배정됐다')
 
     def test_every_migration_test_module_is_assigned(self):
-        text = (ROOT / 'build.gradle').read_text(encoding='utf-8')
-        staged = re.search(r'stagedVerification = project\.path in \[([^\]]*)\]', text)
-        self.assertIsNotNone(staged)
-        modules = re.findall(r"'(:[^']+)'", staged.group(1))
+        # migrationTest는 stove.staged-verification 플러그인을 적용한 모듈에만 있다(결정 build-logic-convention-plugins).
+        modules = sorted(project_path(script.parent) for script in ROOT.glob('*/*/build.gradle')
+                         if re.search(r"^\s*id 'stove\.staged-verification'\s*$", script.read_text(encoding='utf-8'), re.M))
         self.assertTrue(modules)
         for module in modules:
             self.assertIn(module + ':migrationTest', build_shards.assigned())

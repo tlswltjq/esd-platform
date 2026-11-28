@@ -1,3 +1,7 @@
+plugins {
+    id 'stove.app'
+}
+
 dependencies {
     integrationTestRuntimeOnly 'io.micrometer:micrometer-registry-prometheus'
     implementation 'org.springframework.boot:spring-boot-starter-web'

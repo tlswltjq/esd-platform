@@ -32,8 +32,8 @@ springdoc-webflux-ui = { module = "org.springdoc:springdoc-openapi-starter-webfl
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 hdrhistogram = { module = "org.hdrhistogram:HdrHistogram", version.ref = "hdrhistogram" }
 
-[plugins]
-spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
-dependency-management = { id = "io.spring.dependency-management", version.ref = "dependency-management-plugin" }
-jib = { id = "com.google.cloud.tools.jib", version.ref = "jib-plugin" }
-pitest = { id = "info.solidsoft.pitest", version.ref = "pitest-plugin" }
+# build-logic 의 convention plugin 이 적용하는 Gradle 플러그인(결정 build-logic-convention-plugins).
+spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
+dependency-management-gradle-plugin = { module = "io.spring.gradle:dependency-management-plugin", version.ref = "dependency-management-plugin" }
+jib-gradle-plugin = { module = "com.google.cloud.tools:jib-gradle-plugin", version.ref = "jib-plugin" }
+pitest-gradle-plugin = { module = "info.solidsoft.gradle.pitest:gradle-pitest-plugin", version.ref = "pitest-plugin" }
