@@ -50,8 +50,11 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 @Tag("review")
+@ExtendWith(LocalStackExtension.class)
+@LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY, StackApp.REVIEW})
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ReviewCreatorFlowTest {
     static Account creator, reviewer, admin;

@@ -15,7 +15,7 @@
 | 배포 비밀·Compose·서비스 접근키·웹훅 경계 | 같은 절의 Python 검사와 `ServiceKey`·`PortOneWebhookDisabled` 통합 테스트 | [구조·보안 경계 검사 실행](#structure-checks) |
 | 결함 재현 | `./gradlew defectTest` (실패 = 결함이 살아 있음) | [3. 결함 재현 테스트](#3-결함-재현-테스트) |
 | 여러 모듈을 잇는 여정 | `python3 tools/verification/verify-jib.py`(격리 실제 스택, 구매 여정). 모듈별 여정은 `tools/verification/verify-<모듈>.py`가 스택을 띄우고 `:e2e`의 태그별 태스크를 부른다 | [2. 테스트 계층](#2-테스트-계층) |
-| 가입·로그인, 역할별 진입 여정 | `./gradlew :e2e:ownershipE2eTest` — 테스트가 스택(인프라는 Testcontainers, 앱 12개는 `bootJar` 프로세스)을 직접 띄우고 내린다. `measure_guard.py`로 감싸고, `after`는 Testcontainers 정리 컨테이너(ryuk)가 사라진 뒤(수 초)에 부른다. MinIO 이미지는 [재사용](#minio-image) | [결정 e2e-stack-in-junit](decisions.md#e2e-stack-in-junit) |
+| 가입·로그인·역할별 진입 여정, Review 여정과 재시작 | `./gradlew :e2e:ownershipE2eTest`, `:e2e:reviewE2eTest`, `:e2e:reviewRestartE2eTest`(한 번에 하나씩, 같은 포트 자리를 쓴다) — 테스트가 스택(인프라는 Testcontainers, 앱은 `bootJar` 프로세스)을 직접 띄우고 내리며, 재시작 여정은 테스트가 앱을 직접 재시작한다. `measure_guard.py`로 감싸고, `after`는 Testcontainers 정리 컨테이너(ryuk)가 사라진 뒤(수 초)에 부른다. MinIO 이미지는 [재사용](#minio-image) | [결정 e2e-stack-in-junit](decisions.md#e2e-stack-in-junit) |
 | 장애 주입 | `./gradlew :e2e:chaosTest` (스택을 실제로 멈춘다). 지금은 선행 여정이 없어 돌지 못한다([플랫폼 T48](../specs/platform/tasks.md)) | [실험 E9](experiments.md#resilience) |
 | 성능·메시징 측정 | `tools/ci/measure_guard.py before/after`로 감싼 측정 회차 | [실험](experiments.md) |
 | 층 1 E2E 측정 하네스(`verify-jib.py --measure`·`e2e_baseline.py`·`support/e2e_faults.py`) | `tools/verification`·`tools/measurement` 단위 시험. 실제 스택으로 계측·장애 주입이 맞물리는지는 `python3 -B tools/measurement/e2e_baseline.py smoke`(회차마다 `measure_guard.py`로 감쌈, 30~45분) | [실험 E13](experiments.md#kafka-baseline-layer1) |

@@ -315,9 +315,13 @@
   - `:e2e:ownershipE2eTest`(`OwnershipIsolationFlowTest` 3건)가 `LocalStackExtension`으로 스택을 띄우고 내린다. 인프라는 Testcontainers, 앱 12개는 `bootJar` 프로세스다. 구매는 실제 출시·주문 API로 만든다. `verify-gateway-ownership.py`·`support/gateway_ownership.py`는 지웠다.
   - 잰 값(2026-11-28, OCI A1 4코어·23GB): 전체 231초, 그중 스택 기동이 인프라 16초 + 앱 12개 149초. 앱 프로세스 RSS 합 최대 5,290MiB, 컨테이너 최대 1,163MiB. 새 코드 760줄(테스트 154줄 + 스택 기반 606줄), 지운 파이썬 371줄.
   - 남긴 것: 정산의 "남의 판매자를 질의해도 자기 범위로만 답한다"는 Settlement가 매출을 기록하지 않아(결정 settlement-consumption-off) 문이 열리는지만 본다. 매출이 다시 쌓이면(T41) 단언을 더한다. 앱별 비밀 허용 목록이 `ServiceCredentials.java`와 `support/service_credentials.py` 두 곳에 있다 — 파이썬 여정이 남아 있는 동안만이고, 전면 이전을 정할 때 한 곳으로 모은다.
-- [ ] **T49. 재시작 여정 하나를 단계 없이 한 테스트로 옮긴다(시범 2)** ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit)) — T44 뒤
-  - 대상: `reviewRestartE2eTest`(`verify-review.py`가 단계 사이에 Review를 재시작한다). 테스트가 `stack.restart(...)`를 직접 불러 `phase` 속성·증거 파일 없이 재시작 전후를 한 메서드에서 단언하게 한다.
-  - 판단: 되면 나머지 `verify-*.py` 여정의 이전 여부를 사용자에게 묻는다(그때 `e2eTest`의 관측 두 건을 여정 뒤에 붙이는 자리도 정한다). 안 되면 T44 상태에서 멈추고 이유를 결정 기록에 더한다. `verify-jib.py`(Jib 이미지 스택, 야간 구매 E2E와 측정)는 옮기지 않는다.
+- [x] **T49. 재시작 여정 하나를 단계 없이 한 테스트로 옮긴다(시범 2)** — PR #278 ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
+  - `ReviewRestartFlowTest`가 `stack.restart(REVIEW, ...)`로 Review를 직접 재시작하고, 재시작 전후를 한 메서드에서 단언한다. `phase` 속성과 증거 파일이 없어졌다. `ReviewCreatorFlowTest`(10건)도 같은 스택 확장을 쓴다. `verify-review.py`는 지웠다.
+  - `LocalStack`에 앱 일부만 띄우기(`@LocalStackApps`)와 실행 인자를 바꾼 재시작을 더했다.
+  - 잰 값(2026-11-28, OCI A1 4코어·23GB): `reviewRestartE2eTest` 121초(인프라 20초 + 앱 5개 50초), `reviewE2eTest` 91초(인프라 17초 + 앱 5개 49초).
+- [ ] **T51. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮길지 정한다** [결정 필요] ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
+  - 시범 둘(T44·T49)이 됐다. 남은 것: `verify-studio.py`·`verify-catalog.py`·`verify-store.py`·`verify-order.py`·`verify-payment.py`·`verify-license.py`·`verify-download.py`·`verify-g4-operations.py`(단계 실행과 증거 파일), `verify-tracing.py`. `verify-jib.py`는 옮기지 않는다.
+  - 정할 것: 전면 이전 여부와 순서, 범위 동결(결정 201) 안에서 할지, 야간 CI에 어느 여정을 넣을지, `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이는 자리. 스크립트가 단계 사이에 하는 일(릴레이 정지 외에 검증 전용 장애 설정으로 띄우기, DB 권한 회수, Kafka 주입)이 `LocalStack`에 더 필요한지는 스크립트마다 본다.
 - [ ] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild)) — T49 뒤
   - 지금: 회원 세션을 옛 트랙 A가 `Journey`에 채워 주던 구조라 선행 단계 실패로 끝나고, 지금 Download에 없는 `/api/v1/downloads/{code}/manifests`를 부른다. T43에서 트랙 A를 지워 세션을 만드는 곳이 없다.
   - 할 일: T44·T49의 스택 제어로 "License를 멈춰도 다운로드와 Gateway가 살고, 되살리면 복구된다"를 한 테스트로 다시 쓴다. 구매는 실제 API로 만들고 지금 있는 `/api/v1/downloads/{code}/ticket`으로 확인한다. 옮긴 뒤 `Journey`와 옛 `chaosTest` 구성을 정리하고 `docs/testing.md`의 L7 행을 맞춘다.
