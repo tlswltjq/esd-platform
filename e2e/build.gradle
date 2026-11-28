@@ -32,6 +32,99 @@ tasks.named('test') { enabled = false }
 // 노브가 하나인 것은 포트가 오프셋 규칙이기 때문이다(Stove 클래스 주석).
 def endpoints = ['host', 'port-offset']
 
+// ── 모듈·여정별 검증 태스크 표 ─────────────────────────────────────────
+// 태그 하나에 태스크 하나다. 아래 `e2eTest` 의 제외 목록과 태스크 등록이 모두 이 표에서 나온다(결정 e2e-task-table).
+// 새 태그를 여기에 더하면 `e2eTest` 에서 자동으로 빠진다.
+//   props    : 테스트 JVM 으로 넘기는 `stove.e2e.<이름>` (없으면 빈 문자열)
+//   optional : 주어졌을 때만 넘기는 `stove.e2e.<이름>`
+//   phase    : `stove.e2e.<property>` 로 고르는 테스트 메서드 하나(재시작을 사이에 둔 단계 실행)
+//   expected : 실행 건수. 다르거나 건너뜀이 있으면 failure 문구로 실패한다. 없으면 세지 않는다
+def suites = [
+    // Auth·Gateway·Studio
+    [task: 'studioE2eTest', tag: 'studio',
+     description: 'Auth·Gateway·Studio만으로 로그인, 소유권, 업로드와 이벤트 처리 경계를 검증한다',
+     props: ['kafka-brokers'],
+     expected: 7, failure: 'Studio E2E requires 7 executed checks without skips'],
+    // Auth·Gateway·Studio·Review
+    [task: 'reviewE2eTest', tag: 'review',
+     description: '실제 로그인·심사·빌드 열람·재심사·출시 요청을 네 모듈로 검증한다',
+     props: ['kafka-brokers'],
+     expected: 10, failure: 'Review E2E requires 10 executed checks without skips'],
+    [task: 'reviewRestartE2eTest', tag: 'review-restart',
+     description: 'Review 재시작 전후 저장된 판정·미발행 Outbox의 복구를 검증한다',
+     props: ['review-evidence'],
+     phase: [test: 'ReviewRestartFlowTest', property: 'review-restart-phase', first: 'preparePendingResult'],
+     expected: 1, failure: 'Review restart verification requires one executed check without skips'],
+    // 다섯 모듈. 실제 프로세스 재시작을 단계로 나눠 검증한다
+    [task: 'catalogE2eTest', tag: 'catalog',
+     description: '실제 심사·출시·공개 조회와 Catalog 재시작 후 결과 복구를 검증한다',
+     props: ['catalog-evidence'],
+     phase: [test: 'CatalogPublicationFlowTest', property: 'catalog-phase',
+             first: 'publishesOnlyApprovedRequestedSnapshotsAndReplacesAfterNewReview'],
+     expected: 1, failure: 'Catalog verification requires one executed check without skips'],
+    // 여섯 모듈
+    [task: 'withdrawalE2eTest', tag: 'withdrawal',
+     description: '단일 심사·명시적 철회·동일 승인본 재출시와 Catalog 자동 공개 재시작 복구를 검증한다',
+     props: ['withdrawal-evidence'],
+     phase: [test: 'WithdrawalFlowTest', property: 'withdrawal-phase', first: 'prepareQueuedRelease'],
+     expected: 1, failure: 'Withdrawal verification requires one executed check without skips'],
+    [task: 'g4OperationsE2eTest', tag: 'g4-operations',
+     description: '출시·철회부터 Store 복구·판매/노출/다운로드 제어·기존 구매권까지 연결한다 (결제 결과는 계약 픽스처)',
+     props: ['kafka-brokers', 'g4-evidence', 'g4-secrets'],
+     phase: [test: 'G4OperationsFlowTest', property: 'g4-phase', first: 'publishesAndPreparesOwnedAndPendingOrders'],
+     expected: 1, failure: 'G4 operations requires one executed check without skips'],
+    [task: 'storeE2eTest', tag: 'store',
+     description: '공개 상품의 Store 검색·사본 갱신·HTTP 초기화·재시작을 검증한다',
+     props: ['store-evidence'],
+     phase: [test: 'StorePublicationFlowTest', property: 'store-phase',
+             first: 'publishesSearchesAndReplacesOnlyReleasedSnapshots'],
+     expected: 1, failure: 'Store verification requires one executed check without skips'],
+    // 일곱 앱. 격리 Order 검증에서 Payment 는 계약 픽스처다
+    [task: 'orderE2eTest', tag: 'order',
+     description: '공개 상품 주문·결제 결과 계약·장애와 재시작을 검증한다',
+     props: ['kafka-brokers', 'order-evidence'],
+     phase: [test: 'OrderPurchaseFlowTest', property: 'order-phase', first: 'preparesOrdersWithRelayPaused'],
+     expected: 1, failure: 'Order verification requires one executed check without skips'],
+    // 여덟 앱. 실제 Payment 작업자와 독립 모의 PG
+    [task: 'paymentE2eTest', tag: 'payment',
+     description: '주문·결제·결과 반영과 응답 유실·재시작·발행 복구를 검증한다',
+     props: ['kafka-brokers', 'payment-evidence'],
+     phase: [test: 'PaymentPurchaseFlowTest', property: 'payment-phase', first: 'prepareReceiptWithoutProcessing'],
+     expected: 1, failure: 'Payment verification requires one executed check without skips'],
+    // 아홉 앱
+    [task: 'licenseE2eTest', tag: 'license',
+     description: '결제 완료 주문의 권한 지급·라이브러리·반복 구매·중단과 재시작을 검증한다',
+     props: ['kafka-brokers', 'license-evidence'],
+     phase: [test: 'LicensePurchaseFlowTest', property: 'license-phase', first: 'preparePendingPurchase'],
+     expected: 1, failure: 'License verification requires one executed check without skips'],
+    // 메시징 비교 실험의 부하 드라이버(결정 204 G). 검증이 아니라 측정이라 건수를 세지 않는다.
+    //   ./gradlew :e2e:messagingLoadTest -Dstove.e2e.port-offset=<오프셋> -Dstove.e2e.load-rate=5 \
+    //       -Dstove.e2e.load-duration-secs=300 -Dstove.e2e.load-evidence=runs/load.json
+    [task: 'messagingLoadTest', tag: 'messaging-load',
+     description: '정해진 도착률로 주문을 만들어 메시징 비교 실험의 부하를 건다 (스택이 먼저 떠 있어야 한다)',
+     props: ['load-rate', 'load-duration-secs', 'load-warmup-secs', 'load-buyers', 'load-refund-every', 'load-evidence']],
+    // 열 앱과 실제 전체 빌드 전송
+    [task: 'downloadE2eTest', tag: 'download',
+     description: '보유권·현재 공개본·실제 ZIP 다운로드와 만료·장애·재시작을 검증한다',
+     props: ['download-evidence'],
+     phase: [test: 'DownloadPurchaseFlowTest', property: 'download-phase', first: 'preparePendingPurchase'],
+     expected: 1, failure: 'Download verification requires one executed check without skips'],
+    [task: 'tracingE2eTest', tag: 'tracing',
+     description: '현행 구매·Payment 내구 재개·별도 Download의 실제 Tempo 연결을 검증한다',
+     optional: ['tempo-base-url', 'tracing-evidence', 'tracing-scenario', 'tracing-sampled', 'tracing-expected-state'],
+     phase: [test: 'TracePropagationE2eTest', property: 'tracing-phase', first: 'prepareTwoDurableReceipts'],
+     expected: 1, failure: 'Tracing verification requires one executed check without skips'],
+    // 업무 앱 열하나와 독립 실행 HTTP 결제 공급자
+    [task: 'settlementE2eTest', tag: 'settlement',
+     description: '실제 구매·판매자 배분·PG 지급 명세·대사·외부 장애와 원본 재전달을 검증한다',
+     props: ['kafka-brokers', 'settlement-evidence'],
+     phase: [test: 'SettlementPurchaseFlowTest', property: 'settlement-phase', first: 'initialPurchasesAndDownloads'],
+     expected: 1, failure: 'Settlement verification requires one executed check without skips'],
+]
+
+// `chaos` 는 아래 chaosTest 가 맡는다. `api-demo` 는 태스크 없이 빼 두는 태그다.
+def tagsOutsideJourney = ['chaos', 'api-demo'] + suites.collect { it.tag }
+
 tasks.register('e2eTest', Test) {
     group = 'verification'
     description = '떠 있는 전체 스택을 상대로 인수 시나리오를 관통한다 (스택이 먼저 떠 있어야 한다)'
@@ -43,7 +136,7 @@ tasks.register('e2eTest', Test) {
     // 그러면 "인수가 깨졌다" 와 "일부러 죽였다" 가 같은 리포트에 같은 모양으로 남는다.
     // 실행 정책을 필요 자원으로 가르는 이 저장소의 규칙 그대로다(루트 build.gradle) —
     // 저 장이 요구하는 자원은 '망가뜨려도 되는 스택' 이라 e2e 와도 다르다.
-    useJUnitPlatform { excludeTags 'chaos', 'api-demo', 'studio', 'review', 'review-restart', 'catalog', 'withdrawal', 'g4-operations', 'store', 'order', 'payment', 'license', 'download', 'settlement', 'tracing', 'messaging-load' }
+    useJUnitPlatform { excludeTags(*tagsOutsideJourney) }
 
     endpoints.each { name ->
         systemProperty "stove.e2e.${name}",
@@ -100,27 +193,6 @@ tasks.register('e2eTest', Test) {
 }
 
 // ── 장애 주입 ─────────────────────────────────────────────────────────
-tasks.register('studioE2eTest', Test) {
-    group = 'verification'
-    description = 'Auth·Gateway·Studio만으로 로그인, 소유권, 업로드와 이벤트 처리 경계를 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'studio' }
-    endpoints.each { name ->
-        systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('')
-    }
-    systemProperty 'stove.e2e.kafka-brokers', providers.systemProperty('stove.e2e.kafka-brokers').getOrElse('')
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 7 || result.skippedTestCount != 0)) {
-            throw new GradleException('Studio E2E requires 7 executed checks without skips')
-        }
-    }
-}
-
 //
 // 필요한 자원이 하나 더 있다: **망가뜨려도 되는 스택.**
 // 이 태스크는 서비스를 실제로 정지시키므로 인수 시나리오와 같은 회차에 둘 수 없다 —
@@ -172,267 +244,38 @@ tasks.register('chaosTest', Test) {
     }
 }
 
-// Auth·Gateway·Studio·Review only; incomplete publishing/commerce modules are excluded.
-tasks.register('reviewE2eTest', Test) {
-    group = 'verification'
-    description = '실제 로그인·심사·빌드 열람·재심사·출시 요청을 네 모듈로 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'review' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.kafka-brokers', providers.systemProperty('stove.e2e.kafka-brokers').getOrElse('')
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 10 || result.skippedTestCount != 0)) {
-            throw new GradleException('Review E2E requires 10 executed checks without skips')
+// ── 표의 태스크 등록 ───────────────────────────────────────────────────
+suites.each { suite ->
+    tasks.register(suite.task, Test) {
+        group = 'verification'
+        description = suite.description
+        testClassesDirs = sourceSets.test.output.classesDirs
+        classpath = sourceSets.test.runtimeClasspath
+        useJUnitPlatform { includeTags suite.tag }
+        (endpoints + (suite.props ?: [])).each { name ->
+            systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('')
         }
-    }
-}
-
-tasks.register('reviewRestartE2eTest', Test) {
-    group = 'verification'
-    description = 'Review 재시작 전후 저장된 판정·미발행 Outbox의 복구를 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'review-restart' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.review-evidence', providers.systemProperty('stove.e2e.review-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.ReviewRestartFlowTest.${providers.systemProperty('stove.e2e.review-restart-phase').getOrElse('preparePendingResult')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0)) {
-            throw new GradleException('Review restart verification requires one executed check without skips')
+        (suite.optional ?: []).each { name ->
+            if (providers.systemProperty("stove.e2e.${name}").isPresent())
+                systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").get()
         }
-    }
-}
-
-// Five completed/reworked modules, with explicit phases for real process restart verification.
-tasks.register('catalogE2eTest', Test) {
-    group = 'verification'
-    description = '실제 심사·출시·공개 조회와 Catalog 재시작 후 결과 복구를 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'catalog' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.catalog-evidence', providers.systemProperty('stove.e2e.catalog-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.CatalogPublicationFlowTest.${providers.systemProperty('stove.e2e.catalog-phase').getOrElse('publishesOnlyApprovedRequestedSnapshotsAndReplacesAfterNewReview')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Catalog verification requires one executed check without skips')
-    }
-}
-
-// Six completed/reworked modules; each phase is executed against an OCI disposable stack.
-tasks.register('withdrawalE2eTest', Test) {
-    group = 'verification'
-    description = '단일 심사·명시적 철회·동일 승인본 재출시와 Catalog 자동 공개 재시작 복구를 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'withdrawal' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.withdrawal-evidence', providers.systemProperty('stove.e2e.withdrawal-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.WithdrawalFlowTest.${providers.systemProperty('stove.e2e.withdrawal-phase').getOrElse('prepareQueuedRelease')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Withdrawal verification requires one executed check without skips')
-    }
-}
-
-tasks.register('g4OperationsE2eTest', Test) {
-    group = 'verification'
-    description = '출시·철회부터 Store 복구·판매/노출/다운로드 제어·기존 구매권까지 연결한다 (결제 결과는 계약 픽스처)'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'g4-operations' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    ['kafka-brokers', 'g4-evidence', 'g4-secrets'].each { name ->
-        systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('')
-    }
-    filter { includeTestsMatching "com.stove.e2e.G4OperationsFlowTest.${providers.systemProperty('stove.e2e.g4-phase').getOrElse('publishesAndPreparesOwnedAndPendingOrders')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('G4 operations requires one executed check without skips')
-    }
-}
-
-tasks.register('storeE2eTest', Test) {
-    group = 'verification'
-    description = '공개 상품의 Store 검색·사본 갱신·HTTP 초기화·재시작을 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'store' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.store-evidence', providers.systemProperty('stove.e2e.store-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.StorePublicationFlowTest.${providers.systemProperty('stove.e2e.store-phase').getOrElse('publishesSearchesAndReplacesOnlyReleasedSnapshots')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Store verification requires one executed check without skips')
-    }
-}
-
-// Seven apps; Payment remains a contract fixture in the isolated Order verification.
-tasks.register('orderE2eTest', Test) {
-    group = 'verification'
-    description = '공개 상품 주문·결제 결과 계약·장애와 재시작을 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'order' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.kafka-brokers', providers.systemProperty('stove.e2e.kafka-brokers').getOrElse('')
-    systemProperty 'stove.e2e.order-evidence', providers.systemProperty('stove.e2e.order-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.OrderPurchaseFlowTest.${providers.systemProperty('stove.e2e.order-phase').getOrElse('preparesOrdersWithRelayPaused')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Order verification requires one executed check without skips')
-    }
-}
-
-// Eight apps, including the real Payment worker and durable simulated supplier.
-tasks.register('paymentE2eTest', Test) {
-    group = 'verification'
-    description = '주문·결제·결과 반영과 응답 유실·재시작·발행 복구를 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'payment' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.kafka-brokers', providers.systemProperty('stove.e2e.kafka-brokers').getOrElse('')
-    systemProperty 'stove.e2e.payment-evidence', providers.systemProperty('stove.e2e.payment-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.PaymentPurchaseFlowTest.${providers.systemProperty('stove.e2e.payment-phase').getOrElse('prepareReceiptWithoutProcessing')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Payment verification requires one executed check without skips')
-    }
-}
-
-// Nine apps in an isolated OCI stack; each phase has one explicit executed check.
-tasks.register('licenseE2eTest', Test) {
-    group = 'verification'
-    description = '결제 완료 주문의 권한 지급·라이브러리·반복 구매·중단과 재시작을 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'license' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.kafka-brokers', providers.systemProperty('stove.e2e.kafka-brokers').getOrElse('')
-    systemProperty 'stove.e2e.license-evidence', providers.systemProperty('stove.e2e.license-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.LicensePurchaseFlowTest.${providers.systemProperty('stove.e2e.license-phase').getOrElse('preparePendingPurchase')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('License verification requires one executed check without skips')
-    }
-}
-
-// 메시징 비교 실험의 부하 드라이버(결정 204 G). 검증이 아니라 측정이라 e2eTest에서 뺀다.
-//   ./gradlew :e2e:messagingLoadTest -Dstove.e2e.port-offset=<오프셋> -Dstove.e2e.load-rate=5 \
-//       -Dstove.e2e.load-duration-secs=300 -Dstove.e2e.load-evidence=runs/load.json
-tasks.register('messagingLoadTest', Test) {
-    group = 'verification'
-    description = '정해진 도착률로 주문을 만들어 메시징 비교 실험의 부하를 건다 (스택이 먼저 떠 있어야 한다)'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'messaging-load' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    ['load-rate', 'load-duration-secs', 'load-warmup-secs', 'load-buyers', 'load-refund-every', 'load-evidence'].each { name ->
-        systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('')
-    }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-}
-
-// Ten completed/reworked apps and actual full-build transfers in an isolated stack.
-tasks.register('downloadE2eTest', Test) {
-    group = 'verification'
-    description = '보유권·현재 공개본·실제 ZIP 다운로드와 만료·장애·재시작을 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'download' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.download-evidence', providers.systemProperty('stove.e2e.download-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.DownloadPurchaseFlowTest.${providers.systemProperty('stove.e2e.download-phase').getOrElse('preparePendingPurchase')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Download verification requires one executed check without skips')
-    }
-}
-
-tasks.register('tracingE2eTest', Test) {
-    group = 'verification'
-    description = '현행 구매·Payment 내구 재개·별도 Download의 실제 Tempo 연결을 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'tracing' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    ['tempo-base-url', 'tracing-evidence', 'tracing-scenario', 'tracing-sampled', 'tracing-expected-state'].each { name ->
-        if (providers.systemProperty("stove.e2e.${name}").isPresent())
-            systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").get()
-    }
-    filter { includeTestsMatching "com.stove.e2e.TracePropagationE2eTest.${providers.systemProperty('stove.e2e.tracing-phase').getOrElse('prepareTwoDurableReceipts')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Tracing verification requires one executed check without skips')
-    }
-}
-
-// Eleven business apps plus an independently running HTTP payment provider.
-tasks.register('settlementE2eTest', Test) {
-    group = 'verification'
-    description = '실제 구매·판매자 배분·PG 지급 명세·대사·외부 장애와 원본 재전달을 검증한다'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform { includeTags 'settlement' }
-    endpoints.each { name -> systemProperty "stove.e2e.${name}", providers.systemProperty("stove.e2e.${name}").getOrElse('') }
-    systemProperty 'stove.e2e.kafka-brokers', providers.systemProperty('stove.e2e.kafka-brokers').getOrElse('')
-    systemProperty 'stove.e2e.settlement-evidence', providers.systemProperty('stove.e2e.settlement-evidence').getOrElse('')
-    filter { includeTestsMatching "com.stove.e2e.SettlementPurchaseFlowTest.${providers.systemProperty('stove.e2e.settlement-phase').getOrElse('initialPurchasesAndDownloads')}" }
-    maxParallelForks = 1
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-    testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
-    afterSuite { desc, result ->
-        if (desc.parent == null && (result.testCount != 1 || result.skippedTestCount != 0))
-            throw new GradleException('Settlement verification requires one executed check without skips')
+        if (suite.phase) {
+            String method = providers.systemProperty("stove.e2e.${suite.phase.property}").getOrElse(suite.phase.first)
+            filter { includeTestsMatching "com.stove.e2e.${suite.phase.test}.${method}" }
+        }
+        maxParallelForks = 1
+        // e2eTest 와 같은 이유다 — 진짜 입력은 소스가 아니라 떠 있는 스택이다.
+        outputs.upToDateWhen { false }
+        outputs.cacheIf { false }
+        testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
+        if (suite.expected != null) {
+            int expected = suite.expected
+            String failure = suite.failure
+            afterSuite { desc, result ->
+                if (desc.parent == null && (result.testCount != expected || result.skippedTestCount != 0)) {
+                    throw new GradleException(failure)
+                }
+            }
+        }
     }
 }
