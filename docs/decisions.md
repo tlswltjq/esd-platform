@@ -2520,6 +2520,18 @@
 - 구분: 추천 수용
 - 결과: [PR #257](https://github.com/tlswltjq/esd-platform/pull/257)
 
+<a id="kafka-baseline-closure"></a>
+## 238. T39 Kafka 기준선은 미측정 사유로 닫고, 재지 않은 두 항목은 동결 뒤 백로그로 옮긴다
+- 문제: T39(Kafka 단일 구현의 성능·안정성 기준선, [결정 227](#kafka-only-messaging))는 B1~B4로 기준선·포화 경계·장애 시나리오 3~6을 쟀고, 완료 조건("시나리오마다 결과 또는 미측정 사유·실행 방법이 E13에 있다")도 충족한다. 다만 층 2 프로세스 kill과 `quarantine/replay` 재투입 시간(실행 수단 없음), DLT 저장 직후 offset 커밋 실패로 생기는 DLT 중복([결정 235](#dlt-write-failure-injection) 범위 밖)은 수치가 없다. 같은 무렵 PR #255 CI에서 `PaymentIntegrationTest`가 한 번 실패했으나 재현 전이라 결함 대장에 올릴 수 없다.
+- 선택지: A E13의 미측정 사유로 T39를 닫고 두 항목은 동결 뒤 백로그(T40)로 옮긴다 / B 벤치에 재기동 단계·관리자 인증을 넣어 측정까지 끝낸 뒤 닫는다 / C T39를 열어 두고 간헐 실패만 기록한다 (추천: A — 완료 조건을 이미 충족했고, 층 2 kill은 층 1 kill 결과로 대신하며, 나머지는 새 실행 수단이 먼저 필요해 M의 다음 걸음(독립 구현 비교)에 필수가 아니다. 실행 방법은 E13에 남는다)
+- 내 의견: "A로 진행해"
+- 선택: A — 추천을 받아들였다.
+  - 플랫폼 T39는 완료로 표시하고, 재지 않은 두 항목은 T40으로 옮겨 [로드맵 0절](roadmap.md#scope-freeze)의 동결 뒤 백로그에 넣는다. M에 필요할 때만 꺼낸다.
+  - `PaymentIntegrationTest.kafkaInvalidRequestIsQuarantinedAndStopsItsKey()` 간헐 실패는 [결정 113](#flaky-tests)대로 결정적 재현 테스트를 만들어 결함인지 가린 뒤 결함 대장에 올린다. 그 전까지는 Payment `tasks.md`의 할 일과 PR #255 본문에만 둔다(결함 대장은 재현된 결함만 받는다).
+  - 비용: Kafka 기준선에 층 2 kill·replay 시간·DLT 중복 수치가 없다. 독립 구현 비교에서 이 시나리오를 다루려면 T40을 먼저 꺼내야 한다.
+- 구분: 추천 수용
+- 결과: [PR #258](https://github.com/tlswltjq/esd-platform/pull/258)
+
 ---
 
 ## 검증하며 드러난 것

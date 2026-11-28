@@ -231,6 +231,7 @@
 - [x] (옛 tasks:46 `[결정 필요]` Order 시도의 `reconciliationRequired` 해제) — [결정 164](../../../docs/decisions.md#attribution-in-payment)로 닫힘: Order 시도는 귀속을 갖지 않는다. Payment 쪽은 PA-T3·R15.9.
 - [x] (옛 tasks:47 결정 128 "기존 `RefundExecutionFailed`로 잇는다") — 결정 147·148로 전용 이벤트 `RefundFailureClosed`. PA-T12·R18(소급 RC-7, 문서 정정).
 - [x] (옛 tasks:58~61 PG 계약 중립화 4건) — MC-P2·MC-P3·PA-T17·T28로 옮김.
+- [ ] 간헐 실패 재현([결정 113](../../../docs/decisions.md#flaky-tests)): `PaymentIntegrationTest.kafkaInvalidRequestIsQuarantinedAndStopsItsKey()`가 PR #255의 첫 CI `build`([run 46106286515](https://github.com/tlswltjq/esd-platform/actions/runs/46106286515))에서 `PaymentIntegrationTest.java:342` 단언으로 실패했다. 잘못된 결제 요청이 격리된 직후 `purchase_payment`·`processed_event` 행이 0이어야 하는데 0이 아니었다. 실패한 작업 재실행 1회에 통과했고, PR은 payment 코드를 바꾸지 않았다. 결정적 재현 테스트로 결함인지 테스트 문제인지 가린 뒤 결함이면 `docs/defects.md`에 올려 고친다. 원인은 아직 모른다.
 
 ## 범위 밖(후속)
 

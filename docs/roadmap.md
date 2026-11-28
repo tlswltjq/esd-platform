@@ -20,14 +20,14 @@
 | 결제 실패·이탈→재진입·종료 | G1, 야간 `fake PortOne approval expiry` (`verify-approval-journeys.py`·`verify-expiry-journeys.py`) |
 | 자동·수동 환불, 확정 실패→복구 | G2(PR #116), 야간 `fake PortOne refund settlement` (`verify-refund-settlement.py`) |
 
-**동결 뒤 백로그(지금 진행하지 않음):** G2의 남은 구현(결정 127~134·148, PR #166), G3 공급자 중립화와 정산 종료 여정, G5 운영 API·역할별 단일 여정, G6, G7, 각 모듈 `tasks.md`의 `[결정 필요]`. 정산은 MVP 계약(매출 배분·월 마감·환불 조정)까지만 완료로 본다. 백로그 항목은 M에 필요할 때만 꺼낸다. GitHub 이슈 #96·#97·#98·#100·#101(MVP 후속)도 이 백로그에 속한다.
+**동결 뒤 백로그(지금 진행하지 않음):** G2의 남은 구현(결정 127~134·148, PR #166), G3 공급자 중립화와 정산 종료 여정, G5 운영 API·역할별 단일 여정, G6, G7, 각 모듈 `tasks.md`의 `[결정 필요]`, 플랫폼 T40(T39에서 재지 않은 Kafka 기준선 항목, [결정 238](decisions.md#kafka-baseline-closure)). 정산은 MVP 계약(매출 배분·월 마감·환불 조정)까지만 완료로 본다. 백로그 항목은 M에 필요할 때만 꺼낸다. GitHub 이슈 #96·#97·#98·#100·#101(MVP 후속)도 이 백로그에 속한다.
 
 **다음 단계 M — Kafka 기준선과 독립 구현 비교([결정 227](decisions.md#kafka-only-messaging)·[228](decisions.md#messaging-comparison-closure)):**
 1. 메시징을 Kafka 단일 구현으로 되돌린다. 업무 리스너는 `@KafkaListener`, 릴레이는 `KafkaTemplate`을 쓰고, 전달 보장(최소 1회, 소비자 그룹 팬아웃, 재시도 후 격리·키 정지, 같은 키의 발행 순서대로 한 번에 하나씩)은 Kafka 파티션과 `DefaultErrorHandler`로 낸다. 기본 기능 여정이 그대로 통과해야 한다.
 2. 실제 앱 기준으로 Kafka의 성능·안정성 기준선을 잰다.
 3. 다른 기술은 같은 업무를 독립 구현한 앱으로, Kafka 기준선과 같은 벤치마크 계약(업무 시나리오·기대 상태·전달 보장·장애 주입·지표)으로 잰다. 앱 안에 기술 교체용 공통 추상화를 두지 않는다.
 
-**M 상태:** 결정 209 구조(브로커 중립 포트 + adapter 다섯)에서 잰 비교 — 평시 부하, S4~S7, S3 1회차 — 는 그 구조의 기록으로 [E12](experiments.md#messaging-comparison)에 남기고 비교 측정은 닫았다(결정 228, 플랫폼 T36·T37). 1은 [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)으로 끝났다. 2·3의 상태는 [플랫폼 tasks.md](../.kiro/specs/platform/tasks.md)(T39~)를 본다.
+**M 상태:** 결정 209 구조(브로커 중립 포트 + adapter 다섯)에서 잰 비교 — 평시 부하, S4~S7, S3 1회차 — 는 그 구조의 기록으로 [E12](experiments.md#messaging-comparison)에 남기고 비교 측정은 닫았다(결정 228, 플랫폼 T36·T37). 1은 [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)으로, 2는 플랫폼 T39(PR #252~#255, [E13](experiments.md#kafka-baseline))로 끝났다. 2·3의 상태는 [플랫폼 tasks.md](../.kiro/specs/platform/tasks.md)(T39~)를 본다.
 
 ## 1. 단계의 정의
 
