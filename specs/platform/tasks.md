@@ -308,13 +308,22 @@
   - 어디서: `tools/measurement/e2e_baseline.py`의 `SMOKE_FAULTS` 중 `kill:...service=settlement`(정산 소비자 재시작).
   - 목표: settlement가 소비하지 않는 동안 이 장애는 흔적을 남기지 않으므로 다른 소비 앱으로 바꾸거나 뺀다.
 
-- [ ] **T43. `e2e`의 옛 `e2eTest` 여정이 지금 없는 API를 부른다** ([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters))
-  - 어디서: `TrackBCommerceFlowTest`·`TrackCFulfillmentFlowTest`·`PaymentFailurePathTest`(`/api/v1/payments/callback`, 앞의 둘은 `/api/v1/settlements/orders/*`도), `PaymentSimulatorE2eTest`·`PromotionOperationsE2eTest`(`/api/v1/payments/simulator/*`, 뒤쪽은 `/payments/{orderNo}/prepare`·`/settlements/orders/*`도). payment·settlement 컨트롤러에 이 경로가 없다.
-  - 목표: 지금 API로 옮길 수 없는 여정은 지우고 `e2eTest` 태스크·`testing.md` L6 행(건수)을 맞춘다. `E2eClient`의 콜백 서명(`PG_CALLBACK_SECRET`)도 함께 정리한다.
-- [ ] **T44. `verify-gateway-ownership.py`의 구매 픽스처가 License 제약에 걸려 실패한다**
-  - 어디서: `tools/verification/support/gateway_ownership.py`가 `stove_license.product_license`에 `status='ACTIVE'`를 넣는다. License V10(2026-11-06, `chk_product_license_status`)은 `STORED`·`REGISTERED`·`SUSPENDED`·`REFUNDED`만 받는다.
-  - 확인: 2026-11-28 PR #268 로컬 실행에서 `ERROR 3819 ... Check constraint 'chk_product_license_status' is violated`. PG 제거와 무관하다(License와 이 픽스처는 바꾸지 않았다).
-  - 할 일: 픽스처 상태를 현재 스키마 값으로 고치고 스크립트를 끝까지 통과시킨다. [로드맵 0절](../../docs/roadmap.md#scope-freeze)의 "가입·로그인, 역할별 진입" 확인 경로다.
+- [x] **T43. `e2e`의 옛 `e2eTest` 여정이 지금 없는 API를 부른다** — PR #275 ([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters))
+  - 지운 것: `TrackBCommerceFlowTest`·`TrackCFulfillmentFlowTest`·`PaymentFailurePathTest`·`PaymentSimulatorE2eTest`·`PromotionOperationsE2eTest`(payment·settlement에 없는 콜백·시뮬레이터·`settlements/orders` 경로)와 `TrackACreatorFlowTest`(Studio에 없는 `credentials`·`store-page-revisions`·`submissions`·`ci`·`testers` 경로). `E2eClient`의 콜백 서명과 `postUnsigned`, `Journey`의 여정 값도 지웠다.
+  - 남은 `e2eTest`는 관측 두 건(`OutboxDrainE2eTest`·`DeadLetterE2eTest`)이다. 여정에 붙여 도는 자리는 T49에서 정한다.
+- [ ] **T44. 소유권 격리 검증을 `:e2e`의 JUnit 여정으로 옮긴다(시범 1)** ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
+  - 지금: `verify-gateway-ownership.py`가 `stove_license.product_license`에 `status='ACTIVE'`를 직접 넣는다. License V10(2026-11-06, `chk_product_license_status`)은 `STORED`·`REGISTERED`·`SUSPENDED`·`REFUNDED`만 받아 `ERROR 3819`로 실패한다(2026-11-28 PR #268 로컬 실행). 라이브러리 조회는 `license_registration`을 읽으므로 상태 값만 고쳐서는 통과하지 못한다. [로드맵 0절](../../docs/roadmap.md#scope-freeze)의 "가입·로그인, 역할별 진입" 확인 경로다.
+  - 할 일: `:e2e`에 스택을 띄우고 제어하는 JUnit 확장(Testcontainers)을 만들고, 소유권 격리 검증(자기 것 200, 남의 것 404, 위조 헤더 404, 목록 격리, 창작자 격리)을 JUnit 테스트로 옮긴다. 구매 데이터는 DB에 직접 넣지 않고 실제 주문 API로 만든다. 옮긴 뒤 `verify-gateway-ownership.py`와 `support/gateway_ownership.py`를 지운다.
+  - 잴 것: 스택 기동 시간, 메모리, 기존 스크립트와의 코드량 차이. 실행은 `measure_guard.py`로 감싼다.
+- [ ] **T49. 재시작 여정 하나를 단계 없이 한 테스트로 옮긴다(시범 2)** ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit)) — T44 뒤
+  - 대상: `reviewRestartE2eTest`(`verify-review.py`가 단계 사이에 Review를 재시작한다). 테스트가 `stack.restart(...)`를 직접 불러 `phase` 속성·증거 파일 없이 재시작 전후를 한 메서드에서 단언하게 한다.
+  - 판단: 되면 나머지 `verify-*.py` 여정의 이전 여부를 사용자에게 묻는다(그때 `e2eTest`의 관측 두 건을 여정 뒤에 붙이는 자리도 정한다). 안 되면 T44 상태에서 멈추고 이유를 결정 기록에 더한다. `verify-jib.py`(Jib 이미지 스택, 야간 구매 E2E와 측정)는 옮기지 않는다.
+- [ ] **T48. `chaosTest`(`ServiceOutageChaosTest`)가 돌지 못한다** [결정 필요]
+  - 어디서: 회원 세션을 옛 트랙 A가 `Journey`에 채워 주던 구조라 따로 돌리면 선행 단계 실패로 끝나고, 지금 Download에 없는 `/api/v1/downloads/{code}/manifests`를 부른다. T43에서 트랙 A를 지워 세션을 만드는 곳이 없다.
+  - 정할 것: 지울지, 새 스택 제어(T44·T49) 위에서 "License를 멈춰도 다운로드와 Gateway가 산다"를 다시 세울지. 층 1 하네스의 장애 주입(`support/e2e_faults.py`)과 겹치는 범위도 함께 본다. `docs/testing.md`의 L7 행이 이 결정에 달려 있다.
+- [ ] **T50. `docs/api-demo.md`가 걷어낸 결제 시뮬레이터·콜백 API를 안내한다**
+  - 어디서: "결제 시뮬레이터" 절의 `/payments/{orderNo}/prepare`·`/payments/simulator/*`·`/payments/{orderNo}/cancel`과 "자동 검증은 `:e2e:e2eTest`" 문장. payment에 이 경로가 없다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)).
+  - 할 일: 지금 API(프로세스 안 승인, [결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval))로 다시 쓰거나 절을 지운다.
 - [ ] **T45. HTTP 오류 관측: 구조화 로그와 로그 수집** ([결정 error-observability](../../docs/decisions.md#error-observability) 3·4)
   - 앞 단계: 1(경보 `HttpServerErrorRateHigh`)·2(`http_server_requests`의 `error_code` 태그)는 PR #273.
   - 할 일 3: 앱 12개의 콘솔 로그를 구조화(JSON) 형식으로 낸다. Spring Boot 3.5의 `logging.structured.format.console`로 켤 수 있다. 값 안의 개행이 이스케이프되므로 `GlobalExceptionHandler`의 `malformed request` 로그에 요청 값이 실려 로그 줄을 위조할 수 있는 경로([결정 remove-unknown-property-net](../../docs/decisions.md#remove-unknown-property-net)의 선택지 C)가 함께 닫히는지 확인한다. 정할 것: 형식(ecs·logstash 등), 컨테이너 배포에서만 켤지 로컬 `bootRun`·테스트에서도 켤지. 로그를 읽는 검증 도구(`tools/verification`)가 평문 형식에 기대는지 먼저 확인한다.

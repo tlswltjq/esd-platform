@@ -14,8 +14,8 @@
 | 패키지 이동·ArchUnit 규칙·모듈 의존 | 구조 검사 묶음 | [구조·보안 경계 검사 실행](#structure-checks) |
 | 배포 비밀·Compose·서비스 접근키·웹훅 경계 | 같은 절의 Python 검사와 `ServiceKey`·`PortOneWebhookDisabled` 통합 테스트 | [구조·보안 경계 검사 실행](#structure-checks) |
 | 결함 재현 | `./gradlew defectTest` (실패 = 결함이 살아 있음) | [3. 결함 재현 테스트](#3-결함-재현-테스트) |
-| 여러 모듈을 잇는 여정 | `python3 tools/verification/verify-jib.py`(격리 실제 스택), 스택이 떠 있으면 `./gradlew :e2e:e2eTest` | [2. 테스트 계층](#2-테스트-계층) |
-| 장애 주입 | `./gradlew :e2e:chaosTest` (스택을 실제로 멈춘다) | [실험 E9](experiments.md#resilience) |
+| 여러 모듈을 잇는 여정 | `python3 tools/verification/verify-jib.py`(격리 실제 스택, 구매 여정). 모듈별 여정은 `tools/verification/verify-<모듈>.py`가 스택을 띄우고 `:e2e`의 태그별 태스크를 부른다 | [2. 테스트 계층](#2-테스트-계층) |
+| 장애 주입 | `./gradlew :e2e:chaosTest` (스택을 실제로 멈춘다). 지금은 선행 여정이 없어 돌지 못한다([플랫폼 T48](../specs/platform/tasks.md)) | [실험 E9](experiments.md#resilience) |
 | 성능·메시징 측정 | `tools/ci/measure_guard.py before/after`로 감싼 측정 회차 | [실험](experiments.md) |
 | 층 1 E2E 측정 하네스(`verify-jib.py --measure`·`e2e_baseline.py`·`support/e2e_faults.py`) | `tools/verification`·`tools/measurement` 단위 시험. 실제 스택으로 계측·장애 주입이 맞물리는지는 `python3 -B tools/measurement/e2e_baseline.py smoke`(회차마다 `measure_guard.py`로 감쌈, 30~45분) | [실험 E13](experiments.md#kafka-baseline-layer1) |
 | `benchmarks/messaging`(층 2 메시징 벤치) | `./gradlew :benchmarks:messaging:test`(단위·ArchUnit). 실 Kafka·MySQL로 계측이 맞물리는지는 `measure_guard.py`로 감싼 `python3 -B tools/measurement/bench_messaging.py smoke`(CI 밖, [결정 234](decisions.md#benchmark-messaging-module)) | [실험 E13](experiments.md#kafka-baseline) |
@@ -117,13 +117,13 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 | **L3 메시징 인프라** | 릴레이 재시도, 멱등 가드 | 없음(대역) | `test` | `common/messaging` | ms | 매 빌드 |
 | **L4 구조** | 패키지 경계, 의존 방향, 순서 보장 전제 | 없음 | `test` | `*ArchitectureTest` | ms | 매 빌드 |
 | **L5 기동** | 빈 구성, Flyway ↔ 엔티티 정합 | 전체 | `integrationTest` | `*ContextTest` | 십수 초 | 매 빌드 |
-| **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 21종 | `e2e` 모듈 | `e2e/src/test` | 46건에 36초 | **CI 밤마다·수동** (`verify-jib.py`) |
-| **L7 장애 주입** | 서비스를 정지시켰을 때 격리되는가, 복구되는가 | **망가뜨려도 되는** 스택 | `e2e` 모듈 (`chaos` 태그) | `ServiceOutageChaosTest` | 회차에 수 분 | 손으로 |
+| **L6 인수** | 서비스 *사이* — 이벤트가 건너가는가, 되감기는가 | 배포된 스택 21종 | `e2e` 모듈 | `e2e/src/test` | 여정마다 다름 | **CI 밤마다·수동** (`verify-jib.py`) |
+| **L7 장애 주입** | 서비스를 정지시켰을 때 격리되는가, 복구되는가 | **망가뜨려도 되는** 스택 | `e2e` 모듈 (`chaos` 태그) | `ServiceOutageChaosTest` | 회차에 수 분 | 손으로. 지금은 돌지 못한다([플랫폼 T48](../specs/platform/tasks.md)) |
 
 CI(`.github/workflows/ci.yml`, 결정 101)는 GitHub 호스팅 러너에서 main push마다 `./gradlew build`(L0~L5·과거 이행)를, PR에서는 바뀐 범위만 돌린다([결정 207](decisions.md#ci-build-scope): 문서만이면 생략, `apps/<앱>/` 안만이면 그 앱의 `build`, 그 밖은 전체. `e2e/`·`benchmarks/messaging/`만이면 그 모듈의 `build`, 루트 `docker-compose*.yml`만이면 `:common:test:test`, `scripts/`만이면 생략 — [결정 ci-scope-leaf-paths](decisions.md#ci-scope-leaf-paths)). 또 매일 03:00 KST와 수동 실행 때 L6 실제 스택(`verify-jib.py`, `:e2e:purchaseE2eTest`의 구매→지급→다운로드)을 돌린다. PG 연동은 걷어내 결제 실패·환불 야간 작업은 없다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 공개 저장소라 self-hosted 러너를 쓰지 않고, 비밀 값은 CI에 넣지 않는다.
 
 L6·L7 이 `build` 밖이다. 스택이 떠 있어야 돌기 때문이고, 그 조건을 기본 빌드에 넣으면
-컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다. 대신 `./gradlew :e2e:e2eTest` 로 따로 부른다.
+컨테이너가 없는 로컬에서 전체 빌드가 항상 빨개진다. 대신 `tools/verification/verify-*.py`가 스택을 띄우고 `:e2e`의 태스크를 따로 부른다.
 
 **L7 을 L6 에서 뗀 이유는 자원이 다르기 때문이다.** L6 은 떠 있는 스택이면 되지만
 L7 은 그 스택을 **정지시킨다.** 한 회차에 두면 저니 중간에 서비스가 사라져 관계없는 판정이
@@ -147,8 +147,9 @@ L7 은 그 스택을 **정지시킨다.** 한 회차에 두면 저니 중간에 
 ./gradlew integrationTest   Testcontainers · Order/Payment의 과거 이행 검사는 별도
 ./gradlew :apps:order:migrationTest :apps:payment:migrationTest
 ./gradlew build             단위·통합·과거 이행을 모두 포함
-./gradlew :e2e:e2eTest      46건 · 떠 있는 스택이 필요하다
-./gradlew :e2e:chaosTest    5건 · 스택을 실제로 정지시킨다 (L7)
+./gradlew :e2e:<여정>E2eTest  태그별 여정 · 떠 있는 스택이 필요하다(verify-<모듈>.py가 부른다)
+./gradlew :e2e:e2eTest      2건 · 여정 뒤 Outbox 적체·DLT 유입 관측
+./gradlew :e2e:chaosTest    스택을 실제로 정지시킨다 (L7). 지금은 돌지 못한다(플랫폼 T48)
 ```
 
 단위/인프라 경계를 태그로만 가르지 않은 이유가 여기 있다. 태그는 붙이는 것을 잊을 수 있고,
