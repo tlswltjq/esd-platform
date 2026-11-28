@@ -319,9 +319,21 @@
   - `ReviewRestartFlowTest`가 `stack.restart(REVIEW, ...)`로 Review를 직접 재시작하고, 재시작 전후를 한 메서드에서 단언한다. `phase` 속성과 증거 파일이 없어졌다. `ReviewCreatorFlowTest`(10건)도 같은 스택 확장을 쓴다. `verify-review.py`는 지웠다.
   - `LocalStack`에 앱 일부만 띄우기(`@LocalStackApps`)와 실행 인자를 바꾼 재시작을 더했다.
   - 잰 값(2026-11-28, OCI A1 4코어·23GB): `reviewRestartE2eTest` 121초(인프라 20초 + 앱 5개 50초), `reviewE2eTest` 91초(인프라 17초 + 앱 5개 49초).
-- [ ] **T51. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮길지 정한다** [결정 필요] ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
-  - 시범 둘(T44·T49)이 됐다. 남은 것: `verify-studio.py`·`verify-catalog.py`·`verify-store.py`·`verify-order.py`·`verify-payment.py`·`verify-license.py`·`verify-download.py`·`verify-g4-operations.py`(단계 실행과 증거 파일), `verify-tracing.py`. `verify-jib.py`는 옮기지 않는다.
-  - 정할 것: 전면 이전 여부와 순서, 범위 동결(결정 201) 안에서 할지, 야간 CI에 어느 여정을 넣을지, `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이는 자리. 스크립트가 단계 사이에 하는 일(릴레이 정지 외에 검증 전용 장애 설정으로 띄우기, DB 권한 회수, Kafka 주입)이 `LocalStack`에 더 필요한지는 스크립트마다 본다.
+- [x] **T51. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮길지 정한다** — PR #280 ([결정 e2e-full-migration](../../docs/decisions.md#e2e-full-migration)): 전부 옮긴다. 야간 CI 연결은 하지 않는다.
+- [ ] **T52. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮긴다** ([결정 e2e-full-migration](../../docs/decisions.md#e2e-full-migration)·[결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
+  - 방법: 스크립트 하나에 PR 하나. 테스트가 `LocalStack`으로 스택을 띄우고, 단계(`phase`)로 나뉜 메서드와 증거 파일은 재시작·장애를 직접 부르는 한 흐름으로 합친다. 옮긴 뒤 그 스크립트와 `ports.py`의 자리, 작업 표의 `phase`·`props`를 지운다. 스크립트가 단계 사이에 하던 제어(검증 전용 장애 설정으로 띄우기, 릴레이 정지, DB 권한 회수, Kafka 주입)는 필요한 만큼 `LocalStack`에 더한다. PR마다 운영 코드를 망가뜨린 실행(결정 102)과 `measure_guard`를 남긴다.
+  - 순서(작은 것부터, 뒤 여정이 앞 여정의 앱 구성을 포함한다):
+    - [ ] `verify-studio.py` → `studioE2eTest`
+    - [ ] `verify-catalog.py` → `catalogE2eTest`·`withdrawalE2eTest`
+    - [ ] `verify-store.py` → `storeE2eTest`
+    - [ ] `verify-order.py` → `orderE2eTest`
+    - [ ] `verify-payment.py` → `paymentE2eTest`
+    - [ ] `verify-license.py` → `licenseE2eTest`
+    - [ ] `verify-download.py` → `downloadE2eTest`
+    - [ ] `verify-g4-operations.py` → `g4OperationsE2eTest`
+    - [ ] `verify-tracing.py` → `tracingE2eTest`
+    - [ ] 마무리: 작업 표에서 `phase` 구조를 걷어내고, 앱별 비밀 허용 목록을 한 곳으로 모으고(`ServiceCredentials.java`와 `support/service_credentials.py`), `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이거나 지우고, `docs/testing.md`·`tools/verification/README.md`를 맞춘다.
+  - 옮기지 않는 것: `verify-jib.py`(Jib 이미지 스택, 구매 여정·백업 복구·Prometheus·측정).
 - [x] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** — PR #279 ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild))
   - `LicenseOutageFlowTest`(5건)가 `stack.stop(LICENSE)`·`start`로 License를 직접 멈췄다 되살린다: 주입 전 깨끗함 → 주입 확인 → 나머지 앱·무관한 조회는 계속 → 보유자의 티켓이 `503 UPSTREAM_UNAVAILABLE`(Download R9.3) → 복구 뒤 200. `ServiceOutageChaosTest`·`Journey`를 지웠다.
   - 옛 가설("Download는 권한 사본이 있어 License 없이도 내려받는다")은 지금 구조와 맞지 않아 버렸다. Download는 사본 없이 License에 묻고, 응답이 없으면 미보유로 바꾸지 않고 503으로 끝낸다.

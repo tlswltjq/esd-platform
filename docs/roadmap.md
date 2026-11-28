@@ -10,13 +10,13 @@
 <a id="scope-freeze"></a>
 ## 0. 범위 동결과 다음 단계 ([결정 201](decisions.md#scope-freeze-verified-journeys))
 
-**기본 기능 완료 기준:** 아래 여정이 격리 실제 스택에서 재현되고, 매일 밤 CI가 회귀를 확인한다. 이 여정이 다음 단계(M)의 회귀 기준선이다.
+**기본 기능 완료 기준:** 아래 여정이 격리 실제 스택에서 재현된다. 이 여정이 다음 단계(M)의 회귀 기준선이다. 매일 밤 CI가 확인한다는 조건은 뺐다([결정 e2e-full-migration](decisions.md#e2e-full-migration)).
 
 | 여정 | 확인 경로 |
 |---|---|
 | 가입·로그인, 역할별 진입 | auth·gateway 통합 검증, `:e2e:ownershipE2eTest` |
 | 창작→심사→출시→검색, 업데이트·판매 중지/재개 | G4, `verify-g4-operations.py` |
-| 구매→지급→다운로드 | 야간 `stack E2E (verify-jib.py)`(`:e2e:purchaseE2eTest`) |
+| 구매→지급→다운로드 | `verify-jib.py`(`:e2e:purchaseE2eTest`). CI의 야간 `stack E2E` 작업도 이것을 돌린다 |
 
 결제 실패·이탈→재진입·종료와 자동·수동 환불(확정 실패→복구) 여정은 PG 어댑터를 걷어내며 기준선에서 뺐다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)).
 

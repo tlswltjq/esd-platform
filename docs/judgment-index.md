@@ -9,6 +9,7 @@
 
 | 날짜 | 쟁점 | 제시된 선택지 (AI 추천) | 내 의견 (대화 인용) | 선택과 이유 | 구분 | 결정 |
 |---|---|---|---|---|---|---|
+| 2026-11-29 | 시범 둘이 된 뒤 나머지 E2E 여정 아홉 개를 테스트가 띄우는 스택으로 옮길지, 기준선 여정의 "매일 밤 CI 확인"을 어떻게 채울지 | A 여기서 멈춤 / B 기준선 여정만 옮기고 야간 CI 연결(추천) / C 아홉 개 모두 | "C, 매일밤 확인된다는 조건은 제거" | C — 모두 옮기고, 로드맵의 기본 기능 완료 기준에서 "매일 밤 CI가 확인한다"를 뺀다 | 추천과 다른 선택 | [결정 e2e-full-migration](decisions.md#e2e-full-migration) |
 | 2026-11-28 | 미루기로 한 결제·정산·PG 연동에서 무엇까지 걷어낼지 | A mock-pg만 / B PG 어댑터 전부, 코어 유지 / C payment·settlement 모듈까지(추천) / D 빌드에서만 제외 | "B" | B — mock-pg 앱과 Simulated·PortOne·TossPay 어댑터를 걷어내고 payment·settlement 코어는 남긴다. 이유는 말하지 않았다 | 추천과 다른 선택 | [결정 remove-pg-adapters](decisions.md#remove-pg-adapters) |
 | 2026-11-28 | 결정 번호를 착수 때 미리 예약해야 하는지(Kiro 제거 중 `gh` 없이 예약할 수 없어 드러남) | A 예약 유지(추천) / B 예약 없이 기록 때 main 최대 + 1 / C 번호 없이 이름으로 식별 | "작업번호 선점에대한 정책도 논의하고싶어 꼭 필요한가" / "C" / (식별자 모양) "a" | C — 예약 절차·도구·상한을 없애고, 새 결정은 영문 kebab 식별자(앵커)로 부른다. 1~238은 번호 그대로 | 추천과 다른 선택 | [결정 decision-name-ids](decisions.md#decision-name-ids) |
 | 2026-11-26 | Kafka 기준선의 DLT 발행 실패를 어떻게 일으킬지 | A DLT 토픽 `min.insync.replicas=2`(추천) / B DLT 토픽 `max.message.bytes` 제한 / C 가짜 DLT 발행기 | "현재 프로젝트는 Kafka 3.9.0을 사용합니다. Kafka 3.7 이후에는 유효한 min.insync.replicas가 실제 복제본 수를 초과하지 않도록 제한되므로, 단일 브로커에서 min.insync.replicas=2를 설정해도 DLT 쓰기 실패가 발생하지 않을 수 있습니다." | B — 단일 브로커에서 A의 쓰기 거부 전제가 성립하지 않을 수 있다. 사전 검증·설정 복원·무효 판정 조건을 더했고, DLT 저장 직후 offset 커밋 실패는 별도 시나리오로 뺐다 | AI 주장 정정 | [결정 235](decisions.md#dlt-write-failure-injection) |
@@ -111,4 +112,4 @@
 
 - **결정** 열의 링크를 따라가면 [decisions.md](decisions.md)에서 배경, 버린 대안, 비용을 볼 수 있다. 결정 29(전액 환불)에는 날짜별로 여러 선택이 모여 있다.
 - 각 선택을 구현하고 확인한 테스트·실제 여정의 결과는 [evidence.md](evidence.md)에 있다.
-- 이 표는 판단이 뚜렷한 30건만 골랐다. 나머지 사용자 결정 대부분은 AI 추천을 받아들인 것이다.
+- 이 표는 판단이 뚜렷한 31건만 골랐다. 나머지 사용자 결정 대부분은 AI 추천을 받아들인 것이다.
