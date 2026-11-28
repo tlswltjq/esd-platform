@@ -111,9 +111,9 @@ def suites = [
      expected: 1, failure: 'Payment verification requires one executed check without skips'],
     // 아홉 앱
     [task: 'licenseE2eTest', tag: 'license',
-     description: '결제 완료 주문의 권한 지급·라이브러리·반복 구매·중단과 재시작을 검증한다',
-     props: ['kafka-brokers', 'license-evidence'],
-     phase: [test: 'LicensePurchaseFlowTest', property: 'license-phase', first: 'preparePendingPurchase'],
+     description: '결제 완료 주문의 권한 지급·라이브러리·반복 구매·환불과 중단·재시작을 검증한다 (스택을 직접 띄운다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order', 'payment', 'license'],
+     verificationClasspath: ['payment', 'license'],
      expected: 1, failure: 'License verification requires one executed check without skips'],
     // 메시징 비교 실험의 부하 드라이버(결정 204 G). 검증이 아니라 측정이라 건수를 세지 않는다.
     //   ./gradlew :e2e:messagingLoadTest -Dstove.e2e.port-offset=<오프셋> -Dstove.e2e.load-rate=5 \

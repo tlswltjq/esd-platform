@@ -158,6 +158,27 @@ final class LocalStack implements AutoCloseable {
         }
     }
 
+    /**
+     * 앱 프로세스가 스스로 끝나기를 기다리고 종료 코드를 돌려준다. 검증 전용 장애 설정이 처리 도중 프로세스를 내리는
+     * 경우(커밋 뒤 ACK 전에 종료)에 쓴다. 끝난 앱은 떠 있는 목록에서 빠진다.
+     */
+    int awaitExit(StackApp app, Duration limit) {
+        Process process = processes.get(app);
+        if (process == null) {
+            throw new IllegalStateException(app.module() + " 은 떠 있지 않다");
+        }
+        try {
+            if (!process.waitFor(limit.toSeconds(), TimeUnit.SECONDS)) {
+                throw new IllegalStateException(app.module() + " 이 " + limit.toSeconds() + "초 안에 끝나지 않았다");
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("종료 대기가 중단됐다", interrupted);
+        }
+        processes.remove(app);
+        return process.exitValue();
+    }
+
     /** 떠 있는 앱 집합. */
     Set<StackApp> apps() {
         return Set.copyOf(apps);
