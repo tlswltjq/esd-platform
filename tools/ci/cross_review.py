@@ -23,6 +23,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import review_packet  # noqa: E402
+
 MODEL = 'gpt-6.1-terra'
 EFFORT = 'high'
 SANDBOX = 'read-only'
@@ -162,12 +165,28 @@ def fail(reasons, out=None):
     return 1
 
 
+def head_commit(root):
+    """리뷰를 시작할 때의 worktree head. git 저장소가 아니면 None."""
+    try:
+        result = subprocess.run(['git', '-C', str(root), 'rev-parse', '--verify', '--quiet', 'HEAD^{commit}'],
+                                capture_output=True, text=True)
+    except OSError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
+
+
 def run(args):
     out = Path(args.out)
     if out.exists():
         out.unlink()
     codex = json.loads(args.codex) if args.codex else default_codex()
     packet = Path(args.packet).read_text(encoding='utf-8')
+    # 리뷰 1 R1(PR #272): 리뷰한 커밋은 묶음이 담은 커밋이다. worktree가 그 뒤로 나아갔으면 리뷰받지 않은 커밋이
+    # 리뷰한 커밋으로 적히므로 리뷰를 시작하지 않는다.
+    reviewed = review_packet.target_commit(packet)
+    current = head_commit(args.root)
+    if reviewed is not None and reviewed != current:
+        return fail(['리뷰 묶음은 %s의 것인데 worktree head는 %s다. 묶음을 다시 만든다.' % (reviewed[:12], (current or '없음')[:12])])
     try:
         completed = subprocess.run(command(codex, args.model, args.root, out), input=packet,
                                    capture_output=True, text=True, timeout=args.timeout)
@@ -186,6 +205,9 @@ def run(args):
     if reasons:
         return fail(reasons, out)
     print('통과: ' + reviewer_line(args.model, thread))
+    if reviewed:
+        # 결정 review-gate-reviewed-commit: 이 줄을 리뷰어 줄과 함께 PR 본문 `리뷰 판정`에 적는다.
+        print('리뷰한 커밋: ' + reviewed)
     print('결과: ' + str(out))
     return 0
 

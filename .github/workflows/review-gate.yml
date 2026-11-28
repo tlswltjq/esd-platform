@@ -56,3 +56,13 @@ jobs:
           gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[] | .filename + (if .previous_filename then "\t" + .previous_filename else "" end)' > "$RUNNER_TEMP/files.txt"
           printf '%s' "$PR_BODY" > "$RUNNER_TEMP/body.md"
           python3 -I -B tools/ci/review_gate.py --body "$RUNNER_TEMP/body.md" --files "$RUNNER_TEMP/files.txt" --expected-files "$(cat "$RUNNER_TEMP/expected.txt")"
+      # 결정 review-gate-reviewed-commit: 리뷰한 커밋 뒤에 PR이 바꾼 코드 파일이 달라졌으면 재리뷰 전에는 통과시키지 않는다.
+      # 얕은 체크아웃(병합 커밋과 두 부모)으로는 리뷰한 커밋과 공통 조상을 볼 수 없어 이 단계에서만 이력을 받는다.
+      - name: Check reviewed commit
+        if: ${{ !cancelled() }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          git fetch --quiet --no-tags --unshallow origin
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/reviewed-body.md"
+          python3 -I -B tools/ci/reviewed_commit.py --body "$RUNNER_TEMP/reviewed-body.md" --root . --base 'HEAD^1' --head 'HEAD^2'

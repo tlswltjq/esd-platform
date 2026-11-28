@@ -31,6 +31,7 @@
 
 <!-- 변경 파일이 모두 *.md인 PR이 아니면 병합 전 필수(결정 108). 구현은 Claude, 리뷰는 Codex가 독립 문맥(읽기 전용)으로 한다(결정 117). -->
 <!-- 교차 리뷰(Codex)의 지적마다 판정과 이유. 지적이 없으면 리뷰어와 "지적 없음"을 적는다. -->
+<!-- 리뷰·재리뷰마다 cross_review.py가 출력한 리뷰어 줄과 `리뷰한 커밋: <sha>` 줄을 표 위에 적는다. 그 커밋 뒤에 코드가 바뀌면 review-gate가 실패한다(결정 review-gate-reviewed-commit). -->
 <!-- 판정자(결정 112·ai-judges-adopted-high): AI 초안이 부분 반영·기각이거나 정책 변경이면 사용자가 판정해 (사용자 확정: "원문")을 붙인다. 그 밖의 채택은 high라도 "채택 (AI 판정)". -->
 <!-- 재리뷰는 2회까지. 재리뷰 2회차의 medium·low(지적 칸에 "재리뷰 2")는 "할 일로 이관 — <tasks.md 또는 D-NNN>", high는 이 PR에서 고친다(결정 rereview-cap-two). -->
 <!-- main CI가 실패해 있을 때 그 실패를 고치는 PR은 본문(주석 밖)에 "- main CI 복구: <실패한 run URL>" 줄을 둔다(결정 stop-merge-on-red-main). -->

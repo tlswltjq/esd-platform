@@ -2,6 +2,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -146,6 +147,45 @@ class RunTest(unittest.TestCase):
             self.assertEqual(0, code)
             self.assertIn('리뷰어: Codex gpt-6.1-terra, 추론 high, read-only, 세션 ' + THREAD, printed)
             self.assertEqual('지적 없음', out.read_text(encoding='utf-8'))
+
+    def commit(self, root, message):
+        subprocess.run(['git', '-C', root, '-c', 'user.email=t@example.com', '-c', 'user.name=t', 'commit', '-q',
+                        '--allow-empty', '-m', message], check=True, capture_output=True)
+        return subprocess.run(['git', '-C', root, 'rev-parse', 'HEAD'], check=True, capture_output=True,
+                              text=True).stdout.strip()
+
+    def run_packet(self, sessions, root, text):
+        packet = Path(root) / 'packet.md'
+        packet.write_text(text, encoding='utf-8')
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = cross_review.main(['run', '--packet', str(packet), '--out', str(Path(root) / 'review.md'), '--root', str(root),
+                                      '--sessions', str(sessions),
+                                      '--codex', json.dumps(fake_codex(sessions, session_lines(packet=text)))])
+        return code, buffer.getvalue()
+
+    def test_prints_the_commit_the_packet_was_built_from_when_it_is_the_worktree_head(self):
+        # 결정 review-gate-reviewed-commit: 리뷰 판정에 적을 `리뷰한 커밋:` 줄은 묶음이 담은 커밋이다.
+        with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:
+            code, printed = self.run_main(fake_codex(sessions, session_lines()), sessions, root, Path(root) / 'review.md')
+            self.assertEqual(0, code)
+            self.assertNotIn('리뷰한 커밋', printed)  # 커밋을 담지 않은 묶음
+            subprocess.run(['git', '-C', root, 'init', '-q'], check=True, capture_output=True)
+            head = self.commit(root, 'a')
+            code, printed = self.run_packet(sessions, root, PACKET + '\n리뷰 대상 커밋: ' + head + '\n')
+            self.assertEqual(0, code, printed)
+            self.assertIn('리뷰한 커밋: ' + head + '\n', printed)
+
+    def test_r1_a_packet_built_before_a_later_commit_is_refused(self):
+        # 리뷰 1 R1(PR #272): 묶음은 A의 diff인데 worktree가 B로 나아갔으면 B를 리뷰한 커밋으로 적게 두지 않는다.
+        with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:
+            subprocess.run(['git', '-C', root, 'init', '-q'], check=True, capture_output=True)
+            first = self.commit(root, 'a')
+            self.commit(root, 'b')
+            code, printed = self.run_packet(sessions, root, PACKET + '\n리뷰 대상 커밋: ' + first + '\n')
+            self.assertEqual(1, code)
+            self.assertIn('묶음을 다시 만든다', printed)
+            self.assertNotIn('리뷰한 커밋:', printed)
 
     def test_unverified_review_fails_and_moves_result_aside(self):
         with tempfile.TemporaryDirectory() as sessions, tempfile.TemporaryDirectory() as root:
