@@ -320,7 +320,7 @@
   - `LocalStack`에 앱 일부만 띄우기(`@LocalStackApps`)와 실행 인자를 바꾼 재시작을 더했다.
   - 잰 값(2026-11-28, OCI A1 4코어·23GB): `reviewRestartE2eTest` 121초(인프라 20초 + 앱 5개 50초), `reviewE2eTest` 91초(인프라 17초 + 앱 5개 49초).
 - [x] **T51. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮길지 정한다** — PR #280 ([결정 e2e-full-migration](../../docs/decisions.md#e2e-full-migration)): 전부 옮긴다. 야간 CI 연결은 하지 않는다.
-- [ ] **T52. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮긴다** ([결정 e2e-full-migration](../../docs/decisions.md#e2e-full-migration)·[결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
+- [x] **T52. 나머지 `verify-*.py` 여정을 `LocalStack` 위로 옮긴다** ([결정 e2e-full-migration](../../docs/decisions.md#e2e-full-migration)·[결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
   - 방법: 스크립트 하나에 PR 하나. 테스트가 `LocalStack`으로 스택을 띄우고, 단계(`phase`)로 나뉜 메서드와 증거 파일은 재시작·장애를 직접 부르는 한 흐름으로 합친다. 옮긴 뒤 그 스크립트와 `ports.py`의 자리, 작업 표의 `phase`·`props`를 지운다. 스크립트가 단계 사이에 하던 제어(검증 전용 장애 설정으로 띄우기, 릴레이 정지, DB 권한 회수, Kafka 주입)는 필요한 만큼 `LocalStack`에 더한다. PR마다 운영 코드를 망가뜨린 실행(결정 102)과 `measure_guard`를 남긴다.
   - 순서(작은 것부터, 뒤 여정이 앞 여정의 앱 구성을 포함한다):
     - [x] `verify-studio.py` → `studioE2eTest` — PR #281
@@ -332,7 +332,7 @@
     - [x] `verify-download.py` → `downloadE2eTest` — PR #287
     - [x] `verify-g4-operations.py` → `g4OperationsE2eTest` — PR #288
     - [x] `verify-tracing.py` → `tracingE2eTest` — 옮기지 않는다([결정 tracing-stays-on-jib](../../docs/decisions.md#tracing-stays-on-jib)). `verify-jib.py --tracing`의 한 모드라 Jib 스택에 남는다. `tracingE2eTest`만 단계 실행(`phase`)을 계속 쓴다.
-    - [ ] 마무리: 작업 표의 `phase` 구조는 `tracingE2eTest`만 쓰도록 줄이고, 앱별 비밀 허용 목록을 한 곳으로 모으고(`ServiceCredentials.java`와 `support/service_credentials.py`), `e2eTest`의 관측 두 건(Outbox 적체·DLT 유입)을 여정 뒤에 붙이거나 지우고, Store가 있는 스택에서 브로커 무응답 중 Catalog가 낸 공개 알림이 복구 뒤 Store 사본에 닿는지 보는 단언을 더하고(PR #282에서 잡지 못한 변형), `docs/testing.md`·`tools/verification/README.md`를 맞춘다.
+    - [x] 마무리 — PR #290: 앱별 비밀 허용 목록을 `tools/verification/support/service_credentials.json` 하나로 모았다(파이썬 검사와 `ServiceCredentials.java`가 함께 읽는다). `e2eTest`의 관측 두 건은 소유권 여정의 마지막 테스트로 옮기고(Outbox에 남은 이벤트 0건, 격리된 소비 0건을 DB에서 센다) `e2eTest` 태스크를 지웠다. Store 여정에 "브로커 무응답 중 공개된 변경이 복구 뒤 Store 사본에 닿는다"를 더했다(PR #282에서 잡지 못한 변형을 잡는다). 작업 표의 `phase`는 `tracingE2eTest`만 쓴다.
   - 옮기지 않는 것: `verify-jib.py`(Jib 이미지 스택, 구매 여정·백업 복구·Prometheus·측정).
 - [x] **T48. `chaosTest`(`ServiceOutageChaosTest`)를 새 스택 제어 위에서 다시 세운다** — PR #279 ([결정 chaos-test-rebuild](../../docs/decisions.md#chaos-test-rebuild))
   - `LicenseOutageFlowTest`(5건)가 `stack.stop(LICENSE)`·`start`로 License를 직접 멈췄다 되살린다: 주입 전 깨끗함 → 주입 확인 → 나머지 앱·무관한 조회는 계속 → 보유자의 티켓이 `503 UPSTREAM_UNAVAILABLE`(Download R9.3) → 복구 뒤 200. `ServiceOutageChaosTest`·`Journey`를 지웠다.

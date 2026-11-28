@@ -58,7 +58,7 @@ final class G4PaymentFixture {
 
     static E2eClient.Response admit(String number, Object body) throws Exception {
         // LocalStack이 Order에 준 Payment 접근키를 내어 준다.
-        return Stove.consumers.get("order").post("/internal/v1/orders/" + number + "/payment-admissions", body,
+        return Stove.order.post("/internal/v1/orders/" + number + "/payment-admissions", body,
                 Map.of("X-Payment-Service-Key", System.getProperty("stove.e2e.payment-order-service-key")));
     }
 

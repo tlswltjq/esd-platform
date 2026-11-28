@@ -17,8 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 /**
@@ -30,6 +33,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 @ExtendWith(LocalStackExtension.class)
 @LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY, StackApp.REVIEW, StackApp.CATALOG,
         StackApp.STORE})
+// 자동 대조(기본 1분)가 이벤트 대신 사본을 맞추면 알림 유실이 가려진다. 이 여정의 사본은 이벤트와 기동 때의 HTTP
+// 초기화로만 바뀌게 한다.
+@LocalStackEnvironment("STORE_SYNC_RECONCILE_INTERVAL=PT1H")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class StorePublicationFlowTest {
     private static void publish(long project, Account creator, Account reviewer) {
         long review = request(project, creator, reviewer);
@@ -53,6 +60,7 @@ class StorePublicationFlowTest {
     private static final String WITHOUT_LISTENER = "--spring.kafka.listener.auto-startup=false";
 
     @Test
+    @Order(1)
     void storeFollowsPublicationsRebuildsOverHttpAndAnswersHonestlyWithoutCatalog(LocalStack stack) throws Exception {
         ReviewJourney.Account creator = account(true);
         ReviewJourney.Account reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
@@ -107,5 +115,60 @@ class StorePublicationFlowTest {
         stack.restart(StackApp.STORE, WITHOUT_LISTENER);
         matchesCatalog(code);
         assertThat(Stove.gateway.get(detail).data()).as("Catalog 복구 뒤 다시 채운 사본").isEqualTo(current);
+    }
+
+    /**
+     * 브로커가 응답하지 않는 동안 Catalog가 내보내지 못한 공개 알림은 Outbox에 남았다가, 브로커가 돌아오면 Store 사본에
+     * 닿는다. 같은 상품 키의 앞 이벤트 하나만 잃어도 드러나게, 자동 대조가 대신 고치지 못하도록 대조 주기를 길게 둔
+     * 스택에서 본다({@link LocalStackEnvironment}).
+     */
+    @Test
+    @Order(2)
+    void aPublicationReachesStoreAfterABrokerOutage(LocalStack stack) throws Exception {
+        // 앞 테스트가 리스너를 끈 채로 끝난다. 이벤트를 받는 기본 설정으로 다시 띄운다.
+        stack.restart(StackApp.STORE);
+        ReviewJourney.Account creator = account(true);
+        ReviewJourney.Account reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD);
+        ReviewJourney.Project project = project(creator);
+        String code = data(project.id(), creator).path("productCode").asText();
+        String detail = "/api/v1/storefront/products/" + code;
+        publish(project.id(), creator, reviewer);
+        matchesCatalog(code);
+        JsonNode before = Stove.gateway.get(detail).data();
+
+        // 릴레이를 끈 Catalog: 새 공개본은 확정되지만 알림은 Outbox에 남는다.
+        stack.restart(StackApp.CATALOG, "--stove.outbox.relay-enabled=false");
+        page(project.id(), creator, "Published during outage", 4000);
+        long review = request(project.id(), creator, reviewer);
+        assertThat(Stove.gateway.post(reviewPath(review) + "/approve", null, reviewer.headers()).status()).isEqualTo(200);
+        waitForResult(project.id(), review, creator, "APPROVED");
+        assertThat(Stove.gateway.post(path(project.id()) + "/release-requests",
+                ReviewJourney.submission(path(project.id()), creator.headers()), creator.headers()).status()).isEqualTo(202);
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(Stove.gateway.get("/api/v1/products/by-code/" + code).data().path("title").asText())
+                        .isEqualTo("Published during outage"));
+        assertThat(Stove.gateway.get(detail).data()).as("알림이 나가기 전의 Store 사본").isEqualTo(before);
+
+        stack.stop(StackApp.CATALOG);
+        stack.pauseKafka();
+        try {
+            stack.startWithoutWaiting(StackApp.CATALOG,
+                    "--spring.kafka.producer.properties.max.block.ms=1000",
+                    "--spring.kafka.producer.properties.delivery.timeout.ms=2000",
+                    "--spring.kafka.producer.properties.request.timeout.ms=1000");
+            Awaitility.await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
+                assertThat(stack.log(StackApp.CATALOG)).as("브로커 무응답으로 발행이 실패했다")
+                        .contains("not present in metadata after 1000 ms");
+                assertThat(Integer.parseInt(stack.sql(
+                        "SELECT COUNT(*) FROM stove_catalog.outbox_event WHERE status='PENDING'")))
+                        .as("발행 실패 뒤에도 Outbox에 남은 알림").isPositive();
+            });
+        } finally {
+            stack.resumeKafka();
+        }
+        stack.awaitReady(StackApp.CATALOG);
+
+        matchesCatalog(code);
+        assertThat(Stove.gateway.get(detail).data().path("title").asText()).isEqualTo("Published during outage");
     }
 }

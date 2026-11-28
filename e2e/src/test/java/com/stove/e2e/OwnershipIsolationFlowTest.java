@@ -16,8 +16,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 /**
@@ -29,6 +32,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
  */
 @Tag("ownership")
 @ExtendWith(LocalStackExtension.class)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class OwnershipIsolationFlowTest {
 
     private static Purchase first;
@@ -45,6 +49,7 @@ class OwnershipIsolationFlowTest {
     }
 
     @Test
+    @Order(1)
     void buyersReadOnlyTheirOwnOrdersPaymentsAndLibrary(LocalStack stack) {
         for (Purchase[] pair : List.of(new Purchase[] {first, second}, new Purchase[] {second, first})) {
             Purchase own = pair[0];
@@ -74,6 +79,7 @@ class OwnershipIsolationFlowTest {
     }
 
     @Test
+    @Order(2)
     void creatorsReadOnlyTheirOwnProjects() {
         for (Purchase[] pair : List.of(new Purchase[] {first, second}, new Purchase[] {second, first})) {
             Purchase own = pair[0];
@@ -96,6 +102,7 @@ class OwnershipIsolationFlowTest {
     }
 
     @Test
+    @Order(3)
     void rolesOpenOnlyTheirOwnDoors() {
         for (Account operator : List.of(reviewer, admin)) {
             assertThat(Stove.gateway.get("/api/v1/reviews", operator.headers()).status()).isEqualTo(200);
@@ -114,5 +121,16 @@ class OwnershipIsolationFlowTest {
         assertThat(Stove.gateway.get("/api/v1/settlements/me/sales", first.buyer().headers()).status())
                 .as("회원은 판매자가 아니다").isEqualTo(403);
         assertThat(Stove.gateway.get("/api/v1/orders").status()).as("로그인 없이").isEqualTo(401);
+    }
+
+    /**
+     * 열두 앱이 모두 떠 있는 정상 여정 뒤의 관측: 내보낼 이벤트가 남아 있지 않고, 재시도를 소진해 격리된 메시지가 없다.
+     * 여정이 초록인 채로 릴레이가 막혀 있거나 소비자 하나가 계속 실패하고 있어도 여기서 드러난다.
+     */
+    @Test
+    @Order(4)
+    void afterTheJourneyNothingIsStuckOrQuarantined(LocalStack stack) {
+        StackObservations.requireOutboxDrained(stack);
+        StackObservations.requireNothingQuarantined(stack);
     }
 }

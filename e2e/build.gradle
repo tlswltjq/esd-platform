@@ -2,16 +2,16 @@ plugins {
     id 'stove.java-base'
 }
 
-// 인수 시나리오 — 떠 있는 전체 스택(인프라 12 + 앱 11)을 **밖에서** 두드린다.
+// 인수 여정 — 실제 앱 스택을 **밖에서** 두드린다.
 //
-//   ./gradlew :e2e:e2eTest
+//   ./gradlew :e2e:<여정>E2eTest      (아래 표. 테스트가 스택을 직접 띄우고 내린다 — LocalStackExtension)
+//   python3 tools/verification/verify-jib.py   (Jib 이미지 스택: 구매 여정·추적·백업 복구·측정)
 //
-// `scripts/smoke-stack.sh` 의 인수 45건이 여기로 왔다. 셸이 하던 일이라 옮긴 것이 아니라,
-// 셸로는 할 수 없던 것이 있어서 옮겼다 — 정규식 단언(`"grossAmount":18000.*"netAmount":12600,`)이
-// 필드 순서에 묶여 있었고, 깨져도 무엇이 틀렸는지 말하지 않았다.
+// 셸 스크립트의 인수 판정이 여기로 왔다. 셸이 하던 일이라 옮긴 것이 아니라, 셸로는 할 수 없던 것이 있어서 옮겼다 —
+// 정규식 단언(`"grossAmount":18000.*"netAmount":12600,`)이 필드 순서에 묶여 있었고, 깨져도 무엇이 틀렸는지 말하지 않았다.
 //
-// **스프링 컨텍스트를 띄우지 않는다.** 여기서 보는 것은 컨테이너로 배포된 앱 10종이 서로
-// 맞물려 도는지이고, 그걸 보려면 이 프로세스가 그 스택의 일부가 아니어야 한다.
+// **스프링 컨텍스트를 띄우지 않는다.** 여기서 보는 것은 앱들이 서로 맞물려 도는지이고, 요청은 브라우저처럼 웹 BFF·
+// Gateway 로 보낸다. 테스트가 쥐는 것은 스택의 수명(기동·정지·재시작)뿐이다(결정 e2e-stack-in-junit).
 // 인프라를 띄워 한 서비스 안을 보는 것은 `integrationTest` 의 일이다(decisions.md 20번).
 
 dependencies {
@@ -45,11 +45,11 @@ def localStackApps = ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog
                       'license', 'download', 'settlement']
 
 // ── 모듈·여정별 검증 태스크 표 ─────────────────────────────────────────
-// 태그 하나에 태스크 하나다. 아래 `e2eTest` 의 제외 목록과 태스크 등록이 모두 이 표에서 나온다(결정 e2e-task-table).
-// 새 태그를 여기에 더하면 `e2eTest` 에서 자동으로 빠진다.
+// 태그 하나에 태스크 하나다. 태스크 등록이 모두 이 표에서 나온다(결정 e2e-task-table).
 //   props    : 테스트 JVM 으로 넘기는 `stove.e2e.<이름>` (없으면 빈 문자열)
 //   optional : 주어졌을 때만 넘기는 `stove.e2e.<이름>`
-//   phase    : `stove.e2e.<property>` 로 고르는 테스트 메서드 하나(재시작을 사이에 둔 단계 실행)
+//   phase    : `stove.e2e.<property>` 로 고르는 테스트 메서드 하나. 바깥 실행기가 단계마다 따로 부르는 구조이고,
+//              Jib 스택에 남긴 tracingE2eTest 만 쓴다(결정 tracing-stays-on-jib). 나머지는 테스트가 스택을 직접 제어한다
 //   expected : 실행 건수. 다르거나 건너뜀이 있으면 failure 문구로 실패한다. 없으면 세지 않는다
 //   localStack: 테스트가 스택을 직접 띄운다(LocalStackExtension). 값은 그 여정이 띄우는 앱 목록이고(@LocalStackApps 와 같게 둔다),
 //               그 앱의 bootJar 와 MinIO 이미지를 먼저 준비한다
@@ -59,7 +59,7 @@ def suites = [
     [task: 'ownershipE2eTest', tag: 'ownership',
      description: '실제 BFF 로그인으로 구매자·창작자·운영자가 자기 것만 보고 자기 문만 여는지 검증한다 (스택을 직접 띄운다)',
      localStack: localStackApps,
-     expected: 3, failure: 'Ownership verification requires 3 executed checks without skips'],
+     expected: 4, failure: 'Ownership verification requires 4 executed checks without skips'],
     // 장애 주입(L7). 앱을 실제로 멈추므로 다른 여정과 같은 실행에 두지 않는다 — 여정 중간에 서비스가 사라지면
     // "인수가 깨졌다"와 "일부러 죽였다"가 리포트에서 같은 모양이 된다. 스택이 테스트의 것이라 따로 뜬다.
     [task: 'chaosTest', tag: 'chaos',
@@ -94,9 +94,9 @@ def suites = [
      localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order', 'license', 'download'],
      expected: 1, failure: 'G4 operations requires one executed check without skips'],
     [task: 'storeE2eTest', tag: 'store',
-     description: '공개 상품의 Store 검색·사본 갱신·HTTP 초기화·재시작과 Catalog 정지 중 동작을 검증한다 (스택을 직접 띄운다)',
+     description: '공개 상품의 Store 검색·사본 갱신·HTTP 초기화·재시작과 Catalog 정지·브로커 무응답 중 동작을 검증한다 (스택을 직접 띄운다)',
      localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store'],
-     expected: 1, failure: 'Store verification requires one executed check without skips'],
+     expected: 2, failure: 'Store verification requires 2 executed checks without skips'],
     // 일곱 앱. 격리 Order 검증에서 Payment 는 계약 픽스처다
     [task: 'orderE2eTest', tag: 'order',
      description: '공개 상품 주문·결제 결과 계약과 브로커·Catalog 장애, 재시작을 검증한다 (스택을 직접 띄운다)',
@@ -139,77 +139,6 @@ def suites = [
      expected: 1, failure: 'Purchase verification requires one executed check without skips'],
 ]
 
-// `api-demo` 는 태스크 없이 빼 두는 태그다.
-def tagsOutsideJourney = ['api-demo'] + suites.collect { it.tag }
-
-tasks.register('e2eTest', Test) {
-    group = 'verification'
-    description = '떠 있는 스택의 Outbox 적체 수렴과 DLT 유입 없음을 확인한다 (스택이 먼저 떠 있어야 한다)'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-
-    // 장애 주입 장은 여기서 뺀다. **저니와 같은 태스크에 두면 안 된다** —
-    // 서비스를 중간에 정지시키므로 관계없는 판정들이 무더기로 빨개지고,
-    // 그러면 "인수가 깨졌다" 와 "일부러 죽였다" 가 같은 리포트에 같은 모양으로 남는다.
-    // 실행 정책을 필요 자원으로 가르는 이 저장소의 규칙 그대로다(build-logic 의 stove.java-base) —
-    // 저 장이 요구하는 자원은 '망가뜨려도 되는 스택' 이라 e2e 와도 다르다.
-    useJUnitPlatform { excludeTags(*tagsOutsideJourney) }
-
-    endpoints.each { name ->
-        systemProperty "stove.e2e.${name}",
-                providers.systemProperty("stove.e2e.${name}").getOrElse('')
-    }
-
-    // 옛 인수 여정(트랙 A·B·C, 결제 실패·시뮬레이터·행사)은 지금 없는 API를 불러 지웠다(플랫폼 T43).
-    // 남은 것은 여정 뒤에 보는 관측 두 건(OutboxDrainE2eTest·DeadLetterE2eTest)이다.
-    // 여정은 위 표의 태그별 태스크가 맡는다.
-    maxParallelForks = 1
-
-    // **이 태스크는 절대 건너뛰지 않는다.**
-    //
-    // 처음 붙였을 때 실제로 당했다 — 원격에서 두 번째로 부르니 `:e2e:e2eTest UP-TO-DATE`,
-    // `BUILD SUCCESSFUL in 1s`. 42건 중 한 건도 돌지 않았는데 초록이었다.
-    //
-    // stove.java-base 가 같은 함정을 이미 막아 두었지만 그쪽은 `CI` 환경변수가 있을 때뿐이다.
-    // 로컬을 열어 둔 근거는 "반복 루프에서는 캐시가 맞다" 였고, 그 근거가 여기서는 성립하지 않는다 —
-    // **이 태스크의 진짜 입력은 소스가 아니라 떠 있는 스택이다.** 그레이들은 그것을 볼 수 없으므로,
-    // 소스가 그대로면 언제나 "같다" 고 판단한다. 앱을 재배포하고 다시 부르는 것이 이 층의 기본 사용법인데
-    // 그때마다 검증이 조용히 건너뛰어진다.
-    //
-    // 아래 실행 건수 보고도 이것만으로는 못 막는다. 건너뛴 태스크는 afterSuite 자체를 부르지 않아
-    // **아무 줄도 출력되지 않는다** — 요약이 없는 것과 0건인 것이 화면에서 같아 보인다.
-    outputs.upToDateWhen { false }
-    outputs.cacheIf { false }
-
-    testLogging {
-        events 'passed', 'failed'
-        exceptionFormat = 'full'
-        // 이 층은 판정만이 아니라 **숫자를 기록한다** — 종단 지연, DLT 카운터의 유무.
-        // 기본값으로 두면 테스트가 찍은 것이 콘솔에 오지 않아, 기록하기로 한 값이 아무 데도 남지 않는다.
-        showStandardStreams = true
-    }
-
-    // **몇 건이 돌았는지 말하게 한다.**
-    //
-    // 루트의 `defectTest` 합산 보고와 같은 이유다. "돌았는가" 와 "통과했는가" 가 화면에서
-    // 구분되지 않으면 필터 오타나 캐시 복원으로 0건이 돈 실행이 초록으로 읽힌다.
-    // 셸에서는 EXPECTED_CHECKS 가 그 자리를 지켰다.
-    //
-    // 캐시 쪽은 stove.java-base 가 이미 막아 두었다 — CI 에서는 모든 Test 태스크가 UP-TO-DATE·FROM-CACHE 로
-    // 건너뛰어지지 않는다(decisions.md 12번 옆 흐름). 여기서는 세어서 말하는 것만 한다.
-    afterSuite { desc, result ->
-        if (desc.parent == null) {
-            println '════════════════════════════════'
-            println "  e2e ${result.testCount}건 실행 — 통과 ${result.successfulTestCount}" +
-                    " / 실패 ${result.failedTestCount} / 건너뜀 ${result.skippedTestCount}"
-            if (result.testCount == 0) {
-                println '  (0건이다. 통과가 아니라 미실행이다 — 클래스패스와 필터를 확인한다)'
-            }
-            println '════════════════════════════════'
-        }
-    }
-}
-
 // MinIO 이미지 선택(루트 build.gradle).
 def minioImageSelection = rootProject.ext.minioImageSelection
 
@@ -244,7 +173,8 @@ suites.each { suite ->
             filter { includeTestsMatching "com.stove.e2e.${suite.phase.test}.${method}" }
         }
         maxParallelForks = 1
-        // e2eTest 와 같은 이유다 — 진짜 입력은 소스가 아니라 떠 있는 스택이다.
+        // **이 태스크는 절대 건너뛰지 않는다.** 진짜 입력은 소스가 아니라 스택이다. 그레이들은 그것을 볼 수 없어
+        // 소스가 그대로면 "같다"고 판단하고, 그러면 한 건도 돌지 않았는데 초록(`UP-TO-DATE`)이 된다.
         outputs.upToDateWhen { false }
         outputs.cacheIf { false }
         testLogging { events 'passed', 'failed'; exceptionFormat = 'full' }
