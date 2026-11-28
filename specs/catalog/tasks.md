@@ -103,7 +103,7 @@
 - 영향: 돈 없음.
 
 ### CA-T10. 작업자 끄기 설정을 테스트·검증 도구가 쓰고, 운영 용도가 적혀 있지 않다
-- 어디서: `catalog:config/PublicationConfiguration.java:49`, `DownloadStorageConfiguration.java:30`, `apps/catalog/src/integrationTest/java/com/stove/catalog/CatalogIntegrationTestBase.java:12`, `e2e/src/test/java/com/stove/e2e/WithdrawalFlowTest.java`(작업자를 끈 Catalog로 재시작)·`tools/verification/verify-g4-operations.py`.
+- 어디서: `catalog:config/PublicationConfiguration.java:49`, `DownloadStorageConfiguration.java:30`, `apps/catalog/src/integrationTest/java/com/stove/catalog/CatalogIntegrationTestBase.java:12`, `e2e/src/test/java/com/stove/e2e/WithdrawalFlowTest.java`(작업자를 끈 Catalog로 재시작)·`e2e/src/test/java/com/stove/e2e/G4OperationsFlowTest.java`.
 - 목표: 원칙 ⑦ — 운영 용도(DB 전환 절차의 작업자 정지)를 design "설정"·사용 안내에 적어 운영 계약으로 두거나, 테스트는 결정 103의 테스트 전용 멈춤 지점으로 바꾼다. 기본값은 운영 값(true)이어야 한다(지금 충족).
 - 영향: 돈 없음.
 

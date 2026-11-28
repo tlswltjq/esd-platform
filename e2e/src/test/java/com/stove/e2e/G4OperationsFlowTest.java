@@ -11,9 +11,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,13 +22,28 @@ import java.util.Map;
 import java.util.UUID;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.Test;
 
-/** Each phase runs against the same disposable stack, with real process restarts between phases. */
+/** 한 스택에서 걸음을 순서대로 밟고, 걸음 사이에 실제 프로세스를 다시 띄운다. Payment는 띄우지 않는다. */
 @Tag("g4-operations")
+@ExtendWith(LocalStackExtension.class)
+@LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY, StackApp.REVIEW, StackApp.CATALOG,
+        StackApp.STORE, StackApp.ORDER, StackApp.LICENSE, StackApp.DOWNLOAD})
+@LocalStackEnvironment({
+        // 자동 대조와 초기화 재시도를 기다릴 수 있게 주기를 줄인다.
+        "STORE_SYNC_RECONCILE_INTERVAL=PT2S", "STORE_SYNC_RETRY_DELAY=PT1S", "STORE_SYNC_POLL_INTERVAL_MS=100",
+        "DOWNLOAD_BUILD_URL_TTL=PT15M",
+        // Catalog가 처음부터 읽기 계정(차단 태그 확인)과 태그 전용 계정(다운로드 차단)을 갖는다.
+        "STORAGE_BUCKET=" + LocalStack.BUILD_BUCKET,
+        "DOWNLOAD_STORAGE_ACCESS_KEY=download-reader", "DOWNLOAD_STORAGE_SECRET_KEY=" + LocalStack.READER_PASSWORD,
+        "CATALOG_DOWNLOAD_STORAGE_ENABLED=true",
+        "CATALOG_DOWNLOAD_STORAGE_ENDPOINT=" + LocalStack.STORAGE_ENDPOINT_TOKEN,
+        "CATALOG_DOWNLOAD_STORAGE_BUCKET=" + LocalStack.BUILD_BUCKET,
+        "CATALOG_DOWNLOAD_STORAGE_ACCESS_KEY=catalog-tagger",
+        "CATALOG_DOWNLOAD_STORAGE_SECRET_KEY=" + LocalStack.READER_PASSWORD})
 class G4OperationsFlowTest {
-    @Test
-    void publishesAndPreparesOwnedAndPendingOrders() throws Exception {
+    private static void publishesAndPreparesOwnedAndPendingOrders() throws Exception {
         Account creator = ReviewJourney.account(true);
         Account buyer = ReviewJourney.account(false);
         Account pendingSeller = ReviewJourney.account(false);
@@ -81,8 +93,7 @@ class G4OperationsFlowTest {
         save(state);
     }
 
-    @Test
-    void genreOnlyUpdateRequiresApprovalAndAndSearchMatchesAll() throws Exception {
+    private static void genreOnlyUpdateRequiresApprovalAndAndSearchMatchesAll() throws Exception {
         ObjectNode state = saved();
         Account creator = actor(state, "creatorEmail");
         long project = state.path("project").asLong();
@@ -123,8 +134,7 @@ class G4OperationsFlowTest {
         save(state);
     }
 
-    @Test
-    void withdrawsAnUpdateAndQueuesApprovedReplacement() throws Exception {
+    private static void withdrawsAnUpdateAndQueuesApprovedReplacement() throws Exception {
         ObjectNode state = saved();
         Account creator = actor(state, "creatorEmail");
         Account reviewer = reviewer();
@@ -153,8 +163,7 @@ class G4OperationsFlowTest {
         save(state);
     }
 
-    @Test
-    void verifiesPublishedUpdateAndPermanentRight() throws Exception {
+    private static void verifiesPublishedUpdateAndPermanentRight() throws Exception {
         ObjectNode state = saved();
         Account creator = actor(state, "creatorEmail");
         history(state.path("project").asLong(), "release", state.path("survivingRelease").asLong(), creator, "COMPLETED");
@@ -192,8 +201,7 @@ class G4OperationsFlowTest {
         save(state);
     }
 
-    @Test
-    void enforcesIndependentSalesAndListingControls() throws Exception {
+    private static void enforcesIndependentSalesAndListingControls() throws Exception {
         ObjectNode state = saved();
         Account creator = actor(state, "creatorEmail");
         Account admin = admin();
@@ -233,8 +241,7 @@ class G4OperationsFlowTest {
         save(state);
     }
 
-    @Test
-    void restrictsHistoricalUrlsAndNewlyPublishedBuildIndependently() throws Exception {
+    private static void restrictsHistoricalUrlsAndNewlyPublishedBuildIndependently() throws Exception {
         ObjectNode state = saved();
         Account creator = actor(state, "creatorEmail");
         restrictDownload(state, true);
@@ -266,8 +273,7 @@ class G4OperationsFlowTest {
         save(state);
     }
 
-    @Test
-    void hiddenProjectionSurvivesHttpBootstrap() throws Exception {
+    private static void hiddenProjectionSurvivesHttpBootstrap() throws Exception {
         ObjectNode state = saved();
         assertThat(matches(state.path("controlCode").asText())).isEqualTo(state.path("controlProduct"));
         hidden(state);
@@ -275,13 +281,11 @@ class G4OperationsFlowTest {
         stableRight(state);
     }
 
-    @Test
-    void automaticReconciliationRepairsMissingAndSameVersionProjection() throws Exception {
+    private static void automaticReconciliationRepairsMissingAndSameVersionProjection() throws Exception {
         hiddenProjectionSurvivesHttpBootstrap();
     }
 
-    @Test
-    void servesCachedSnapshotDuringCatalogOutage() throws Exception {
+    private static void servesCachedSnapshotDuringCatalogOutage() throws Exception {
         ObjectNode state = saved();
         cachedControl(state);
         hiddenStore(state);
@@ -290,8 +294,7 @@ class G4OperationsFlowTest {
         stableRight(state);
     }
 
-    @Test
-    void failedBootstrapIsUnavailable() {
+    private static void failedBootstrapIsUnavailable() {
         Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
             E2eClient.Response response = Stove.gateway.get("/api/v1/storefront/products");
             assertThat(response.status()).isEqualTo(503);
@@ -299,13 +302,11 @@ class G4OperationsFlowTest {
         });
     }
 
-    @Test
-    void bootstrapRetryRecoversBothVisibilityStates() throws Exception {
+    private static void bootstrapRetryRecoversBothVisibilityStates() throws Exception {
         hiddenProjectionSurvivesHttpBootstrap();
     }
 
-    @Test
-    void restoresPublicAccessAndCurrentPurchaseSnapshot() throws Exception {
+    private static void restoresPublicAccessAndCurrentPurchaseSnapshot() throws Exception {
         ObjectNode state = saved();
         change(state, "listing", false, "preference", "AUTO", actor(state, "creatorEmail"));
         JsonNode current = matches(code(state));
@@ -330,15 +331,15 @@ class G4OperationsFlowTest {
         save(state);
     }
 
+    /** 앞 걸음이 만든 상품·주문·티켓. 예전에는 실행기가 걸음마다 테스트를 따로 불러 파일로 넘겼다. */
+    private static String journey;
+
     private static ObjectNode saved() throws Exception {
-        return (ObjectNode) ReviewJourney.JSON.readTree(Files.readString(evidence()));
+        return (ObjectNode) ReviewJourney.JSON.readTree(journey);
     }
 
-    private static Path evidence() { return Path.of(System.getProperty("stove.e2e.g4-evidence")); }
-
     private static void save(ObjectNode state) throws Exception {
-        if (!Files.exists(evidence())) Files.createFile(evidence(), PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-        Files.writeString(evidence(), ReviewJourney.JSON.writeValueAsString(state));
+        journey = ReviewJourney.JSON.writeValueAsString(state);
     }
 
     private static Account actor(ObjectNode state, String field) throws Exception { return ReviewJourney.login(state.path(field).asText(), "creator-password-1234"); }
@@ -511,5 +512,103 @@ class G4OperationsFlowTest {
         assertThat(order.data().path("status").asText()).isEqualTo("PAID");
         for (String field : new String[] {"productId", "productCode", "title", "contentVersion", "amount", "currency", "createdAt", "expiresAt"})
             assertThat(order.data().path(field)).as("original purchase " + field).isEqualTo(state.path("firstOrder").path(field));
+    }
+
+    /** Kafka 리스너를 끈 Store: 사본은 HTTP 초기화와 자동 대조로만 맞춰진다. */
+    private static final String WITHOUT_LISTENER = "--spring.kafka.listener.auto-startup=false";
+
+    /** 사본에 두 상품이 있고, 노출을 끈 주 상품이 현재 빌드(3)로 남아 있는지 본다. */
+    private static void requireProjection(LocalStack stack, String mainCode) {
+        List<List<String>> rows = stack.sqlRows("SELECT product_code,listed,catalog_version,content_version,build_version "
+                + "FROM stove_store.store_product ORDER BY product_code");
+        assertThat(rows).as("Store 사본의 상품 수").hasSize(2);
+        List<List<String>> hidden = rows.stream().filter(row -> row.get(0).equals(mainCode)).toList();
+        assertThat(hidden).as("노출을 끈 주 상품").hasSize(1);
+        assertThat(hidden.get(0).get(1)).as("노출 여부").isEqualTo("0");
+        assertThat(hidden.get(0).get(4)).as("현재 빌드").isEqualTo("3");
+    }
+
+    private static String generatedCode(String code) {
+        // 테스트가 만든 UUID 상품 코드만 SQL에 넣는다.
+        assertThat(code).as("생성한 상품 코드").matches("[A-Za-z0-9-]+");
+        return code;
+    }
+
+    /**
+     * 출시·철회부터 Store 복구, 판매·노출·다운로드 제어, 기존 구매권까지 잇는 운영 여정. Payment 없이 결제 결과는 Kafka 계약
+     * 픽스처로 넣는다(PG 호출 없음). 테스트가 Catalog·Store를 직접 멈추고 되살리고, Store 사본을 직접 어긋나게 한 뒤 자동
+     * 대조가 고치는지 본다(결정 e2e-stack-in-junit).
+     */
+    @Test
+    void operationsSurviveWithdrawalsControlsProjectionDamageAndCatalogOutage(LocalStack stack) throws Exception {
+        publishesAndPreparesOwnedAndPendingOrders();
+        genreOnlyUpdateRequiresApprovalAndAndSearchMatchesAll();
+
+        // 자동 공개 작업자를 끈 Catalog: 대기 중인 출시를 철회하고 승인된 대체본을 줄 세운다.
+        stack.restart(StackApp.CATALOG, "--stove.catalog.publication.worker-enabled=false");
+        withdrawsAnUpdateAndQueuesApprovedReplacement();
+        stack.restart(StackApp.CATALOG);
+        verifiesPublishedUpdateAndPermanentRight();
+        enforcesIndependentSalesAndListingControls();
+        restrictsHistoricalUrlsAndNewlyPublishedBuildIndependently();
+
+        // 사본을 비우고 리스너 없이 다시 띄운다: 노출을 끈 상품도 HTTP 초기화로 돌아온다.
+        stack.stop(StackApp.STORE);
+        stack.sql("DELETE FROM stove_store.store_product");
+        stack.start(StackApp.STORE, WITHOUT_LISTENER);
+        hiddenProjectionSurvivesHttpBootstrap();
+        ObjectNode state = saved();
+        String mainCode = generatedCode(state.path("code").asText());
+        String controlCode = generatedCode(state.path("controlCode").asText());
+        requireProjection(stack, mainCode);
+
+        // 사본을 직접 어긋나게 한다: 대조군 상품은 지우고, 주 상품은 같은 버전인 채 값·노출·장르를 바꾼다.
+        long auditStart = Long.parseLong(stack.sql("SELECT COALESCE(MAX(id),0) FROM stove_store.store_reconciliation"));
+        List<List<String>> damaged = stack.sqlRows("START TRANSACTION; "
+                + "DELETE FROM stove_store.store_product WHERE product_code='" + controlCode + "'; "
+                + "UPDATE stove_store.store_product SET price=1,listed=TRUE,title='Injected projection mismatch' "
+                + "WHERE product_code='" + mainCode + "'; "
+                + "DELETE FROM stove_store.store_product_genre WHERE product_id="
+                + "(SELECT product_id FROM stove_store.store_product WHERE product_code='" + mainCode + "'); "
+                + "INSERT INTO stove_store.store_product_genre SELECT product_id,'PUZZLE' FROM stove_store.store_product "
+                + "WHERE product_code='" + mainCode + "'; "
+                + "SELECT catalog_version,price,listed FROM stove_store.store_product WHERE product_code='" + mainCode + "'; "
+                + "COMMIT;");
+        assertThat(damaged).as("어긋나게 만든 주 상품").hasSize(1);
+        String version = damaged.get(0).get(0);
+        assertThat(damaged.get(0).subList(1, 3)).isEqualTo(List.of("1", "1"));
+        automaticReconciliationRepairsMissingAndSameVersionProjection();
+        assertThat(stack.sqlRows("SELECT catalog_version,price,listed FROM stove_store.store_product WHERE product_code='"
+                + mainCode + "'")).as("같은 버전으로 정본 값을 되찾는다").isEqualTo(List.of(List.of(version, "2500", "0")));
+        List<List<String>> repairs = stack.sqlRows("SELECT action,product_code,"
+                + "JSON_UNQUOTE(JSON_EXTRACT(before_snapshot,'$.price')),JSON_UNQUOTE(JSON_EXTRACT(after_snapshot,'$.price')),"
+                + "catalog_version,JSON_EXTRACT(before_snapshot,'$.genres'),JSON_EXTRACT(after_snapshot,'$.genres') "
+                + "FROM stove_store.store_reconciliation WHERE id>" + auditStart + " ORDER BY id");
+        assertThat(repairs).as("값을 고친 대조 기록").anySatisfy(row -> {
+            assertThat(row.subList(0, 5)).isEqualTo(List.of("REPAIRED", mainCode, "1", "2500", version));
+        });
+        assertThat(repairs).as("장르를 고친 대조 기록").anySatisfy(row -> {
+            assertThat(row.subList(0, 2)).isEqualTo(List.of("REPAIRED", mainCode));
+            assertThat(ReviewJourney.JSON.readTree(row.get(5))).isEqualTo(ReviewJourney.JSON.readTree("[\"PUZZLE\"]"));
+            assertThat(ReviewJourney.JSON.readTree(row.get(6)))
+                    .isEqualTo(ReviewJourney.JSON.readTree("[\"ACTION\",\"RPG\"]"));
+        });
+        assertThat(repairs).as("빠진 상품을 다시 넣은 대조 기록").anySatisfy(row ->
+                assertThat(row.subList(0, 2)).isEqualTo(List.of("INSERTED", controlCode)));
+
+        // Catalog가 없어도 가진 사본으로 답하고, Catalog 없이 다시 뜨면 준비되지 않았다고 답한다.
+        stack.stop(StackApp.CATALOG);
+        servesCachedSnapshotDuringCatalogOutage();
+        stack.restart(StackApp.STORE, WITHOUT_LISTENER);
+        failedBootstrapIsUnavailable();
+        // Catalog가 돌아오면 Store는 다시 띄우지 않아도 스스로 초기화를 마친다.
+        long recovering = stack.pid(StackApp.STORE);
+        stack.start(StackApp.CATALOG);
+        bootstrapRetryRecoversBothVisibilityStates();
+        assertThat(stack.pid(StackApp.STORE)).as("자동 복구 동안 Store를 다시 띄우지 않았다").isEqualTo(recovering);
+        requireProjection(stack, mainCode);
+
+        stack.restart(StackApp.STORE);
+        restoresPublicAccessAndCurrentPurchaseSnapshot();
     }
 }
