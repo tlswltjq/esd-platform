@@ -1,6 +1,6 @@
 # 정산 매출·월 마감·PG 수령 모델
 
-[전체 안내](../model-guide.md) · [정산 실행](../../../specs/settlement/design.md#사용-안내) · [MVP 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md) · [책임 분리](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md) · [PortOne 혜택 A](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-external-benefit-verification.md) · [Order·Payment](order-payment.md)
+[전체 안내](../model-guide.md) · [정산 실행](../../../tools/verification/README.md) · [MVP 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md) · [책임 분리](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md) · [PortOne 혜택 A](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-external-benefit-verification.md) · [Order·Payment](order-payment.md)
 
 Settlement는 기존 OrderPaid의 불변 구매 근거를 매출로 기록한다. 판매자는 Catalog의 불변 ownerSubject,
 PG 근거는 선택한 공급자에서 직접 확인한다. SIMULATED는 외부 모의 PG의 거래·비용·명세, PORTONE_TEST는 현재 TOSSPAY_V2 원승인·지급 구성을 조회한다. Payment HTTP나 다른 모듈 DB를 경유하지 않는다.

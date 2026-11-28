@@ -1,6 +1,6 @@
 # 출시 자료와 심사·출시 요청 모델
 
-[전체 안내](../model-guide.md) · [실행·검증](../../../specs/studio/design.md#사용-안내) · [계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/studio-simplification-plan.md)
+[전체 안내](../model-guide.md) · [실행·검증](../../../tools/verification/README.md) · [계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/studio-simplification-plan.md)
 
 Studio는 창작자의 출시용 상세정보·빌드를 관리하고 심사·출시 요청과 재요청을 발행한다.
 심사 판정, 실제 출시, 공개 상품·공개본 관리의 책임은 외부 업무에 있다.

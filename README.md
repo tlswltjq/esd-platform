@@ -16,7 +16,8 @@
 | 궁금한 내용 | 읽을 문서 |
 |---|---|
 | 현재 목표·단계·완료 조건 | [로드맵](docs/roadmap.md) |
-| 모듈별 계약·실행 방법·남은 작업 | [`specs/`](specs/README.md) (각 `design.md` 끝의 "사용 안내") |
+| 모듈별 계약·남은 작업 | [`specs/`](specs/README.md) |
+| 실행·검증 방법 | [개발 환경과 실행](docs/getting-started.md) · [검증 도구](tools/verification/README.md) |
 | 어떤 도메인과 모델이 있고 어떻게 연결되는가 | [도메인·모델 안내](docs/domain/model-guide.md) · [용어집](docs/domain-glossary.md) · [업무 흐름](docs/domain/workflows.md) |
 | 누가 무엇을 왜 골랐나 | [판단 색인](docs/judgment-index.md) · [설계 결정](docs/decisions.md) |
 | 무엇으로 검증했나 | [근거 색인](docs/evidence.md) · [실험 기록](docs/experiments.md) · [결함 대장](docs/defects.md) |
@@ -60,4 +61,4 @@ python3 tools/verification/verify-settlement.py
 
 스택이 준비되면 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 연다. 로그인까지 같은 주소를 사용한다. 실행 조건, 상태·로그 확인, 종료와 원격 실행은 [개발 환경과 실행](docs/getting-started.md)을 따른다.
 
-현재 열 앱의 실제 구매·다운로드 검증은 [Download 독립 검증](specs/download/design.md#사용-안내)을 사용한다. [전체 API 데모](docs/api-demo.md#full-demo)는 구매·배포·정산 모듈의 재작성 전 참고 기록이다. 실제 PG·세금계산서 등 외부 연동의 구현 범위는 [서비스 명세](docs/services.md)에 정리돼 있다.
+현재 열 앱의 실제 구매·다운로드 검증은 [Download 독립 검증](tools/verification/README.md)을 사용한다. [전체 API 데모](docs/api-demo.md#full-demo)는 구매·배포·정산 모듈의 재작성 전 참고 기록이다. 실제 PG·세금계산서 등 외부 연동의 구현 범위는 [서비스 명세](docs/services.md)에 정리돼 있다.
