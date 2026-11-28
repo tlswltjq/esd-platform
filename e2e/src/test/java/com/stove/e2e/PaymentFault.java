@@ -6,8 +6,7 @@ import java.util.stream.Stream;
  * Payment를 검증 전용 장애 설정({@code PaymentFaultConfiguration})으로 띄운다.
  *
  * <p>운영 Payment는 프로세스 안에서 모든 결제를 승인하므로(결정 in-process-pg-approval) 거절이나 응답 유실은 이
- * 설정으로만 만들 수 있다. 통합 테스트 소스셋에서 컴파일되고 bootJar에는 들어가지 않는다. 파이썬 실행기의
- * {@code support/payment_fault.py}와 같은 값이다.
+ * 설정으로만 만들 수 있다. 통합 테스트 소스셋에서 컴파일되고 bootJar에는 들어가지 않는다.
  */
 final class PaymentFault {
 

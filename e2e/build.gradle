@@ -123,9 +123,10 @@ def suites = [
      props: ['load-rate', 'load-duration-secs', 'load-warmup-secs', 'load-buyers', 'load-refund-every', 'load-evidence']],
     // 열 앱과 실제 전체 빌드 전송
     [task: 'downloadE2eTest', tag: 'download',
-     description: '보유권·현재 공개본·실제 ZIP 다운로드와 만료·장애·재시작을 검증한다',
-     props: ['download-evidence'],
-     phase: [test: 'DownloadPurchaseFlowTest', property: 'download-phase', first: 'preparePendingPurchase'],
+     description: '보유권·현재 공개본·실제 ZIP 다운로드와 만료·장애·재시작을 검증한다 (스택을 직접 띄운다)',
+     localStack: ['auth', 'studio', 'web-bff', 'gateway', 'review', 'catalog', 'store', 'order', 'payment', 'license',
+                  'download'],
+     verificationClasspath: ['payment'],
      expected: 1, failure: 'Download verification requires one executed check without skips'],
     [task: 'tracingE2eTest', tag: 'tracing',
      description: '현행 구매·Payment 내구 재개·별도 Download의 실제 Tempo 연결을 검증한다',

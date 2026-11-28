@@ -31,7 +31,7 @@ import java.util.Map;
  * Method=GET} 이라 이 운영 호출은 밖에서 닿지 않는 것이 정상이다. <b>이 목록이 늘어나면 그 자체가 검토 대상이다.</b>
  */
 // The consumers/publishers address maps below belong to the historical full-stack/chaos journeys.
-// Current Download has no Kafka consumer; use verify-download.py for its completed MVP contract.
+// Current Download has no Kafka consumer; use :e2e:downloadE2eTest for its completed MVP contract.
 final class Stove {
 
     /** 컨테이너 포트에 이만큼 더한 것이 호스트 포트다. traefik 이 잡던 8080 과도 겹치지 않는다. */
