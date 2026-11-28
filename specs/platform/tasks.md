@@ -1,0 +1,300 @@
+# 작업: Platform (모듈을 넘는 계약)
+
+> [결정 150](../../docs/decisions.md#spec-foundation)·[결정 151](../../docs/decisions.md#platform-spec). 스펙 작성 항목과, 목표 계약과 코드가 다른 모듈 간 항목을 둔다.
+
+## 스펙 작성
+
+- [x] 평가 방법·완료 조건 결정([결정 152](../../docs/decisions.md#spec-evaluation))
+- [ ] P1~P4 요구사항과 설계 작성(P3에 흐름 단계별 실패 표) — 초안 5개 통합본(2026-11-09) 검토 대기
+- [ ] 부하·장애 실험으로 기준선을 잰 뒤 P5 품질 시나리오를 더하고 다시 평가
+- [ ] 정방향 응답 쌍의 경보 기준 시간을 G6 실험 측정값으로 쌍마다 확정(결정 159, P4.3-4) — G7 완료 조건
+- [ ] `docs/domain/workflows.md`의 돈 불변식(I1~I11·U1~U6)과 이벤트 뜻을 이 스펙으로 옮기고 `docs/`에는 설명과 링크만 남김 — 낡은 서술도 함께 정리: `workflows.md:43-56`("방문자" 절의 `contentVersion` 비교·재시작 서술, 실제는 `catalogVersion`·자동 재시도), `docs/event-ordering.md:236`(구 계약 `ProductChangedEvent`·`projectionVersion` 예시)
+- [ ] 모듈 스펙 11개가 이벤트·흐름·불변식을 다시 적지 않고 이 스펙을 링크하게 정리 — 한 모듈 안에서 끝나는 코드 차이(`MC` 번호)를 각 모듈 `tasks.md`로 옮김
+- [x] `[결정 필요]` PD-1~PD-20을 한 건씩 묻고 결정 번호로 바꿈 — PD-1 → 결정 153, PD-2 → 결정 154, PD-3 → 결정 155, PD-4 → 결정 156, PD-5 → 결정 157, PD-6 → 결정 158·159, PD-7 → 결정 158 적용, PD-8 → 결정 160, PD-9 → 결정 161, PD-10 → 결정 162, PD-11 → 결정 163, PD-12 → 결정 164, PD-13 → 결정 165, PD-14 → 결정 166, PD-15 → 결정 167, PD-16 → 결정 168, PD-17 → 결정 169, PD-18 → 결정 170, PD-19 → 결정 171, PD-20 → 결정 172 완료 — PD 전부 결정됨(돈·보유권 영향 순: PD-1·PD-2·PD-3 먼저)
+- [ ] 소급 후보 RC-1~RC-19(결정 147 원칙에 어긋난 옛 결정)를 한 건씩 다시 물음. 다시 고르기 전까지 기존 결정 유효
+  - 닫힘 — PD 결정이 이미 답함: RC-6(결정 171), RC-8(결정 164·170), RC-10(결정 167), RC-11(결정 168), RC-12(결정 158·159), RC-15(결정 162), RC-19(결정 158·161 — 지키는 곳은 응답 대기 게이지와 ADMIN 재발행이고, 결정 37의 "자동 재발행·대조 엔진은 만들지 않는다"는 그대로 맞다)
+  - 닫힘 — 결정은 그대로이고 구현·문구만 고침(원칙만으로 방향이 정해짐, 결정 150): RC-4(결정 32의 30분은 유지, 기한 정본은 Order — T12·결정 169), RC-5(결정 42의 금융 확인 월은 유지, 선후 비교만 제거 — T3·결정 163), RC-7(결정 128 본문의 이벤트 서술 정정 — 결정 147·148), RC-14(결정 124의 3시간은 adapter 설정으로 — 결정 140 작업), RC-18(결정 29·133의 HTTP 코드 서술은 adapter 메모로 — 결정 140 작업)
+  - 다시 물어 정함: RC-16 → 결정 173, RC-1 → 결정 174, RC-3 → 결정 175, RC-9 → 결정 176
+  - 모듈 스펙 단계에서 물음(한 모듈 안의 상태 모양이라 상태×트리거 표를 쓸 때): RC-2(결정 144 보류 사유 칸, Payment), RC-13(결정 114·124·126 보류 상태 하나, Payment), RC-17(결정 94·96 정지 전 상태, License → [결정 193](../../docs/decisions.md#split-suspended-status))
+- [ ] 독립 아키텍처 평가 → 수정 → 재평가
+  - [x] 1회차: 플랫폼 스펙만(`982cceb3`), Kiro `gpt-5.6-sol`(`xhigh`, 결정 149 대체) — 지적 14건, 아래 "독립 평가 1회차 지적"
+  - [ ] 2회차: 모듈 스펙 11개를 다시 쓴 뒤 플랫폼과 함께 평가. 1회차 지적도 이때 판정·수정한다([결정 178](../../docs/decisions.md#evaluation-findings-deferred))
+
+## 독립 평가 1회차 지적
+
+> [결정 178](../../docs/decisions.md#evaluation-findings-deferred): 판정하지 않고 그대로 둔다. 모듈 스펙을 쓸 때 걸리는 곳에 ID를 달되, 고친 것으로 치지 않는다. 판정(결정 112 규칙)과 수정은 2회차 함께 평가에서 한다. 평가 원문(위치·실패 시나리오)은 [PR #194](https://github.com/tlswltjq/esd-platform/pull/194) 본문.
+
+| ID | 심각도 | 문제 | 평가자 수정안 |
+|---|---|---|---|
+| A1 | high | 정방향 응답 쌍에 Payment `PAID`(`OrderPaymentCompleted`) → Order 반영이 없다. 결과가 Order에 닿지 않으면 청구됐는데 주문·보유권이 없고 세는 곳도 없다(I14·I20·흐름 2 S9) | I14에 `purchase_payment.PAID → purchase_order.PAID`를 넣고, Payment가 Order의 수락 사실(예: `OrderPaid`를 새 그룹으로 소비) 또는 `OrderPaymentResultRejected`를 기다리며 센다. 응답 쌍 표·T6에 추가 — **새로 정할 일** |
+| A2·B2 | high | 늦은 취소 회수가 서로 어긋난다: P3.23-8은 복구로 `ACTIVE`인 보유권도 회수, P3.25는 현재 정지와 맞지 않으면 영구 실패. I4(P4.2-3)·확인 SQL은 `REFUNDED`면 환불 `COMPLETED`·`refund_confirmed_at`을 요구해 정상 늦은 취소를 위반으로 잡는다. 재신청 시도 B가 진행 중일 때 B의 송신·상태·정지 ID를 어떻게 닫는지 없다(S14는 모듈 스펙으로 넘김) | P3.25에 늦은 취소 예외(`refundId`·늦은 취소 확인이 맞으면 `ACTIVE`에서도 회수), I4에 "또는 늦은 취소 완료 + Payment 확인 기록". 재신청 시도 B의 처리는 **새로 정할 일**(결정 157은 모듈 스펙으로 넘겼다) |
+| A3 | high | `OrderPaymentCompleted.admissionId`를 "선택 칸 추가라 호환"이라 했지만 Order가 null을 거절하므로 필수화다(P2.7-2). 배포 때 남은 v1 정상 결과를 새 Order가 거절할 수 있다(design 칸 변경 표, T1) | `schemaVersion=2`. P2.7-5 순서: Payment 늦은 성공 차단(결정 153 A1) → Order가 v1(지금 규칙)·v2 둘 다 읽음 → Payment v2 발행 → v1 행이 Outbox·실패 보관 표에서 0건 → v1 읽기 제거 |
+| B1 | high | 재발행 뒤 회수 순서가 둘이다: P2.2-7은 키 안 발행 순번, P2.6-4·5·design 이벤트 수명·T2는 보관 표 offset 순. 재발행된 앞 이벤트는 offset이 커서 offset 순이면 뒤 이벤트가 먼저 재처리돼 키가 풀리지 않는다 | 회수 정렬을 `(발행 순번, offset)` 하나로. 발행 순번은 발행 모듈 `outbox_event.id`를 헤더로, 헤더 없는 옛 레코드만 offset(결정 161) |
+| B3 | high | 승인 대기 출시가 철회(`WITHDRAWN`)된 뒤 늦은 `ProjectReviewApproved`가 오면 P3.4-2·S3a 문구대로 공개 작업이 열린다 | 같은 요청 잠금(`catalog_request_gate`) 아래 출시가 아직 승인 대기일 때만 작업을 연다. `WITHDRAWN`·`REJECTED`·종결이면 승인만 저장. S3a 실패 행·T16 재현에 추가(결정 57·167) |
+| B4 | high | 결정 158의 응답 사실 3개(`SettlementSaleRecorded`·`SettlementRefundRecorded`·`LicenseRefundApplied`)가 이벤트 목표 행에만 있고 P3.15·P3.25·P3.26·흐름 단계에 없다. P3.25-1은 "결과 이벤트는 내지 않는다"고 적었다. 그 단계의 실패 6종 행도 없다 | 세 사실을 반영 트랜잭션의 Outbox로 요구사항에 넣고, 흐름 2·3에 응답 단계와 실패 6종 행을 더한다. T6 대상에 P3.25·P3.26 |
+| A4·B5 | medium | 결정 164·T19·T30은 `RefundExecutionSucceeded`를 없애는데 비동기 의존 S6·SP-5·P3.21-2·흐름 3 S8·U2 ORD-10은 목표에서도 발행·Order 귀속 기록을 적는다 | 목표 문구를 Payment 내부 귀속 기록으로 통일, 옛 이벤트는 P2.8 제거 절차로 |
+| A5 | medium | 목표 이벤트 계약이 덜 닫혔다: `RefundLateCancellationConfirmed`의 Order 소비 그룹을 Order 모듈 스펙으로 미뤘고, 확인 사실 3개는 소비 측 업무 멱등 키 없이 Inbox만 적었다(P2.3-3). 여러 이름이 "가칭" | 정확한 `eventType`·모든 소비 그룹·소비 측 업무 키·내용 불일치 처리를 이벤트 표에서 확정. 늦은 취소는 `RefundFailureClosed`와 같은 그룹이거나 도착 순서와 무관한 상태 판정 |
+| B6 | medium | 주문 상태×결과 표에 `EXPIRED × OrderPaymentFailed`가 없다. P3.14-3은 `FAILED`로 바꾸는 것으로도 읽힌다 | 다섯 주문 상태 × 세 결과 이벤트를 모두 채우고, `EXPIRED × OrderPaymentFailed`의 최종 상태·사실 기록을 S9 역전 행에 |
+| B7 | medium | adapter 메모의 공급자 보장 기한 "3시간"이 흐름 단계·실패 표 본문에 무조건 규칙처럼 적혔고 목표 차이가 "없음"이다(P1.4-5 정본은 adapter가 준 기한) | adapter 메모에만 3시간을 두고, 본문은 `confirmDeadline`·"adapter가 준 보장 기한" |
+| A6 | low | 결정 166의 `OrderPaid.paymentConfirmedAt`(Order 발행·Settlement 소비)이 MC-S4로만 연결되고 플랫폼 T 항목이 없다 | Order 본문·Settlement 매퍼·옛 이벤트 호환·월 경계 테스트를 묶은 T 항목 |
+| A7 | low | 토픽 표의 `stove.order.v1` 현행 이벤트 수 7은 8이다(#17·18·19·21·22·23·39·40) | 8로 고치고 T27 대조 검사에 소유 모듈별 집계 |
+| B8 | low | 흐름 1 단계 목록에 S6b가 없고, S6b 행 이름이 첫 행만 다르다. S6b 순서 역전 행은 다른 발행 모듈·토픽의 순서를 결정 155가 보장한다고 적었다 | 단계 목록에 S6b, 행 이름 통일, 순서 근거는 `BLOCKED` 선행 조건과 Catalog 작업 잠금 |
+| B9 | low | P3.15-5·흐름 3 S2가 목표 응답 이름으로 `LicenseGranted`를 쓴다(목표는 `PurchaseRecordStored`, 결정 175) | 목표 계약에는 `PurchaseRecordStored`만, 옛 이름은 이행 메모에만 |
+
+1회차가 남긴 그 밖의 확인: `EventType` 상수 42개는 이벤트 표에 모두 있다. 흐름 실패 표는 72·72·84행, 빈칸 0. 점검표는 시계 ⑥·테스트 편의 ⑦ 충족, 불변식 ⑤ 미충족, 나머지 부분.
+
+## 코드와 맞출 것
+
+모듈 둘 이상에 걸친 차이만 둔다. 돈·보유권 영향이 큰 순서다. 형식: 무엇이 · 어디서(`파일:줄`) · 목표 · 영향 · 재현 테스트 아이디어. 경로 줄임은 [requirements.md](requirements.md)와 같다(`<모듈>:` = `apps/<모듈>/src/main/java/com/stove/<모듈>/`). 줄 번호는 2026-11-09 `docs/spec-foundation` 기준이다.
+
+- [ ] **T1. U1 — Order가 결과를 승인 진행 영수증(`admissionId`)과 대조하지 않는다** ([결정 153](../../docs/decisions.md#late-success-rejection))
+  - 어디서: `order:core/domain/Order.java:152-172`(`PAYMENT_PROCESSING`일 때만 `paymentId` 대조 `:163-164`, `PENDING`이면 그대로 `PAID`), `order:core/service/ApplyPaymentResult.java:50-57`(`PAID`면 `OrderPaid` Outbox), `common/contract/.../payload/OrderPaymentCompletedEvent.java:11-12`(`admissionId` 칸 없음), `payment/db/V11__purchase_payment.sql:29`(`uk_purchase_payment_order` — 주문당 `paymentId` 고정), Order V10(`purchase_order`에 반영 영수증 열 없음). Payment 쪽: `payment:adapter/pg/AdmittedPortOnePgGateway.java:21-28`가 시도를 잠금 밖에서만 확인, `payment:core/service/ResolvePayment.java:103,112-119`의 확정 트랜잭션은 결제만 잠그고 시도가 여전히 접수된 현재 시도인지 다시 보지 않는다.
+  - 목표: P3.12-1·P3.14-1·P4.2-5, I12·I15. `OrderPaymentCompleted.admissionId`(필수), `OrderPaymentFailed`·`OrderPaymentReviewClosed.admissionId`(접수된 시도일 때만). Order는 열린 최신 영수증과 `admissionId`·`paymentId`가 같을 때만 `PAID`, `purchase_order.payment_admission_id` FK + `CHECK (status<>'PAID' OR payment_admission_id IS NOT NULL)`. Payment는 결제 → 시도 잠금 뒤 시도 재확인하고, 실패 통지·종결·만료로 닫힌 시도의 성공은 결과로 내지 않고 `PAID_WITHOUT_ADMISSION` 보류(A1). 연결값은 맞지만 반영할 수 없는 성공은 Order가 거절 기록 + `OrderPaymentResultRejected`(P3.14-2, 409 → DLT 아님), Payment가 받아 보류 흐름에 올림(P3.13-7, A2) — 결정 153. Payment는 주문에 연결되지 않은 청구 기록(`UnlinkedCharge`, 출처 `ORDER_REJECTED`, 결정 154)에 담는다(MC-P13). 옛 `PAID` 행(모의 PG·옛 경로)의 이행 방침을 같은 PR에 적는다.
+  - 영향: **돈·보유권** — 접수 실패로 `PENDING`에 돌아온 주문에 이전 시도의 늦은 성공이 오면 `PAID` → `OrderPaid` → 구매 근거·정산 매출. 같은 고객이 새 시도로 이중 청구될 수 있다. 영수증 B가 열려 있을 때 시도 A의 결과도 구분하지 못한다.
+  - 재현: Order 통합 — (1) 접수 → `/failure`로 `PENDING` → 같은 `paymentId`의 `OrderPaymentCompleted` 주입 → `PAID`면 Red (2) `createdAt` 31분 전 `PENDING` 주문(스캔 정지)에 결과 주입 → Red (3) 영수증 B 열림 + 결과 `admissionId`=A → 거절, (4) `EXPIRED` 주문에 성공 주입 → DLT가 아니라 `OrderPaymentResultRejected` Outbox, Payment 보류 목록에 보임. Payment 경합 — `charge` 직후 시도 A를 실패 종료로 바꾸고 PG를 PAID로 둔 뒤 확정 → 결과가 나오면 Red. 계약 테스트: 스키마에 `admissionId`.
+
+- [ ] **T2. 같은 키의 앞 이벤트가 Outbox `DEAD`·소비 DLT로 빠진 뒤 뒤 이벤트가 먼저 흐르고, 재투입이 순서를 뒤집는다** ([결정 155](../../docs/decisions.md#key-stop-on-dead)) — 순서 역전 자체는 발행 쪽 PR #203, 소비 쪽 PR #209로 고쳤다. 아래 "어디서"·"재현"은 수정 전 기록이다. 남은 것은 미완료 하위 항목 둘과 T10
+  - 어디서: `common/messaging/.../outbox/OutboxEvent.java:204-212`(`holdUntil(null)`은 아무것도 안 함), `OutboxRelay.java:109-113`, `OutboxEventRepository.java:20-28`(`lockPendingBatch`가 `DEAD` 키를 거르지 않음), `common/messaging-kafka/.../ops/DltOpsService.java:65-`(재투입이 같은 키의 이후 처리 여부를 보지 않음, `docs/architecture.md` R2).
+  - 목표: P2.2-4·P2.6-5. 결정 155: 키 정지 — Outbox는 `SENT`가 아닌 앞 행이 있는 키의 뒤 행을 보류(`lockPendingBatch`), 소비는 DLT로 보낸 (그룹, 토픽, 키)를 모듈별 정지 목록(`processed_event` 옆)에 올리고 뒤 레코드도 같은 DLT로, 재투입은 키 단위 offset 순·다 처리되면 정지 해제. 정지 키 수 지표·경보(P2.6-5), 키 단위 회수 API. 결정 160: 정지 목록과 실패 레코드 보관을 소비 모듈 DB의 한 표로 둔다(기한 없음, 1건 즉시 경보). DLT 토픽과 `DltOpsService.replay`는 이 표의 키 단위 재처리로 바꾼다. 표 구조·회수 API는 common messaging 설계.
+  - 영향: **돈·보유권(추정)** — `OrderPaid` `DEAD` 중 `LicenseSuspensionRequested`가 먼저 License에 가 DLT, `OrderPaid` 회수 뒤 구매 근거는 생기지만 정지는 DLT에 남아 환불 진행 중 보유권이 열림. DLT 재투입 순서에 따라 환불된 주문에 구매 근거, 환불된 매출이 정산에 남음.
+  - 재현: 릴레이 통합 — `max-retry=1`, 같은 키 두 행, 첫 행을 `DEAD`로 만든 뒤 둘째 행이 `SENT`가 되지 않음을 단언. 소비 — `OrderPaid`를 DLT로 보낸 뒤 같은 주문 환불을 끝내고 재투입, License 상태가 `REFUNDED` 밖으로 가지 않음.
+  - [x] 발행 쪽 — 2026-11-16 [PR #203](https://github.com/tlswltjq/esd-platform/pull/203). `lockPendingBatch`가 같은 키의 앞 행이 `DEAD`이거나 재시도 대기면 뒤 행을 집지 않는다(D-055·D-056), 다른 트랜잭션이 앞 행을 잠근 경우도 `KeyOrderGuard`로 거른다(D-057). `OutboxPendingQueryTest`·`KeyOrderGuardTest`·`OutboxRelayTest`. 8개 모듈 `idx_outbox_key_order` 이행.
+  - 릴레이 여러 인스턴스의 같은 키 경합은 T10으로 옮겼다(같은 결함, [결정 205](../../docs/decisions.md#relay-key-order-single-instance)로 단일 인스턴스 전제).
+  - [x] 소비 쪽 정지 목록·키 단위 재투입(결정 155·160·[206](../../docs/decisions.md#messaging-port-scope-quarantine)) — 2026-11-17 [PR #209](https://github.com/tlswltjq/esd-platform/pull/209). 재시도를 다 쓴 소비 실패는 소비 모듈 DB `consumer_quarantine`에 보관하고 같은 행으로 (그룹, 토픽, 키)를 멈춘다. 멈춘 키의 뒤 메시지도 처리 없이 쌓고, `POST /api/v1/ops/quarantine/replay`가 키 단위 원래 순서로 다시 넣는다. `KafkaEventSubscriptionsTest`·`KeyQuarantineIntegrationTest`. DB 없는 Store는 DLT 그대로(Store tasks).
+  - [x] 보관 1건 즉시 경보(결정 160) — PR #209 뒤 소비 실패가 DLT로 가지 않아 `MessagesDeadLettered`가 7개 소비 앱에서 울리지 않았다(D-059). `ConsumerKeysQuarantined`(`stove_consumer_quarantine_held > 0`, critical)를 더했다. `infra/prometheus/tests/consumer-quarantine.yml`. 2026-11-19 PR #217.
+  - [ ] [결정 필요] 다시 넣어도 계속 실패하는 메시지(계약 위반 등)의 처리 — 지금은 재투입이 실패하면 정지를 유지할 뿐이라 그 키가 영구히 멈춘다(PR #209 "판단 대기"). 폐기·건너뛰기 허용 여부와 기록 방식을 정한다.
+  - [ ] design의 흐름별 실패 표(S1~S9 행)에 남은 "DLT"·"DLT 재투입" 서술을 격리·키 단위 재투입 기준으로 다시 쓴다. 공통 서술 두 곳은 PR #217에서 고쳤고 행은 그 공통 서술로 읽는다.
+
+- [ ] **T3. U2 — 다른 모듈·외부 PG 시각과의 선후 비교 13곳 + PG-* 4곳 + ORD-0(결정 173)**
+  - 어디서: design "U2" 표 ORD-1~ORD-10·PAY-1·SET-1 — Order `order:core/domain/Refund.java:173`·`:255`, `RefundAttempt.java:39-40`·`:98`·`:110`·`:123`·`:150`·`:166-167`, `RefundApprovalStop.java:48`·`:56`·`:67`; Payment `payment:core/service/ReceiveRefundExecution.java:66`; Settlement `settlement:core/domain/RefundMonthInput.java:11`. ORD-0(결정 173): `order:core/domain/RefundPolicy.java:9-12`·`RequestRefund.java:35` — 기한 시작을 Order `paid_at`으로. PG-*(결정 163): `payment:core/domain/RefundExecution.java:164`·`:224`·`:276`, `payment:adapter/pg/PortOneRefundCancellationGateway.java:131`, #166 `recordLateCancellation`. PR #166 diff도 `RefundAttempt.recordRefundFailure`의 비교를 그대로 둔다.
+  - 목표: P4.5-1·I13. 식별자·상태·잠금으로 판정하고 받은 시각은 값으로 저장(U2 표 "목표 판정 방식"). Settlement는 반영 월 = max(원래 월, 현재 `OPEN` 월). 정적 검사(입력의 `occurredAt()`/`confirmedAt()`을 인자로 받는 `isBefore`/`isAfter` 금지)를 ArchUnit 또는 소스 검사로.
+  - 영향: **돈·보유권** — 호스트 시계가 몇 초 어긋나면 금융 완료·실패·복구·재시도 이벤트가 재시도 7초 뒤 DLT, 재투입도 같은 결과. 환불이 `PENDING_PAYMENT_REFUND`·`PENDING_LICENSE_RESTORATION`에 멈춰 돈은 돌려줬는데 회수가 안 되거나 돈도 게임도 없는 상태. SET-1은 환불 조정 누락 → 판매자 과지급.
+  - 재현: D-052 방식(고정 `Clock`, 실제 MySQL·Kafka 컨테이너, 상대 이벤트 `occurredAt`을 받는 쪽 시각 ±5초) — License `LicenseRestorationIntegrationTest`를 Order·Payment·Settlement에 복제. 행마다 U2 표 "확인 테스트" 열.
+
+- [ ] **T4. 운영자 환불 실패 종결(결정 128·148)이 main에 없고, 참고 구현이 목표와 다르다** (PR #166 이어 가기) — 늦은 취소 반영은 [결정 157](../../docs/decisions.md#late-cancellation-confirmation)
+  - 어디서: main에 `RefundFailureClosed`·`CloseRefundFailure` 없음(`common/contract/.../EventType.java`, `docs/runbooks/refund-delay-closure.md:13` "미구현"). 실패 뒤 낮은 빈도 조회도 main에 없음(`confirmFailure`가 조회 일정을 멈춤, payment `tasks.md:50`). 참고 구현(닫힌 [PR #166](https://github.com/tlswltjq/esd-platform/pull/166) head `2d679522`, 브랜치는 지움): `RefundFailureClosedEvent.observedPaymentStatus`가 언제나 `"PAID"` 상수, Order `RefundFailureConfirmation`이 Payment 시각끼리(`evidenceObservedAt ≤ occurredAt`) 다시 검사, Order V35가 출처를 `failure_reason_code`(고객 안내 코드)와 `failure_closure_id`에 겹쳐 담음, 결정 128의 근거 종류 칸 없음. 문서: `.kiro/specs/order/design.md:201`·`:287`, `.kiro/specs/payment/tasks.md:47`, 결정 128 본문이 아직 "기존 `RefundExecutionFailed`".
+  - 목표: P3.23 전체, design "목표 행" `RefundFailureClosed`(본문은 시도 식별자·`closureId`·`failedCancellationId`만, 근거 상세는 Payment `refund_failure_closure`), I16·I19. Order 시도 출처는 사유 코드와 분리한 enum 열(`PG_CANCELLATION_FAILED`·`OPERATOR_FAILURE_CLOSED`) + CHECK. 실패 뒤 낮은 빈도 조회와 `LATE_CANCELLATION` 조사·경보(P3.23-5). 문서 정정.
+  - 영향: **돈·보유권** — 미병합인 동안 PG 형식 거절·잔액 변화·보장 창 종료로 멈춘 환불은 닫을 길이 없어 고객에게 돈도 게임도 없는 상태가 기한 없이 남는다. 실패 뒤 실제 취소가 생겨도 시스템이 모른다(고객이 돈과 게임을 둘 다 가짐 — 반영은 결정 157의 ADMIN 근거 반영 S14, #166 다음에 구현).
+  - 재현: 결정 128 예(11:00 접수 → 403 → 14:00 창 종료) 뒤 종결 API → Order가 복구 요청을 내고 고객 재시도가 열리는지. #166 `RefundFailureClosureIntegrationTest`(R1 Red→Green). Order에 근거 칸 없는 `RefundFailureClosed`를 넣어 거절되지 않는지. 실패 확정 뒤 흉내 서버에서 전액 취소 → 조사 목록 `LATE_CANCELLATION`.
+
+- [ ] **T5. 끝난 결제(종결·만료·실패)에 뒤늦게 생긴 PG 청구를 감지하지 않는다** ([결정 154](../../docs/decisions.md#unlinked-charge-discovery))
+  - 어디서: `payment:core/domain/Payment.java:172-178`(결제가 `PENDING`이 아니면 웹훅 무시), `payment:core/service/ResolvePayment.java:89`(재개 작업 대상에서 뺌).
+  - 목표: P3.13-7·8·9, P4.2-7, I20. 끝난 결제·시도는 다시 열지 않고 주문에 연결되지 않은 청구 기록(가칭 `UnlinkedCharge`, `OPEN` → `CLOSED`, 출처 `LATE_CHARGE`·`ORDER_REJECTED`)을 둔다. 종결·만료·실패로 끝났고 PG 요청이 있었던 결제를 공급자 보장 기한까지 주기 조회, 웹훅이 오면 조회를 앞당김. `PAID`면 기록·보류 목록·경보·안내 청구됨, 운영자 콘솔 취소 뒤 PG 근거로 종결. 조회 간격·기한은 adapter 설정 — **[외부 대기]** 공급자 문서로 "더 이상 결제될 수 없는 시점" 확인(결정 140 중립화와 함께). 결정 153의 거절 사실도 같은 기록(MC-P13).
+  - 영향: **돈** — READY 근거로 종결한 뒤 콘솔 승인 등으로 청구되면 주문·보류 어디에도 연결되지 않은 청구가 남고, 고객은 "청구된 금액은 없습니다"(`CLOSED_NOT_CHARGED`)를 본다.
+  - 재현: 흉내 서버 여정 — (1) 종결(READY 근거) 뒤 `console-approve`, 웹훅 없이 → 기간 안 조회로 기록·경보가 없으면 Red (2) 같은 상황에서 웹훅 전송 → 조회가 앞당겨지는지 (3) PG 조회 이력 없이 만료된 결제가 뒤에 `PAID` → 기록 (4) 공급자 기한이 지난 결제는 조회하지 않음.
+
+- [ ] **T6. U3 — 정방향 반영 누락을 세는 곳이 없다(모듈 간 확인 SQL 실행 주체 없음)** (감지 주체 [결정 158](../../docs/decisions.md#forward-gap-counting), 기준 시간 [결정 159](../../docs/decisions.md#forward-gap-threshold))
+  - 어디서: `tools/verification/`(불변식 검사기 없음, `docs/domain/workflows.md:136`이 "다음 단계 검사기의 명세"라 함), 게이지는 Order 환불 대기만(`order:adapter/RefundLicenseGrantMetrics.java`, `OrderExpiryMetrics.java`, 결정 125·129), Store 대조 경보는 대조가 도는지만(결정 85). 출시 흐름: Studio↔Review 판정, Studio↔Catalog 출시 결과, RI-2, 활성 자리(RI-7), 원요청 없는 미해결 철회, 장기 `PENDING` 명령을 대조하는 곳 없음.
+  - 목표: P2.6-6·P3.9-2·P3.15-5·P4.3-1, I14. 결정 158: 사실을 낸 모듈이 응답을 받지 못한 자기 기록을 셈(design "정방향 응답 쌍"). 새 확인 사실 3개(가칭 `SettlementSaleRecorded`·`SettlementRefundRecorded`·`LicenseRefundApplied`)와 Settlement Outbox, 모듈별 대기 게이지. 경보 기준 시간은 결정 159: 게이지 먼저, G6 실험 측정 뒤 쌍마다 확정, G7 전 관문(P4.3-4). 그리고 design 불변식 표의 확인 SQL(I1~I20)과 출시 정합 조건(RI)을 실제 스택 여정(`verify-*.py`) 끝에서 한 번 돌리는 검사는 둔다.
+  - 영향: **보유권·돈** — `OrderPaid` DLT·유실 시 보유권 미지급, 정산 매출·환불 조정 누락이 조용히 남는다. 출시 결과가 DLT로 빠져도 화면에서만 드러난다.
+  - 재현: Settlement 소비자를 멈춘 채 결제 → T 경과 → 게이지·검사기가 1건. 일부러 `stove_order.purchase_order.amount`를 바꾼 픽스처에서 I1 SQL이 1행. 출시 결과를 DLT로 보낸 뒤 Studio `REQUESTED`·Catalog `COMPLETED`를 검사기가 잡는지.
+
+- [ ] **T7. 원본이 사라진 이벤트를 같은 ID로 다시 낼 수 있는 모듈이 Order·License뿐이다** (범위 [결정 161](../../docs/decisions.md#republish-all-current), 보관 [결정 160](../../docs/decisions.md#dead-letter-store)) — 보관 쪽(소비 실패를 기한 없이 DB에 보관, 1건 즉시 경보)은 PR #209·#217로 끝났다(Store만 DLT 7일, Store tasks). 남은 것은 재발행 범위(결정 161)
+  - 어디서: `common/messaging/.../ops/OutboxRepublishTargets.java:27-37`(Order·License 8종), Payment·Settlement `application.yml`에 재발행 설정 없음, DLT 보존 7일(`docs/architecture.md` R9).
+  - 목표: P2.2-7·P2.6-4. 결정 161: 대상은 design 이벤트 목록의 현행 이벤트 전부, `OutboxRepublishTargets`는 표에서 생성하거나 표 대조 테스트로 지킴, 모든 발행 모듈에 `outbox_republish` 이행·`republish-owner` 설정·ADMIN 경로, 같은 키 안 발행 순번 헤더와 회수 정렬. 보관·경보는 결정 160(소비 모듈 DB 실패 보관 표에 기한 없이, 1건 즉시 경보, Outbox `DEAD`도 즉시 경보).
+  - 영향: **돈·보유권** — `RefundPaymentConfirmed` 원본 소실 시 Order 환불 완료·Settlement 환불 조정이 둘 다 멈추고 복구 수단이 없다. `PurchaseRefunded`가 사라지면 회수가 안 된다.
+  - 재현: Payment에서 `SENT` 행을 재발행 API로 되돌리면 지금은 400(현 동작 고정) → 확장 뒤 통과로 바꿈.
+
+- [ ] **T8. Settlement에 원매출보다 환불 확인이 먼저 오면 404 → 격리(그 주문 키 정지)** ([결정 156](../../docs/decisions.md#refund-awaiting-sale))
+  - 어디서: `settlement:core/domain/ConfirmedRefund.java:22`(`requireSale`), `settlement:core/service/RecordConfirmedRefund.java`(그룹 `settlement-confirmed-refund`). 원매출은 `stove.order.v1`, 환불 확인은 `stove.payment.v1`이라 순서 보장이 없다(P2.5-2).
+  - 목표: P3.26-6. 결정 156: 원매출이 없을 때 온 환불 확인은 "매출 대기 환불"로 저장(Inbox와 같은 트랜잭션, DLT 아님), `OrderPaid` 매출 기록 트랜잭션에서 원매출과 대조해 함께 반영, 대조 불일치는 반영하지 않고 경보, 대기 게이지(건수·최장 대기). 상태 이름·표·상태×트리거 표는 Settlement 모듈 스펙(MC-S3).
+  - 영향: **돈** — 재투입 전 마감되면 판매자 월에 매출만 남고 환불 조정이 빠짐(과지급).
+  - 재현: Settlement를 멈춘 채 결제 → 자동 환불 금융 완료 → Settlement가 `stove.payment.v1`을 먼저 소비하도록 재시작 → 지금 재시도 뒤 `consumer_quarantine` 보관·키 정지(PR #209 뒤 공통 동작, 이 시나리오 자체는 재현 전), 목표 대기 후 반영.
+
+- [ ] **T9. U4 — 결제 공급자가 환불 근거를 줄 수 없는 환경에서 Settlement가 환불 확인을 거절한다** ([결정 162](../../docs/decisions.md#single-reference-simulator))
+  - 어디서: `settlement:adapter/UnavailablePgRefunds.java:12`(`SIMULATED`면 `UPSTREAM_UNAVAILABLE`).
+  - 목표: P4.3-2·P3.26-5. 결정 162: `simulators/mock-pg`·`SIMULATED` 분기·`SimulatedPgHttpGateway`·`UnavailablePgRefunds`를 없애고 개발·여정·실험·통합 테스트를 PortOne 어댑터 + 기준 시뮬레이터로 옮긴다(기본 공급자 설정 포함). 옛 `SIMULATED` 값 읽기는 결정 104 호환 테스트로 유지. 결정 140 중립화와 같은 작업 묶음. 범위: 운영 코드 Payment 3·Settlement 10개 파일, 테스트 21개 파일, Compose·검증 스크립트.
+  - 영향: **돈(검증 환경)** — 판매자 월 환불 합계가 빠져 순액이 크게 남는다.
+  - 재현: 시뮬레이터 스택에서 환불 완료 → `settlement_refund` 1행.
+
+- [ ] **T10. 릴레이 1대 제약(같은 키 동시 선점 금지)이 코드로 강제되지 않는다**
+  - 어디서: `common/messaging/.../outbox/OutboxRelay.java:20-23`(`SKIP LOCKED`는 키를 모름), `docs/event-ordering.md` 7절(R13).
+  - 목표: P2.2-6. 선점 잠금(서비스별 리더 잠금 등) 또는 키 배정.
+  - 영향: **돈·보유권(순서)** — 앱 인스턴스를 2대로 늘리면 같은 키 순서 보장이 조용히 무효가 되어 T2와 같은 역전이 평시에도 생긴다.
+  - 재현: 두 릴레이 인스턴스를 같은 DB에 붙이고 같은 키 3건 중 앞 건 실패를 주입, 뒤 건이 먼저 `SENT`되는지.
+  - 지금은 릴레이 단일 인스턴스 전제로 발생하지 않는다([결정 205](../../docs/decisions.md#relay-key-order-single-instance), 메시징 비교의 확장 조건도 소비 인스턴스만 늘림). 이전 T2 하위 항목 "릴레이 여러 인스턴스의 같은 키 경합"을 여기로 합쳤다. 릴레이를 여러 인스턴스로 늘리기 전에 고친다.
+
+- [ ] **T11. 토픽 자동 생성, 파티션 수가 코드에 없다**
+  - 어디서: `docker-compose.yml:69-73`(자동 생성, 파티션 3, 복제 1, R7).
+  - 목표: P2.4-3. 토픽·파티션 수를 선언(`NewTopic` 또는 배포 스크립트)으로 관리하고 자동 생성을 끈다.
+  - 영향: **돈(유실)** — 오타 토픽이 생겨 이벤트가 사라진다. 파티션 수를 바꾸면 키 순서가 깨진다.
+  - 재현: 자동 생성을 끈 브로커에서 없는 토픽으로 보내면 실패하는지.
+
+- [ ] **T12. 결제 기한(30분)이 7곳에서 다시 계산되고, Payment가 자기 시계로 결제창을 막는다** ([결정 169](../../docs/decisions.md#checkout-open-until-expiry-fact))
+  - 어디서: Order `order:core/domain/Order.java:77`(`createdAt + 30분`, 열 없음), `order:core/service/CloseExpiredOrders.java:38`(스캔 경계 `now − 30분`); Payment `payment:core/domain/PaymentApproval.java:82`(`orderOccurredAt + 30분`), `payment:core/domain/PaymentOrderLifecycle.java:33`·`:36`·`:48`(만료 기한 재계산, `OrderExpired.expiresAt`과 다르면 `conflict()`), `payment:core/service/ReadPaymentCheckout.java:50-51`(Payment 시계로 결제창 `ORDER_EXPIRED`), `payment:core/domain/OrderAdmissionReceipt.java:13-14`(`expiresAt − 30분`). 이벤트에 기한 없음: `common/contract/.../payload/OrderPlacedEvent.java:9-11`.
+  - 목표: P1.4-3·P3.10-1·P3.10-2. Order 설정 키 하나 + `purchase_order.expires_at` 열, `OrderPlaced.expiresAt`. Payment는 저장만 하고 만료는 접수 거절·`OrderExpired` 사실로만 안다. 결정 169: 결제창은 `OrderExpired`를 받은 뒤에만 409 `ORDER_EXPIRED`(`ReadPaymentCheckout.java:50`의 시계 비교 제거).
+  - 영향: **돈** — 기한 정책을 바꾸면(예: 40분) `OrderExpired`가 DLT로 가 접수 전 시도가 만료를 모르고 결정 126의 만료 전 PG 재조회도 멈춘다. 결제창이 Order와 다른 시각에 닫힌다. 두 호스트 시계가 어긋나면 기한 안인데 결제창이 닫힌다.
+  - 재현: 아키텍처 테스트 — Payment 소스에 결제 기한 계산(`ofMinutes(30)` 등) 0건. 통합 — Order 기한 설정을 바꿔 만료 → Payment가 받아들이는지. 단위 — Payment `Clock`을 1분 앞당겨 29분 30초 주문의 결제창이 거절되면 Red.
+
+- [ ] **T13. 모의 PG 경로가 승인 진행 접수 없이 결과를 확정한다(원칙 ⑦)** — 결정 162로 그 경로 자체를 없앤다(T9와 함께)
+  - 어디서: `payment:core/service/ResolvePayment.java:99-126`(`gateway.charge`), `payment:adapter/pg/SimulatedPgHttpGateway.java`, Order 설계 상태×이벤트 표의 `PENDING → PAID` 전이.
+  - 목표: P3.11-2·I15. 공급자와 무관하게 접수 뒤에만 확정, 모의 PG도 같은 시도·접수 경로. Order 상태 모델에서 `PENDING → PAID`를 없앤다.
+  - 영향: **돈·보유권(모의 환경)** — 기한 지난 `PENDING` 주문이 `PAID`(T1과 겹침), 만료된 주문에 성공이 와 DLT. 테스트 공급자 때문에 운영 계약이 넓어졌다.
+  - 재현: Payment 통합(`SIMULATED`) — 접수 없이 `OrderPaymentCompleted`가 나오면 Red.
+
+- [ ] **T14. Order가 Payment의 환불 결과 확인 지연(3시간)을 다시 계산한다**
+  - 어디서: `order:core/domain/RefundPreparationConfirmation.java:17`(`confirmationDelayAt.equals(firstPreparedAt.plus(Duration.ofHours(3)))`). 같은 3시간: Payment `payment:core/domain/RefundCancellationWindow.java:8`, `PaymentApproval.java:25`(`CONFIRM_WINDOW`), `payment:adapter/pg/PortOnePaymentApprovalGateway.java:93`, Order V23·Payment V26.
+  - 목표: P1.4-4·P1.4-5·P3.19-3. Order는 받은 값을 그대로 쓰고, 공급자 보장 기한은 Payment adapter 설정에서 주입(Payment 쪽 정리는 MC-P2).
+  - 영향: **보유권** — 공급자를 바꾸거나 보장 기한이 3시간이 아니면 Order가 정상 `RefundExecutionPrepared`를 거절해 환불이 보유권 정지 상태로 멈춘다(추정).
+  - 재현: 보장 창 설정을 2시간으로 바꾼 `RefundExecutionPrepared`를 Order가 받아들이는지.
+
+- [ ] **T15. Payment가 환불 실행 요청을 받지 못한 경우를 Order가 감지하지 않는다** ([결정 158](../../docs/decisions.md#forward-gap-counting) 적용)
+  - 어디서: 게이지 대상이 `PENDING_LICENSE_GRANT`·`PENDING_LICENSE_SUSPENSION`·`PENDING_LICENSE_RESTORATION`·`PENDING_APPROVAL_STOP` 4개(order `design.md:210`·`:267-271`). Payment에는 행이 없어 `RefundConfirmationsDelayed`도 안 울린다.
+  - 목표: P3.19-4. 결정 158 적용: 결정 125 게이지에 "`PENDING_PAYMENT_REFUND` + 현재 시도 준비 기록 없음" 라벨, 진입 시각은 시도 `startedAt`, 같은 10분 경계·경보·고객 안내(`processingNotice`). Payment 쪽 게이지는 DLT 건을 못 보므로 두지 않는다.
+  - 영향: **보유권** — Payment 소비 중단·DLT 때 보유권 정지·고객 `PROCESSING`이 경보 없이 남는다.
+  - 재현: Payment `payment-refund-execution` 소비를 막고 10분 경과 → 게이지 1.
+
+- [ ] **T16. 공개를 확정하는 Catalog가 심사 승인을 확인하지 않는다(RI-2)** ([결정 167](../../docs/decisions.md#catalog-verifies-approval))
+  - 어디서: `catalog:core/service/ReceiveProjectRelease.java:38-63`(`reviewRequestId`는 저장만), Catalog 설계 "Studio 명령을 신뢰". 가드는 Studio `studio:core/service/release/RequestProjectRelease.java:45-47·58·64`뿐.
+  - 목표: P3.4-2, design 흐름 1 RI-2·S3a. 결정 167: Catalog가 `ProjectReviewApproved`를 새 그룹 `catalog-review-approval`로 받아 보관, 공개 확정 전 `(reviewRequestId, projectId, contentVersion, 스냅샷 값)` 대조, 맞는 승인이 없으면 승인 대기 보류(같은 잠금 안에서 해제), 값이 다르면 `ProjectReleaseRejected`, 승인 대기 게이지. 세부는 Catalog 모듈 스펙(MC-C2).
+  - 영향: **돈·보유권** — Studio 결함·`stove.studio.v1` 생산 권한 오용 때 승인 안 된 자료가 판매되고 그 자료로 보유권이 지급된다.
+  - 재현: 승인 기록 없는 `reviewRequestId`로 `ProjectReleaseRequested`를 직접 넣어 공개되는지(지금 통과).
+
+- [ ] **T17. PG 비용이 Payment와 Settlement 두 곳에 기록된다** ([결정 165](../../docs/decisions.md#pg-fee-owner))
+  - 어디서: `payment/db/V12__pg_fee_snapshot.sql:1-9`, `payment:core/domain/Payment.java:38-40`·`:130`, `payment:adapter/pg/SimulatedPgHttpGateway.java:43-45`; Settlement `settlement/db/V8__...sql:25-33`(`settlement_pg_fee`).
+  - 목표: P1.4-2. 결정 165: Settlement `settlement_pg_fee`만 정본. Payment는 새 결제에 `pg_fee_*`를 쓰지 않고 공급자 승인 응답의 비용을 core 계약으로 받지 않음, 옛 값은 읽기만(결정 104). 칸 제거 시점은 Payment 모듈 스펙 이행 계획.
+  - 영향: **돈(정산)** — 두 값이 다르면 플랫폼 순액의 근거를 정할 수 없다.
+  - 재현: 같은 결제에 두 값이 다를 때 ADMIN 응답이 어느 것을 쓰는지 고정하는 계약 테스트.
+
+- [ ] **T18. 운영자 승인 보류 종결이 `OrderPaymentFailed(reasonCode=REVIEW_CLOSED)`에 실린다** (분리안 SP-1, [결정 174](../../docs/decisions.md#review-closed-event))
+  - 어디서: `payment:core/domain/ApprovalClosure.java:27`, `payment:core/domain/Payment.java:147-156`(`failAfterReview`); Order `order:core/domain/PaymentResult.java:34`(문자열 `REVIEW_CLOSED`로 판정), `Order.java:147-150`(`keepsExpiryFor`), `order:core/service/ApplyPaymentResult.java:47,65-72`, `order:core/domain/ExpiredReviewClosure.java:17`, Order V31.
+  - 목표: P3.13-4·P3.14-3, design "목표 행" `OrderPaymentReviewClosed`(그룹 `order-payment-result`). Order 리스너가 두 타입을 받아 결과 종류 enum으로 구별. P2.7-4 순서로 배포, 이행 뒤 `REVIEW_CLOSED` 사유 제거(결정 174).
+  - 영향: 동작은 같다. 소비자가 사유 문자열로 사실을 구별해 오타·새 소비자 오해 여지.
+  - 재현: 계약 테스트 — `OrderPaymentFailed.reasonCode`에 `REVIEW_CLOSED` 0건, Order가 두 타입을 같은 입력으로 합치는지.
+
+- [ ] **T19. `RefundPaymentConfirmed.source`가 "근거 종류"와 "시도 귀속"을 함께 말한다** (분리안 SP-5, 소급 RC-8) — 내보내는 방법은 [결정 170](../../docs/decisions.md#schema-version-header)
+  - 어디서: `common/contract/.../payload/RefundPaymentConfirmedEvent.java`(`source`), Payment `payment:core/service/RecordRefundCancellationSuccess.java:40`(`PG_RESPONSE`), `RefundConfirmationOutbox`(`PG_QUERY_UNATTRIBUTED`), `payment:core/domain/RefundExecution.java:256,292`; Order `order:core/domain/Refund.java:239`, `RefundPaymentConfirmation.java:18-20`; Settlement `settlement_refund.source`(V10).
+  - 목표: P3.21-2. `source` 삭제(칸 삭제는 비호환 — `RefundPaymentConfirmed`의 새 `schemaVersion`으로, P2.7-5 배포 순서, 결정 170), 귀속은 Payment 기록만([결정 164](../../docs/decisions.md#attribution-in-payment)): Order는 `RefundExecutionSucceeded`를 소비하지 않고 `RefundAttempt.reconciliationRequired`를 없앤다. 소비자가 없어진 `RefundExecutionSucceeded`는 발행을 멈추고 계약에서 뺀다(옛 이벤트 읽기는 결정 104 호환).
+  - 영향: 돈 직접 영향 없음. `source` 값 오타는 시도 귀속을 조용히 빠뜨리고, 귀속 판정을 바꾸려면 금융 사실 이벤트의 뜻이 함께 바뀐다(결정 127 후속이 막힌 원인).
+  - 재현: 계약 테스트 — `PG_RESPONSE` 경로에서 두 이벤트가 같은 트랜잭션에 쓰이는지(목표 Red).
+
+- [ ] **T20. 영구 실패도 4회 재시도하고, 공통 분류가 없다**
+  - 어디서: `common/messaging-kafka/.../KafkaConsumerAutoConfiguration.java`(`stoveKafkaErrorHandler`), 재시도 제외는 앱 config 의 리스너 팩토리뿐이다 — Order 환불 리스너 `RefundKafkaConfiguration`(`RefundCompletionRejected`), 게이트웨이·웹 BFF `AccessChangeKafkaConfiguration`(`AccessChangeRejected`)(R11).
+  - 목표: P2.6-3. Kafka 공통 모듈에 영구 실패 예외 하나, 공용 오류 처리기(`DefaultErrorHandler`)와 `ListenerContainerFactories`의 모든 팩토리가 재시도에서 뺀다(결정 227로 위치만 바뀜).
+  - 영향: 계약 위반 한 건이 파티션을 7초 이상 멈춘다(같은 키 뒤 이벤트 지연).
+  - 재현: 헤더 없는 레코드를 넣고 `consumer_quarantine` 보관까지 시도 1회 단언(PR #209 뒤 DLT 대신 격리).
+
+- [ ] **T21. 철회 결과 이벤트 하나가 "철회됨"과 "철회 거절"을 겸한다** (분리안 SP-7·SP-8, [결정 176](../../docs/decisions.md#withdrawal-result-events))
+  - 어디서: `review:core/domain/ReviewWithdrawal.java:63-68`, `catalog:core/domain/ReleaseWithdrawal.java:63-67`, payload `ProjectWithdrawalResult.java`(`String status`), Studio `studio:api/listener/ProjectResultListener.java:33-49`.
+  - 목표: P3.2-5·P3.4-5. `ProjectReviewWithdrawn`/`ProjectReviewWithdrawalDenied`, `ProjectReleaseWithdrawn`/`ProjectReleaseWithdrawalDenied`(Denied는 `targetStatus` enum만, 대상 판정의 `actor`·`feedback`은 싣지 않음). Studio 리스너가 변환. P2.7-4 순서로 이행(결정 176).
+  - 영향: 돈 없음. 창작자 영수증의 `finalActor`·`finalFeedback`이 뜻이 바뀌는 칸이라 화면·알림이 잘못 읽는다.
+  - 재현: 판정 뒤 철회 → 결과 이벤트의 `actor`가 심사자, `feedback`이 반려 사유임을 단언(지금 통과) → 목표 계약 테스트로 바꾸면 Red.
+
+- [ ] **T22. `CatalogProductPublished`가 최초 공개·공개본 교체·판매 상태·노출 변경을 모두 뜻한다** (분리안 SP-4, 소급 RC-6) — [결정 171](../../docs/decisions.md#catalog-copy-events-by-fact)
+  - 어디서: `catalog:core/service/PublishProjectRelease.java:122-148`, `RecordCatalogSaleChange.java:20`, `ChangeCatalogListing.java:64`.
+  - 목표: P3.5-6. 결정 171: 사실별 4개(`CatalogProductFirstPublished`·`CatalogProductReleaseReplaced`·`CatalogProductSaleStatusChanged`·`CatalogProductListingChanged`), 같은 `CatalogProductSnapshot` 본문, Store `api.listener`가 `ApplyCatalogProduct` 하나로 합침. 이행은 P2.7-4 순서.
+  - 영향: 지금 소비자는 Store 하나라 영향 없음. 새 소비자(알림·검색 색인)가 판매 중지를 새 공개로 읽는다.
+  - 재현: 판매 중지 명령 뒤 Outbox 유형이 `CatalogProductPublished`임을 단언(지금 통과).
+
+- [ ] **T23. Catalog 공개 작업이 재시도로 풀리지 않는 실패도 무한 재시도하고 경보가 없다** ([결정 168](../../docs/decisions.md#publication-blocked-closure))
+  - 어디서: `catalog:core/service/PublishQueuedReleases.java:44-48`(모든 `RuntimeException` 같은 처리), `catalog:core/domain/CatalogPublicationJob.java:68-79`(상한·종료 상태 없음), `infra/prometheus/alerts.yml`(공개 작업 규칙 없음).
+  - 목표: P3.5-5. 일시 오류와 계약 위반을 나누고 계약 위반은 명시적 상태 + 경보. 결정 168: 정지 상태 `BLOCKED`(1건부터 경보), 운영자 재개 또는 종결, 종결은 전용 이벤트 `ProjectReleaseClosed`(가칭, design 목표 행) → Studio가 요청을 끝내고 활성 자리 해제. 상태 이름·운영 API는 Catalog·Studio 모듈 스펙(MC-C3).
+  - 영향: 돈 없음. 보유권: 업데이트 공개가 멈춰 기존 보유자가 새 빌드를 못 받는다. Studio 활성 출시 자리가 풀리지 않아 그 Project의 다음 출시가 모두 409.
+  - 재현: 같은 Project·같은 버전 다른 스냅샷의 두 요청 → 작업 하나가 `attemptCount`만 늘고 경보 지표가 없음.
+
+- [ ] **T24. 공통 계약 `CatalogProductSnapshot`이 빠진 칸을 기본값으로 만든다**
+  - 어디서: `common/contract/.../payload/CatalogProductSnapshot.java`(compact 생성자: `listed` 없으면 판매 상태로 추정, `saleStatus`·`catalogVersion` 없으면 `ON_SALE`·`contentVersion`). Store HTTP 경로는 먼저 검사해 적용되지 않음(`store:adapter/CatalogHttpClient.java:71-75`), Kafka 경로는 적용.
+  - 목표: 원칙 ①(없는 사실을 받는 쪽이 만들지 않는다). 과거 형식 이벤트가 토픽 보존 기간 밖이면 기본값을 지우고 필수 칸으로, 남겨야 하면 Store `api.listener` 변환으로 옮긴다.
+  - 영향: 돈 없음(Order는 Catalog HTTP 정본). 과거 이벤트가 최초 삽입이면 숨긴 상품을 `listed=true`로 보일 수 있다.
+  - 재현: 버전 칸 없는 과거 JSON을 빈 Store에 넣어 `listed=true`·`ON_SALE` 사본이 생기는지.
+
+- [ ] **T25. 헤더 `occurredAt`이 Outbox 적재 시각이라 본문 사실 시각과 다르고, `schemaVersion` 헤더가 없다** ([결정 170](../../docs/decisions.md#schema-version-header))
+  - 어디서: `common/messaging/.../outbox/OutboxRelay.java:151-152`, 예 `order:core/service/ApplyApprovalCorrection.java:50-51`(본문은 `stop.getRestorationRequestedAt()`), `common/contract/.../EventEnvelope.java:17`.
+  - 목표: P2.1-1·P2.1-2. 헤더 `occurredAt` = 본문 값. 결정 170: `outbox_event.schema_version`(종류별 정수, 1부터), 릴레이가 헤더 `schemaVersion`으로 냄, 헤더 없는 옛 메시지는 1, 리스너는 (`eventType`, `schemaVersion`)으로 매퍼 선택, `Topics.java` 주석을 "토픽 `vN` = 파티션 수·키 규칙 세대"로 정정.
+  - 영향: 헤더를 읽는 도구(추적·DLT 조회 `DltRecordResponse`)와 본문을 읽는 업무 코드가 다른 시각을 본다.
+  - 재현: `OutboxRelay` 단위 — 본문 `occurredAt`을 과거로 둔 이벤트의 헤더 값 == 본문 값.
+
+- [ ] **T26. 현행 출시·심사 이벤트 10개가 `EventType`에 없고 문자열 리터럴이다**
+  - 어디서: payload `ProjectReviewRequestedEvent.java:19`·`ProjectReleaseRequestedEvent.java:28`·`ProjectReviewApprovedEvent.java:36`·`ProjectReviewRejectedEvent.java:39`·`ProjectReleaseCompletedEvent.java:36`·`ProjectReleaseRejectedEvent.java:39`·`ProjectReviewWithdrawalRequestedEvent.java:14`·`ProjectReleaseWithdrawalRequestedEvent.java:14`·`ProjectReviewWithdrawalResolvedEvent.java:14`·`ProjectReleaseWithdrawalResolvedEvent.java:14`(모두 `common/contract/.../payload/`); 리스너 `catalog:api/listener/StudioReleaseEventListener.java:27,30`, `review:api/listener/StudioEventListener.java:27,30`, `studio:api/listener/ProjectResultListener.java:33-49`.
+  - 목표: P2.1-4. 상수로 올리고 payload·리스너가 상수를 참조. T21의 분리와 같은 PR이면 새 이름으로 바로 올린다.
+  - 영향: 이름을 한쪽만 바꾸면 리스너가 조용히 건너뛴다(P2.3-7 때문에 오류도 없음).
+  - 재현: 소스 검사 — `isType("` 리터럴 0건, 모든 payload `eventType()`이 `EventType` 필드 값.
+
+- [ ] **T27. `EventType` 목록과 이벤트 목록 표를 대조하는 테스트(결정 151), 런타임 의존을 표와 대조하는 테스트**
+  - 어디서: 없음. `EventContractTest.catalogCoversEveryDeclaredEvent`(`common/contract/src/test/java/.../EventContractTest.java:443-460`)는 payload 패키지와 테스트 카탈로그만 비교한다. `adapter` HTTP 경로·`@KafkaListener`를 design 동기·비동기 의존 표와 대조하는 테스트도 없다.
+  - 목표: P2.8-4·P1.5. design 이벤트 목록(현행·리터럴·목표 행)을 파싱해 `EventType` 필드 집합·소유·토픽·키·소비 그룹과 비교. T26 뒤 켠다. 같은 방식으로 (호출 모듈, 대상 경로)·(소비 그룹, 이벤트 유형) 쌍 대조.
+  - 영향: 표와 코드가 어긋나도 CI가 모른다. 새 의존(예: 순환 동기 호출)이 스펙 없이 생긴다.
+  - 재현: 표에 없는 상수·HTTP 경로를 둔 픽스처가 실패하는지.
+
+- [ ] **T38. 현행 이벤트의 파티션 키가 P2.4-1 집합체 키인지 검사하는 테스트가 없다**
+  - 어디서: `EventContractTest.sameOrderSharesPartitionKey`·`sameAggregateSharesTopic`(`common/contract/src/test/java/com/stove/common/contract/EventContractTest.java:389-415`)은 `OrderCreatedEvent`·`PaymentCompletedEvent`·`PaymentCancelledEvent`·`LicenseIssuedEvent`만 검사한다. 이 넷은 `apps/*/src/main`에서 쓰는 곳이 0건이다. 현행 payload(예: `OrderPaymentCompletedEvent`, `LicenseGrantedEvent`, `ProjectReleaseCompletedEvent`)의 `partitionKey()`는 어느 테스트도 집합체 키와 비교하지 않는다. `KeyOrderGuardTest`·`OutboxRelayTest`는 받은 키의 순서만 본다.
+  - 목표: P2.4-1. 현행 payload마다 `partitionKey()`가 토픽별 집합체 키(`order`·`payment`·`license` = `orderNo`, `studio`·`review`·`release`·`catalog` = `productCode`, `auth` = `subject`) 값과 같은지 검사. T27의 표 대조보다 먼저 할 수 있다(design 파싱 불필요). 옛 이벤트만 보는 두 테스트는 현행 이벤트로 바꾸거나 옛 payload와 함께 정리.
+  - 영향: **돈(순서)** — 한 이벤트의 키를 다른 식별자(예: `licenseId`)로 바꾸면 같은 주문의 결제→지급→환불 순서가 다른 파티션으로 갈려 깨지는데 CI가 모른다.
+  - 재현: 현행 payload 하나의 `partitionKey()`를 다른 칸으로 바꾼 픽스처에서 테스트가 실패하는지.
+
+- [ ] **T28. core의 공급자 이름을 막는 ArchUnit 규칙이 없다(결정 140)**
+  - 어디서: `common/archunit/.../ModulePackageRules.java`(해당 규칙 없음). 예: Payment core 공급자 상수(MC-P3), PG 통지 경로 `/api/v1/payments/webhooks/portone`(`payment:api/controller/PortOneWebhookController.java:28`), 결정 140이 센 core 29곳.
+  - 목표: P1.1-4. `core..` 패키지의 공급자 이름 클래스·문자열 금지 규칙. PG 통지 경로 이름 중립화는 결정 140 작업과 함께.
+  - 영향: 공급자 규칙이 core에 다시 섞인다.
+  - 재현: `core` 패키지에 `PortOne` 이름 클래스를 둔 픽스처가 실패하는지.
+
+- [ ] **T29. 모듈별 DB 계정이 자기 스키마만 쓸 수 있는지 확인되지 않았다**
+  - 어디서: `docker-compose*.yml`·`infra/`(미확인).
+  - 목표: P1.1-2를 DB 권한으로도 지킨다. 운영 도구 계정에도 예외를 두지 않는다(결정 158). 모든 스키마를 읽는 검사기 계정은 시험·실험 환경에만 둔다.
+  - 영향: 한 모듈 코드가 다른 스키마를 쓰는 회귀를 DB가 막지 못할 수 있다.
+  - 재현: 각 모듈 계정으로 다른 스키마 `SELECT`가 거절되는지.
+
+- [ ] **T30. 발행·소비가 없는 상수 22개(구 계약 13 + 제거 대상 9)와 payload가 남아 있다** ([결정 172](../../docs/decisions.md#remove-legacy-contracts))
+  - 어디서: `common/contract/.../EventType.java`, `contract/payload/` 같은 이름 22개(design 이벤트 목록의 구 계약·제거 대상 표).
+  - 목표: P2.8-2·P2.8-3. 결정 172: 구 계약 13개와 제거 대상 9개, 결정 164의 `RefundExecutionSucceeded`를 모두 P2.8-2 절차로 지운다.
+  - 영향: 리뷰어가 현행 계약을 구별하기 어렵다(원칙 ③). 새 소비자가 영원히 오지 않는 이벤트를 기다릴 수 있다.
+  - 재현: 서비스별 `SELECT event_type, status, COUNT(*) FROM outbox_event WHERE event_type IN (...) AND status IN ('PENDING','DEAD') GROUP BY 1,2` 0행 확인.
+
+- [ ] **T31. 구독 토픽의 모르는 `eventType`을 지표 없이 건너뛴다**
+  - 어디서: 모든 리스너의 `isType` 분기(예: `order:api/listener/RefundSuspensionEventListener.java:27`의 `return`).
+  - 목표: P2.3-7. 건너뛴 수를 (소비 그룹, 타입) 지표로.
+  - 영향: 발행 쪽 이름 변경 사고를 알 수 없다.
+  - 재현: 모르는 타입 1건 소비 뒤 지표 1.
+
+- [ ] **T32. `EventType` 묶음 주석과 `Topics.RELEASE` 주석이 소유 모듈과 다르다**
+  - 어디서: `common/contract/.../EventType.java`(`REFUND_EXECUTION_PREPARED`·`ORDER_PAYMENT_COMPLETED`·`ORDER_PAYMENT_FAILED`는 Payment 발행인데 `// order` 아래, `REFUND_EXECUTION_FAILED`는 Payment, `LICENSE_RESTORATION_REQUESTED`·`LICENSE_APPROVAL_CORRECTION_REQUESTED`는 Order 발행인데 `// license` 아래), `Topics.java:120`.
+  - 목표: design 토픽 표·이벤트 목록 "소유" 열이 정본. 주석은 지우거나 소유 모듈로 고친다.
+  - 영향: 소유자를 잘못 읽고 발행 코드를 다른 모듈에 둘 수 있다.
+  - 재현: T27 대조 테스트가 소유 모듈 열까지 비교.
+
+- [ ] **T33. `LicenseGranted`의 이름이 실제 사실(구매 근거 보관)과 다르다** ([결정 175](../../docs/decisions.md#purchase-record-stored))
+  - 어디서: `common/contract/.../EventType.java`(`LICENSE_GRANTED`), `contract/payload/LicenseGrantedEvent`, License 발행(`GrantLicense`), Order 소비(`ApplyLicenseGrant`, 그룹 `order-license-grant`).
+  - 목표: P3.15-1. 새 `eventType` `PurchaseRecordStored`(같은 본문·키), P2.7-4 순서로 이행. 모듈 이름 License·토픽은 그대로.
+  - 영향: 동작은 같다. 새 소비자가 "보유권 활성화"로 오해할 여지를 없앤다.
+  - 재현: 계약 테스트 — Order가 옛·새 타입을 모두 같은 내부 입력으로 받는지.
+- [ ] **T34. 모듈마다 Flyway 스크립트가 쌓여(9개 모듈 164개) 스펙이 옛 이력·채움 작업에 묶여 있다** ([결정 187](../../docs/decisions.md#flyway-baseline))
+  - 어디서: `apps/<모듈>/src/main/resources/db/migration/V*.sql`(payment 39·order 34·studio 27·catalog 15·settlement 15·license 12·review 11·auth 6·store 5), 과거 이행 테스트 18개(`*Migration*Test`), 모듈 스펙의 V번호 참조 295곳.
+  - 목표: 모듈마다 `V1__baseline.sql` = 지금 마지막 스크립트까지 적용한 스키마. 옛 체인과 새 V1의 `information_schema` 비교 차이 0을 근거 색인 한 행으로. 이행 테스트 18개 삭제(D-045·D-046 방어선은 현재 스키마 테스트로 먼저 옮김), `migrationTest` 작업은 유지. 모듈 스펙의 V번호 참조를 표·제약 이름으로, 옛 행 채움 작업 삭제. 로컬 MySQL 볼륨 초기화는 실행 전 사용자 확인.
+  - 영향: 동작 없음. 이후 스키마 변경(V2부터)이 옛 이력과 채움 없이 단순해진다.
+  - 재현: 스키마 비교 스크립트 — 지금은 비교 대상(V1 기준선)이 없다.
+- [ ] **T35. 이벤트 흐름을 업무 키로 따라가거나 끊긴 간선을 찾는 진단 경로가 없다** (사용자 요청 2026-11-11, [로드맵 6절](../../docs/roadmap.md#6-이후-고도화))
+  - 어디서: HTTP·Kafka `traceparent`로 요청과 후속 소비가 Tempo에서 이어지지만([architecture "추적"](../../docs/architecture.md#tracing)), 발행·소비 구간(span)에 업무 속성이 없어 업무 키로 경로를 찾을 수 없다. 모듈 사이 반영 누락은 결정 158의 응답 대기 게이지로만 센다.
+  - 목표: 노드 = 모듈 상태, 간선 = 이벤트로 본다. 발행·소비 구간에 이벤트 종류·업무 키·전후 상태·원인 이벤트 ID 속성을 붙인다. 1단계는 Tempo/TraceQL로 업무 키별 경로를 조회한다. 2단계는 그래프 정의(이 스펙의 "정방향 응답 쌍"·모듈 상태 표에서 만든다)와 간선별 기대 시간으로 끊김을 감지한다.
+  - 경계: 진단용이다. 업무 정본은 모듈 DB이고, 업무 단위 누락 감지의 정본은 결정 158의 응답 대기 게이지다. 추적은 샘플링·보존 기간 때문에 완전하지 않을 수 있어 업무 판정에 쓰지 않는다(원칙 ⑥과 같은 이유로 구간 시각을 업무 규칙에 쓰지 않는다).
+  - 정할 것: `[결정 필요]` 구간 속성 키 이름(공통 라이브러리 상수로 둘 이름) · `[결정 필요]` 간선별 기대 시간 값(결정 159처럼 측정 뒤).
+  - 영향: 장애 진단 시간. 업무 동작은 바뀌지 않는다.
+  - 완료 조건: 1단계 — 주문 하나의 업무 키로 TraceQL 한 쿼리에 Order·Payment·License·Settlement 구간과 각 구간의 전후 상태가 나온다. 2단계 — 그래프 정의의 모든 간선에 기대 시간이 있고, 기대 시간을 넘긴 간선이 경보로 나온다.
+
+- [x] **T36. 메시징 코어와 adapter 넷을 대칭 모듈로 나누고, 넷이 같은 계약 테스트를 통과하게 한다** ([결정 209](../../docs/decisions.md#messaging-symmetric-modules))
+  - 이 항목과 아래 T37의 adapter·공통 계약 테스트·`--broker` 설명은 당시 구조의 기록이다. [결정 227](../../docs/decisions.md#kafka-only-messaging)로 adapter 넷·`MessagingContractTest`·`--broker`를 지우고 Kafka 단일 구현으로 되돌렸다(계약 사례는 `KafkaDeliveryIntegrationTest`로 옮김, PR #250).
+  - [x] 모듈 분리 — 2026-11-19 [PR #218](https://github.com/tlswltjq/esd-platform/pull/218). 계약을 `common:contract`로, `common:kafka`를 `common:messaging-kafka`로, RabbitMQ·Redis Streams·direct를 `common:messaging-rabbitmq`·`-redis`·`-direct`로 옮겼다. 코어(`common:messaging`)의 Kafka 의존을 없애고 Store용 Kafka 병행 발행(`AlsoKafka`)을 포트 `MirrorPublisher` + `MirroredTopics`로 바꿨다. Kafka 발행 포트도 `stove.messaging.broker`로 고르게 해 자동 구성 순서 의존을 없앴다. 앱 9개는 adapter를 `runtimeOnly`로만 넣는다. `verifyCommonRuntimeDependencies`(코어·계약·포트·다른 adapter에 브로커 클라이언트 없음, adapter 상호 의존 없음)와 ArchUnit `CommonLibraryRules`·`MessagingBoundaryRules`(`MessagingBoundaryRulesTest`)로 강제한다.
+  - [x] 공통 계약 테스트 한 벌 — 2026-11-21 [PR #219](https://github.com/tlswltjq/esd-platform/pull/219). 남은 비교 측정([결정 210](../../docs/decisions.md#messaging-comparison-hypotheses) S1~S7)의 선행 조건이었다. 추상 클래스 `MessagingContractTest`(코어 testFixtures)가 계약 8개 — 같은 키 순서대로 한 번씩·한 번에 하나씩, 같은 그룹 인스턴스 둘은 한 메시지를 함께 처리하지 않음, 앞 처리가 붙잡힌 동안 같은 키 뒤 메시지 미시작, 다른 그룹 팬아웃, 제자리 재시도(최초 1 + 3) 뒤 격리·그 키만 정지, 재시도 제외 예외는 첫 실패에 격리, 격리 기록 실패 시 붙잡아 추월 없음, 재시도 중 성공 시 격리 없음·추월 없음 — 를 정하고, `KafkaContractTest`·`RabbitContractTest`·`RedisStreamsContractTest`·`DirectContractTest`가 구독·발행만 구현해 상속한다(실제 브로커·MySQL). Kafka는 이 보장을 실제 브로커로 검증하는 통합 테스트가 처음 생겼다. adapter별로 흩어져 있던 같은 단언은 지우고 adapter 고유 테스트(Redis 점유 이전, direct 커서, RabbitMQ 받을 큐 없는 발행)만 남겼다. direct 구독은 RabbitMQ·Redis처럼 `Supplier<List<SubscribedHandler>>`를 받는다.
+
+- [x] **T37. 결정 210의 가설·시나리오 S1~S7로 네 메시징 방식을 잰다** — S4~S7을 재고 S3는 1회차까지, S1·S2는 재지 않은 채 닫았다([결정 228](../../docs/decisions.md#messaging-comparison-closure)) ([결정 210](../../docs/decisions.md#messaging-comparison-hypotheses), [E12 측정 계획](../../docs/experiments.md#messaging-comparison-plan))
+  - 공통: 결정 204 합격 조건(유실·중복 반영·순서 위반 0), 조건당 2회 A→B→A, 측정 하네스는 `verify-jib.py --measure`. 측정 전 예상은 E12 계획 표로 고정돼 있고 결과는 예상과 달라도 그대로 적는다.
+  - [x] S6 저부하 지연·운영 비용 — 2026-11-22 [PR #221](https://github.com/tlswltjq/esd-platform/pull/221), [E12 S6 결과](../../docs/experiments.md#messaging-s6). 세 브로커 지연 차이 없음, 브로커 없음은 업무 MySQL이 비용을 진다(CPU 약 2.5배). RabbitMQ 유휴 CPU 원인은 확인하지 않았다. 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222)에서 RabbitMQ Streams를 더한 다섯 방식 10회로 다시 쟀다(다른 컨테이너 없음, 고친 도구): 네 브로커 지연 차이 없음, 앞선 8회의 지연 순서는 재현되지 않았다.
+  - [x] S5 독 메시지 1건 — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222), [E12 S5 결과](../../docs/experiments.md#messaging-s5). 같은 분할 뒤 메시지는 다섯 방식 모두 약 7초 멈춤. Kafka는 리스너 동시성 1 때문에 다른 파티션도 멈춤(동시성 3 확인 실험에서는 168ms).
+  - [x] Kafka 리스너 동시성 기본값 — [결정 212](../../docs/decisions.md#kafka-listener-concurrency)로 파티션 수(3)로 정했다.
+  - [x] S7 브로커 재시작 — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222), [E12 S7 결과](../../docs/experiments.md#messaging-s7). 접수된 주문은 모든 방식에서 유실·중복 반영 0. 브로커 장애 동안 주문 요청 실패: Kafka 39·45건, RabbitMQ 0·5건, Streams·Redis 0.
+  - [x] Outbox 릴레이가 행 잠금을 쥔 채 브로커 확인을 기다려 업무 요청이 실패한다 — S7에서 order의 `insert into outbox_event … LOCK WAIT` → Hikari 고갈 → 주문 500. 재현 테스트(격리 MySQL, 확인이 늦는 발행 포트) → `docs/defects.md` 등록 → 수정(확인을 기다리는 동안 행 잠금을 쥐지 않게) → S7 재측정. 재현·수정 완료([D-060](../../docs/defects.md#d-060), [결정 215](../../docs/decisions.md#outbox-relay-lock-hold), PR #228). S7 재측정 2026-11-23 [PR #235](https://github.com/tlswltjq/esd-platform/pull/235)([E12 S7 재측정](../../docs/experiments.md#messaging-s7-rerun)): 네 방식 8회 모두 주문 요청 실패 0(이전 Kafka 39·45건).
+  - [x] S4 소비 인스턴스 1 → 3 → 6 — 2026-11-24 [PR #241](https://github.com/tlswltjq/esd-platform/pull/241)([결정 218](../../docs/decisions.md#s4-adapter-level), [E12 S4 결과](../../docs/experiments.md#messaging-s4)). 분할을 인스턴스에 고르게 나눈 것은 RabbitMQ Streams뿐(6개 279/s). Kafka는 인스턴스당 동시성 3에서 두 인스턴스에 몰려 2배(98/s)에서 멈춤, RabbitMQ·Redis·브로커 없음은 한 인스턴스가 전부 처리. 인계(정상 종료) 6~46초.
+  - [x] S3 소비자 1시간 중단 뒤 회복 — 1회차 4종만 재고 닫았다([결정 228](../../docs/decisions.md#messaging-comparison-closure), [E12 S3 결과](../../docs/experiments.md#messaging-s3), PR #250). Kafka·RabbitMQ·Streams는 60만 건 모두 받고 유실·중복 0. RabbitMQ는 생산자를 막지 않음(예상과 다름). Redis는 `maxmemory`에서 발행 거절, 재개도 OOM으로 진척 없음. 브로커 없음과 2회차는 재지 않았다.
+  - [x] RabbitMQ Streams adapter([결정 211](../../docs/decisions.md#rabbitmq-streams-comparison)) — 2026-11-22 [PR #222](https://github.com/tlswltjq/esd-platform/pull/222). `common:messaging-rabbitmq-streams`: 토픽마다 super stream(분할 3, 보존 7일), 분할마다 단일 활성 소비자, 처리·격리 보관 뒤 위치 저장, 새 그룹은 `first`부터. 공통 계약 8개 + Streams 고유 1개(붙기 전 발행한 메시지도 새 그룹이 받음) 통과, 변이(단일 활성 소비자 제거) 시 계약 2·3 실패. 측정 하네스 `--broker rabbitmq-streams`.
+  - [x] S1 새 소비 서비스와 초기 적재, S2 버그 수정 뒤 과거 재반영 — 재지 않고 닫았다([결정 228](../../docs/decisions.md#messaging-comparison-closure)). 비교 대상 adapter를 [결정 227](../../docs/decisions.md#kafka-only-messaging)로 지웠다.
+
+- [x] **T39. Kafka 단일 구현의 성능·안정성 기준선을 잰다(작업 B)** — 완료 조건 충족으로 닫았다. 실행 수단이 없어 재지 않은 두 항목은 T40(동결 뒤 백로그)로 옮겼다([결정 238](../../docs/decisions.md#kafka-baseline-closure)) ([결정 227](../../docs/decisions.md#kafka-only-messaging)·[229](../../docs/decisions.md#benchmark-fault-injection)~[235](../../docs/decisions.md#dlt-write-failure-injection), [E13 지표·계약](../../docs/experiments.md#kafka-baseline))
+  - 정본: 지표 정의·벤치마크 계약·판정식은 E13, 부하 조건은 결정 230, 판정 기준은 결정 231(잠정 벤치마크 기준, SLO 아님), 결과 보관은 결정 233.
+  - [x] B1 지표 명세·벤치마크 계약(E13), 소비 재시도·격리 지표(`stove.kafka.consumer.failed-deliveries`·`.recovered`·`.recovery-failures`) — PR #252.
+  - [x] B2 층 2 메시징 구간 벤치: `benchmarks:messaging` 모듈(결정 234) — 시험 앱(운영과 같은 자동 구성, 헤더 `x-bench-fail`대로 실패), open-loop 부하 발생기, 회차 폴더·요약(`summary.json`)·그래프 스크립트, smoke — PR #253([E13 층 2 실행](../../docs/experiments.md#kafka-baseline-layer2)).
+  - [x] B3 층 1 E2E 하네스: `verify-jib.py --measure` 확장(주문률 단계, Offered·Completed·Outstanding 10초 시계열, 부하 발생기 달성률), 외부 장애 주입(소비 DB 권한 회수·`docker kill`·잘못된 봉투 발행·DLT `max.message.bytes`), smoke — PR #254([E13 층 1 실행](../../docs/experiments.md#kafka-baseline-layer1)).
+  - [x] B4 측정: 기준선(E2E 2주문/s·메시징 100 msg/s 정식 3회) → 탐색 → 정식(기준·포화 경계) → 장애(시나리오 3~6). 결과는 E13과 `docs/experiments.d/E13/<회차>/` — PR #255([E13 결과](../../docs/experiments.md#kafka-baseline-results)). 최대 지속 처리량 층 1 [6, 7)주문/s·층 2 [100, 110) msg/s, 층 2 기준 발행률은 [결정 236](../../docs/decisions.md#layer2-base-rate).
+  - 완료 조건: 시나리오 1~6마다 결과 또는 미측정 사유·실행 방법이 E13에 있고, 최대 지속 처리량이 결정 231 판정식으로 [통과 단계, 실패 단계) 구간으로 적혀 있다.
+
+- [ ] **T40. (동결 뒤 백로그) T39에서 재지 않은 Kafka 기준선 항목** ([결정 238](../../docs/decisions.md#kafka-baseline-closure)) — M에 필요할 때만 꺼낸다. 미측정 사유는 [E13 결과](../../docs/experiments.md#kafka-baseline-results) "측정하지 못하는 것"에 있다.
+  - [ ] 층 2 시험 앱 프로세스 kill 단계(시나리오 5·6 층 2)와 격리 뒤 `quarantine/replay` 재투입 시간 측정 — 선행: `bench_messaging.py`에 시험 앱 종료·재기동 단계, 회차 절차에 관리자 인증 ops API 호출을 넣는다. 그때까지 층 2 kill은 층 1 kill 결과로 대신한다.
+  - [ ] 별도 시나리오(결정 235 범위 밖): DLT 저장 성공 직후 원본 offset 커밋 실패로 생기는 DLT 중복.

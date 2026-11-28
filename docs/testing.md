@@ -118,7 +118,7 @@ docker run --rm --mount type=bind,source="$PWD/infra/minio/build",target=/w alpi
 
 2026-10-18 License 통합 수정은 완료된 아홉 앱·공통 모듈의 단위 864건·통합 162건과 독립 환경의 License(아홉 앱) 13단계·Order(일곱 앱) 6단계·Payment(여덟 앱) 11단계, 총 30단계 실제 흐름을 OCI에서 검증했다. [범위·실행·완료 근거](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-수정-완료-기록)를 따른다. 통합 전 864건·146건 기록은 당시 근거로 보존한다. 아래 구 License 지급 실패 보상 테스트 기록은 재작성 전 이력이며 현재 업무·테스트 기준이 아니다.
 
-2026-10-18 Download 재작업은 로컬 OrbStack에서 완료했다. 완료된 열 앱·공통 모듈의 **단위 961건**, Download·Catalog·Gateway·License의 **통합 67건**, 실제 열 앱의 **15단계**가 실패·오류·건너뜀 0건이다. 전체 앱·E2E 소스와 단위/통합 테스트 소스를 컴파일하고 OpenAPI는 갱신 옵션 없이 재검증했다. [완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md#재작업-완료-기록) · [실행](../.kiro/specs/download/design.md#사용-안내)을 따른다. Download는 HTTP 대역·실제 JWT·MinIO를 검증하며 MongoDB·Kafka·업무 DB를 필요로 하지 않는다.
+2026-10-18 Download 재작업은 로컬 OrbStack에서 완료했다. 완료된 열 앱·공통 모듈의 **단위 961건**, Download·Catalog·Gateway·License의 **통합 67건**, 실제 열 앱의 **15단계**가 실패·오류·건너뜀 0건이다. 전체 앱·E2E 소스와 단위/통합 테스트 소스를 컴파일하고 OpenAPI는 갱신 옵션 없이 재검증했다. [완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md#재작업-완료-기록) · [실행](../specs/download/design.md#사용-안내)을 따른다. Download는 HTTP 대역·실제 JWT·MinIO를 검증하며 MongoDB·Kafka·업무 DB를 필요로 하지 않는다.
 
 ---
 
@@ -1098,7 +1098,7 @@ ADMIN의 전체 주문 목록·타인 상세 조회, 미결제 취소·자동 �
 
 ## 지급·지급 확인의 기존 이벤트 복구 — P3 A
 
-2026-10-31 [결정 37](decisions.md#license-event-recovery)의 범위다. [운영 절차](license-event-recovery-runbook.md)에 따라 원인을 해결한 운영자가 기존 이벤트를 재처리하며, 조건부 자동 재투입·별도 지급 엔진·확인 이벤트 재생성의 기대값은 추가하지 않는다.
+2026-10-31 [결정 37](decisions.md#license-event-recovery)의 범위다. [운영 절차](runbooks/license-event-recovery.md)에 따라 원인을 해결한 운영자가 기존 이벤트를 재처리하며, 조건부 자동 재투입·별도 지급 엔진·확인 이벤트 재생성의 기대값은 추가하지 않는다.
 
 | 경계 | 수용 조건과 검증 |
 |---|---|

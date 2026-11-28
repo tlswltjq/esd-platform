@@ -2,7 +2,7 @@
 
 **목표 (2026-10-29 사용자 결정):** MVP 상태의 전 기능을 일반적인 사용 수준으로 고도화한 뒤, 엣지 케이스·성능 관점으로 추가 고도화한다.
 **범위 동결 (2026-11-16, [결정 201](decisions.md#scope-freeze-verified-journeys)):** 지금 검증된 여정까지를 "기본 기능 완료"로 동결하고, 다음 단계는 Kafka 기준선과 독립 구현 비교(M, [결정 227](decisions.md#kafka-only-messaging)·[228](decisions.md#messaging-comparison-closure))다. 아래 G1~G7의 남은 항목은 동결 뒤 백로그다(0절).
-모듈별 남은 작업은 각 `.kiro/specs/<모듈>/tasks.md`, 단계별 검증 결과는 [근거 색인](evidence.md), 정책 선택은 [결정 기록](decisions.md)과 [판단 색인](judgment-index.md)을 따른다.
+모듈별 남은 작업은 각 `specs/<모듈>/tasks.md`, 단계별 검증 결과는 [근거 색인](evidence.md), 정책 선택은 [결정 기록](decisions.md)과 [판단 색인](judgment-index.md)을 따른다.
 이 문서는 단계의 정의·순서·완료 조건만 다룬다. 진행 경위는 적지 않는다.
 
 원문(2026-11-06까지의 날짜별 진행 기록 포함): [platform-generalization-plan.md](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/platform-generalization-plan.md)
@@ -27,7 +27,7 @@
 2. 실제 앱 기준으로 Kafka의 성능·안정성 기준선을 잰다.
 3. 다른 기술은 같은 업무를 독립 구현한 앱으로, Kafka 기준선과 같은 벤치마크 계약(업무 시나리오·기대 상태·전달 보장·장애 주입·지표)으로 잰다. 앱 안에 기술 교체용 공통 추상화를 두지 않는다.
 
-**M 상태:** 결정 209 구조(브로커 중립 포트 + adapter 다섯)에서 잰 비교 — 평시 부하, S4~S7, S3 1회차 — 는 그 구조의 기록으로 [E12](experiments.md#messaging-comparison)에 남기고 비교 측정은 닫았다(결정 228, 플랫폼 T36·T37). 1은 [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)으로, 2는 플랫폼 T39(PR #252~#255, [E13](experiments.md#kafka-baseline))로 끝났다. 2·3의 상태는 [플랫폼 tasks.md](../.kiro/specs/platform/tasks.md)(T39~)를 본다.
+**M 상태:** 결정 209 구조(브로커 중립 포트 + adapter 다섯)에서 잰 비교 — 평시 부하, S4~S7, S3 1회차 — 는 그 구조의 기록으로 [E12](experiments.md#messaging-comparison)에 남기고 비교 측정은 닫았다(결정 228, 플랫폼 T36·T37). 1은 [PR #250](https://github.com/tlswltjq/esd-platform/pull/250)으로, 2는 플랫폼 T39(PR #252~#255, [E13](experiments.md#kafka-baseline))로 끝났다. 2·3의 상태는 [플랫폼 tasks.md](../specs/platform/tasks.md)(T39~)를 본다.
 
 ## 1. 단계의 정의
 
@@ -96,4 +96,4 @@ G1~G4에 필요한 계정·권한·지표·기본 복구는 해당 단계에 함
 일반화가 끝나면 실제 사용 패턴과 목표 부하·허용 지연을 정하고 현재 버전의 지연·처리량·DB/PG 호출 수·대기열·복구 시간을 측정한다. 과거 [실험 기록](experiments.md)의 수치를 현재 시스템의 보장으로 쓰지 않는다.
 이어 병목과 영향 순으로 다중 워커/임대·Kafka 소비/릴레이·쿼리/인덱스·검색·큰 파일 경로를 개선하고, 희귀 동시 금융 결과·장시간 외부 장애·DB 유실·재구축을 검증한다. 검색 엔진 교체·캐시·새 인프라는 측정이나 실제 요구가 있을 때 선택한다.
 
-- **이벤트 흐름 감시(진단용, [플랫폼 T35](../.kiro/specs/platform/tasks.md)):** 노드는 모듈 상태, 간선은 이벤트로 본다. 발행·소비 구간에 이벤트 종류·업무 키·전후 상태·원인 이벤트 ID 속성을 붙인다. 1단계는 Tempo/TraceQL로 업무 키별 경로를 조회하고(완료 조건: 주문 하나의 업무 키로 한 쿼리에 Order·Payment·License·Settlement 구간과 전후 상태가 나온다), 2단계는 그래프 정의와 간선별 기대 시간으로 끊김을 감지한다(완료 조건: 모든 간선에 기대 시간이 있고 넘긴 간선이 경보로 나온다). 업무 정본은 모듈 DB이고 업무 누락 감지의 정본은 결정 158의 응답 대기 게이지다. 구간 속성 키 이름과 기대 시간 값은 `[결정 필요]`(기대 시간은 측정 뒤, 결정 159).
+- **이벤트 흐름 감시(진단용, [플랫폼 T35](../specs/platform/tasks.md)):** 노드는 모듈 상태, 간선은 이벤트로 본다. 발행·소비 구간에 이벤트 종류·업무 키·전후 상태·원인 이벤트 ID 속성을 붙인다. 1단계는 Tempo/TraceQL로 업무 키별 경로를 조회하고(완료 조건: 주문 하나의 업무 키로 한 쿼리에 Order·Payment·License·Settlement 구간과 전후 상태가 나온다), 2단계는 그래프 정의와 간선별 기대 시간으로 끊김을 감지한다(완료 조건: 모든 간선에 기대 시간이 있고 넘긴 간선이 경보로 나온다). 업무 정본은 모듈 DB이고 업무 누락 감지의 정본은 결정 158의 응답 대기 게이지다. 구간 속성 키 이름과 기대 시간 값은 `[결정 필요]`(기대 시간은 측정 뒤, 결정 159).

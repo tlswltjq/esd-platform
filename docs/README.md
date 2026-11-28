@@ -13,7 +13,7 @@
 
 | 무엇 | 문서 |
 |---|---|
-| 모듈별 현재 계약·남은 작업 | [`.kiro/specs/`](../.kiro/specs/README.md) — 모듈마다 `requirements`·`design`(끝에 "사용 안내")·`tasks` |
+| 모듈별 현재 계약·남은 작업 | [`specs/`](../specs/README.md) — 모듈마다 `requirements`·`design`(끝에 "사용 안내")·`tasks` |
 | 단계·순서·완료 조건 | [로드맵](roadmap.md) |
 | 왜 그렇게 했고 무엇을 버렸나 | [설계 결정](decisions.md) |
 | 사용자의 판단 이력 | [판단 색인](judgment-index.md) |
@@ -43,7 +43,7 @@
 | [개발 환경과 실행](getting-started.md) | 로컬 실행, Swagger OAuth, 문제 해결 |
 | [API 데모](api-demo.md) | 전체 자동 검증과 창작·구매 수동 호출 예제 |
 | [백업과 장애 복구](backup-restore.md) | MySQL 전체 백업 + binlog 연속 복사, 빌드 연속 미러, 복구 순서와 격리 연습 결과 |
-| [License 이벤트 복구 절차](license-event-recovery-runbook.md) | 지급·확인 이벤트의 DLT 재투입·재큐잉 |
+| [License 이벤트 복구 절차](runbooks/license-event-recovery.md) | 지급·확인 이벤트의 DLT 재투입·재큐잉 |
 | [환불 지연·귀속 미확정 종결 절차](runbooks/refund-delay-closure.md) | 장기·귀속 미확정 환불의 콘솔 취소 → PG 재조회 근거 종결(결정 127) |
 | [이용권 DB 복구 절차](runbooks/license-db-loss.md) | 재작성 전 계약의 원장 유실 복구 참고 기록 (현재 License에 적용하지 않음) |
 | [tools 안내](../tools/README.md) | 검증·관측·DB 실험 도구 |

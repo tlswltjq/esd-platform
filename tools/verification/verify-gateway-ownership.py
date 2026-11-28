@@ -7,11 +7,10 @@ from support.minio_image import ensure_minio_image
 from support.mock_pg_runtime import MockPgRuntime
 from support.service_credentials import credential_names, service_environment
 from support.boot_jars import application_jar
+from support.output_root import output_root
 import os, socket, subprocess, time, urllib.request, tempfile, json, secrets
 repo=Path(__file__).resolve().parents[2]
-output_root=Path(os.environ["KIROCREW_SCRATCH"])
-output_root.mkdir(exist_ok=True)
-directory=Path(tempfile.mkdtemp(prefix="stove-ownership-check-",dir=output_root))
+directory=Path(tempfile.mkdtemp(prefix="stove-ownership-check-",dir=output_root(repo)))
 project=directory.name
 def inventory():
     ids=subprocess.check_output(['docker','ps','-aq'],text=True).split()

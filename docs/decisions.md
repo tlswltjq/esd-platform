@@ -1,6 +1,6 @@
 # 설계 결정 기록
 
-구조와 업무 정책을 정하며 **왜 그렇게 했고 무엇을 포기했는지**를 남긴다. 무엇을 했는지는 커밋·PR이, 현재 계약은 `.kiro/specs/<모듈>/`이 정본이다.
+구조와 업무 정책을 정하며 **왜 그렇게 했고 무엇을 포기했는지**를 남긴다. 무엇을 했는지는 커밋·PR이, 현재 계약은 `specs/<모듈>/`이 정본이다.
 각 결정은 [AGENTS.md](../AGENTS.md) 1절의 형식(문제·선택지·내 의견·선택·구분·결과)을 따른다. 버린 선택지와 감수한 비용은 "선택지"와 "선택"에 함께 적는다.
 "내 의견"은 사용자가 대화에 쓴 말의 원문 인용이다. `(선택지 선택만, 본인 발언 없음)`은 AI가 쓴 선택지를 고르기만 한 경우, `(대화 원본 미확인)`은 선택한 대화를 찾지 못한 경우이며 이때 구분은 `미확인`이다(AI 주도 리팩터링 시기의 결정일 수 있다). 추천이 없던 쟁점에서 고른 경우는 `사용자 선택(추천 없음)`으로 적는다.
 판단 이력 요약은 [judgment-index.md](judgment-index.md), 검증 결과는 [evidence.md](evidence.md)를 본다. 과거 기록의 `infrastructure` 패키지는 [결정 26](#26-외부-연동-구현-패키지를-adapter로-부른다), CI·E2E Compose 파일은 [결정 27](#27-compose는-기본-정의와-로컬-접속-오버라이드만-둔다) 이전의 명칭이다.
@@ -215,7 +215,7 @@
 - 내 의견: "License와 LicensePurchase가 일대다 관계여야만해? … 동일한 상품은 하나만 구매할 수 있다. 선물 등의 목적으로 추가 구매는 이후로 미룬다. → 통합하여 수정계획 수립"
 - 선택: B — 엔티티·저장소·지급 쓰기 경로가 하나가 된다. Order가 PENDING·PAID 유일 제약으로 중복 주문을 막고(License 조회는 비동기로 뒤처질 수 있어 근거로 쓰지 않는다), License도 상품별 유일 제약을 둔다. 비용: License 컬럼 증가, 선물은 후속.
 - 구분: 추천 수용
-- 결과: [License 스펙](../.kiro/specs/license/design.md), [통합 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획)
+- 결과: [License 스펙](../specs/license/design.md), [통합 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획)
 
 ## 26. 외부 연동 구현 패키지를 adapter로 부른다
 - 문제: `infrastructure`에 S3 같은 기술 연동과 다른 도메인 HTTP 호출이 섞여 이름으로 역할을 알기 어려웠다.
@@ -239,11 +239,11 @@
 - 내 의견: (대화 원본 미확인)
 - 선택: B — [결정 17](#17-추적-컨텍스트를-이벤트와-함께-저장한다)의 원칙을 내구 접수까지 확장한다. 재전달로 부모를 바꾸지 않고, 부모가 없으면 스케줄러 trace를 상속하지 않는 새 root다. 업무 입력·도메인에는 추적 라이브러리를 넣지 않는다(port/adapter/config). 비용: 접수당 작은 행 1건·시도당 조회 1회, TTL로 미확정 요청의 부모를 잃지 않게 결제 행과 함께 보존.
 - 구분: 미확인
-- 결과: [experiments.md](experiments.md), [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [experiments.md](experiments.md), [Payment 스펙](../specs/payment/design.md)
 
 <a id="full-refund-policy"></a>
 ## 29. 전액 환불의 접수·기한·접근 제한을 구분한다
-- 문제: 주문 한 건의 전액 환불을 추가하며 환불 자격·상품 접근·외부 PG 실행을 각각 판단하고, PG 결과 미확정과 확정 실패를 구분해야 했다. 현재 계약(상태·API·이벤트·경합 처리)은 [Order 스펙](../.kiro/specs/order/design.md)·[Payment 스펙](../.kiro/specs/payment/design.md)·[License 스펙](../.kiro/specs/license/design.md)이 정본이다.
+- 문제: 주문 한 건의 전액 환불을 추가하며 환불 자격·상품 접근·외부 PG 실행을 각각 판단하고, PG 결과 미확정과 확정 실패를 구분해야 했다. 현재 계약(상태·API·이벤트·경합 처리)은 [Order 스펙](../specs/order/design.md)·[Payment 스펙](../specs/payment/design.md)·[License 스펙](../specs/license/design.md)이 정본이다.
 - 선택지(대표 쟁점): A License가 지급 전 정지 의도를 먼저 보관 / B Order가 지급 확인을 기다렸다가 정지 요청. (추천: A)
 - 내 의견: "라이선스와 페이먼트는 별개의 서비스라 신뢰하지 않도록 하는것이 기본전재일텐데 그렇다면 외부에서 마구잡이로 들어오는 환불요청에 대해서 계속 메시지 큐나 어딘가에 들고 보관해야하잖아. … 근거를 order가 이미 가지고 있으므로 Order가 지급확인을 기다리는 방식이 좋을것같은데"
 - 선택: B — 검증한 주문을 가진 Order에 대기·재개 책임을 모은다. 비용: 지급부터 정지 반영까지 짧은 접근 틈이 남고, 지급 확인의 지연·누락이 환불을 지연시킨다. 발행자 인증·임의 식별자 폭주는 이 선택으로 막았다고 주장하지 않는다.
@@ -320,7 +320,7 @@
 - 문제: 같은 주문 재결제가 최초 가격·할인을 유지하므로 미결제 주문이 조건을 무기한 유지하지 않게 기한이 필요했다. 그런데 기한을 넘긴 실제 승인을 어떻게 볼지가 쟁점이었다.
 - 선택지: A 기한 뒤 실제 승인은 자동 승인 취소(PG 승인 시각을 절대 마감으로) / B 30분은 서버가 상태·기한·금액을 검사하고 승인 진행을 확정·기록하는 기한, 그 뒤의 처리·통신 지연은 서비스가 부담. (추천: A였다가 B로 전환)
 - 내 의견: "우리서버의 시간, 즉 Order가 만료된 상태가 아니라면 외부승인요청까지의 텀은 서비스 제공자의 부담이 아닐까 생각하는데 이전 결정과 부딛히는 지점이 무엇이지?"
-- 선택: B — 유효한 주문으로 서버 검사를 통과한 고객에게 처리 지연 때문에 재주문을 요구하지 않는다(환불 기한 판정과 같은 원칙). 비용: 승인 진행의 내구 기록, 만료와의 경합·중복 요청·응답 유실 처리, 미확정 중 새 결제 제한. 상태·전이는 [Order 스펙](../.kiro/specs/order/design.md).
+- 선택: B — 유효한 주문으로 서버 검사를 통과한 고객에게 처리 지연 때문에 재주문을 요구하지 않는다(환불 기한 판정과 같은 원칙). 비용: 승인 진행의 내구 기록, 만료와의 경합·중복 요청·응답 유실 처리, 미확정 중 새 결제 제한. 상태·전이는 [Order 스펙](../specs/order/design.md).
 - 구분: AI 주장 정정
 - 결과: [구현·검증 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/order-payment-lifecycle-plan.md)
 - 하위 결정:
@@ -339,7 +339,7 @@
 - 내 의견: (선택지 선택만, 본인 발언 없음)
 - 선택: A — 자동 복구한다. 3시간부터는 POST 없이 GET만 하고 시간만으로 실패·새 키를 만들지 않는다. 비용: 키·본문·준비 시각의 내구 저장(본문·토큰 암호화, 종결 뒤 암호문 제거)과 작업자 중복 제어. B는 구현 위험이 작지만 미접수 건이 계속 대기해 사람이 확인해야 한다.
 - 구분: 추천 수용
-- 결과: [서버 승인 작업 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-confirmation-plan.md), [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [서버 승인 작업 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/payment-confirmation-plan.md), [Payment 스펙](../specs/payment/design.md)
 
 <a id="provider-discount-payment-amounts"></a>
 ## 34. PG 할인과 고객 실결제액을 주문 금액과 별도로 보존한다
@@ -348,7 +348,7 @@
 - 내 의견: (대화 원본 미확인)
 - 선택: A — 주문·OrderPaid 금액을 바꾸지 않고 `pgPaidAmount`·`pgDiscountAmount`를 따로 둔다. PG 할인을 PG 비용이나 판매자 부담으로 간주하지 않는다. READY의 `amount.paid`만으로 성공을 만들지 않는다.
 - 구분: 미확인
-- 결과: [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [Payment 스펙](../specs/payment/design.md)
 
 <a id="provider-discount-full-refund"></a>
 ## 35. 할인 거래는 제공사 전액 취소 계약에 따라 반환하고 혜택 재사용은 제공사 정책을 따른다
@@ -357,7 +357,7 @@
 - 내 의견: "A"
 - 선택: A — 이유 미기재. 주문 총액을 고객 현금으로 간주하거나 할인 24원 전체를 포인트로 추정하지 않는다. 요청 숫자는 공식 기술 계약으로 확인한다.
 - 구분: 추천 수용
-- 결과: [Payment 스펙](../.kiro/specs/payment/design.md)
+- 결과: [Payment 스펙](../specs/payment/design.md)
 
 <a id="refund-amount-details"></a>
 ## 36. 고객·관리자 환불 상세에 주문·승인 금액과 확인된 반환 구성을 함께 제공한다
@@ -366,7 +366,7 @@
 - 내 의견: "A"
 - 선택: A — 확인하지 못한 값은 NULL로 두고, 금액 상세 미확인이 환불 COMPLETED를 되돌리지 않는다. 조회 시 외부 호출 없이 이벤트 사본을 쓴다. 비용: 사본 전달 지연.
 - 구분: 추천 수용
-- 결과: [구현 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g2-refund-amount-details-implementation.md), [Order 스펙](../.kiro/specs/order/design.md)
+- 결과: [구현 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/g2-refund-amount-details-implementation.md), [Order 스펙](../specs/order/design.md)
 
 <a id="license-event-recovery"></a>
 ## 37. 지급·지급 확인의 재시도 소진 건은 기존 이벤트 복구 경로와 운영 절차를 먼저 완성한다
@@ -375,7 +375,7 @@
 - 내 의견: "AtLeastOnece발송과 dlt가 있어도 발생가능한건가?"
 - 선택: 재정의한 A — at-least-once·DLT와 기존 도구를 대조하니 새 엔진이 필요한 근거가 없었다. 원래 이벤트 ID·본문·키를 보존해 재투입한다. 비용: 운영자 대응까지 고객이 기다릴 수 있다. 별도 지급 엔진·조건부 자동 재투입은 범위 밖.
 - 구분: AI 주장 정정
-- 결과: [완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-event-recovery-verification.md), [운영 절차](license-event-recovery-runbook.md)
+- 결과: [완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-event-recovery-verification.md), [운영 절차](runbooks/license-event-recovery.md)
 
 <a id="settlement-responsibility-separation"></a>
 ## 38. Settlement 내부에서 매출·배분, 판매자 정산, PG 거래·비용·대사의 책임을 분리한다
@@ -384,7 +384,7 @@
 - 내 의견: "정산도메인을 변경하는것도 고려가능 → 2 진행"
 - 선택: ② — 판매자 배분과 PG 비용의 확정 근거가 다르다. PG 비용 전액 플랫폼 부담을 유지하고 비용 확인 때문에 판매자 배분을 다시 계산하지 않는다. 비용: 초기 모델·스키마·조회 정비 범위가 커진다. 도메인 변경 허용을 자료 삭제 승인으로 넓히지 않는다.
 - 구분: 직접 제안
-- 결과: [책임 분리 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md), [Settlement 스펙](../.kiro/specs/settlement/design.md)
+- 결과: [책임 분리 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-separation-verification.md), [Settlement 스펙](../specs/settlement/design.md)
 
 <a id="seller-close-independent-of-pg-cost"></a>
 ## 39. 판매자 금액을 마감하고 PG 비용·대사는 별도로 진행한다
@@ -473,7 +473,7 @@
 - 내 의견: (대화 원본 미확인)
 - 선택: B — 판매 가능 = 판매자 ON_SALE ∧ 관리자 제한 없음. 한쪽 해제가 다른 쪽을 풀지 않고 재출시도 해제 명령이 아니다. 상품 행 잠금·catalogVersion·감사·Outbox를 한 트랜잭션에 둔다.
 - 구분: 미확인
-- 결과: [Catalog 스펙](../.kiro/specs/catalog/design.md)
+- 결과: [Catalog 스펙](../specs/catalog/design.md)
 
 <a id="platform-restriction-pending-order-admission"></a>
 ## 49. 관리자 판매 제한은 기존 미결제 주문의 새 승인 접수도 차단한다
@@ -518,7 +518,7 @@
 - 내 의견: "A"
 - 선택: A — 확정 기준은 상태·감사·결과 Outbox의 커밋이며 버튼 클릭·Studio 접수·잠금 획득 시각이 아니다. B는 확정된 판정을 소급해 뒤집어 기각했다.
 - 구분: 추천 수용
-- 결과: [분석 문서](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/project-review-withdrawal-analysis.md#5-철회와-승인반려의-경쟁), [Review 스펙](../.kiro/specs/review/design.md)
+- 결과: [분석 문서](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/project-review-withdrawal-analysis.md#5-철회와-승인반려의-경쟁), [Review 스펙](../specs/review/design.md)
 
 <a id="review-withdrawal-async-acceptance"></a>
 ## 54. 심사 철회는 내구 접수 후 응답하고 최종 결과는 별도로 확인한다
@@ -572,7 +572,7 @@
 - 내 의견: "내가 심사와 출시 요청을 혼합해서 생각한 것 같은데 전체 흐름을 정리해 설명하고 앞선 결정이 적절한 논의로 결정된것인지 점검해줘 → A"
 - 선택: A — 새 명령·새 요청 ID로 정상 심사한다. 자료 변경을 재신청 조건으로 삼지 않으므로 그 조건만을 위한 해시 비교기를 만들지 않는다. 검사 결과 재사용은 별도 설계다.
 - 구분: 추천 수용
-- 결과: [Studio 스펙](../.kiro/specs/studio/design.md)
+- 결과: [Studio 스펙](../specs/studio/design.md)
 
 <a id="review-withdrawal-until-final-decision"></a>
 ## 60. 심사 검토에 착수한 뒤에도 최종 판정 전까지 철회를 허용한다
@@ -635,7 +635,7 @@
 - 내 의견: "일반적인 msa eda환경에서도 수동적인 갱신을해? 시스템문제가 발생해 사람의 개입이 필요료하는 불가피한 일이 아니라면 갱신이 적재적소에 맞게 갱신되어야할텐데"
 - 선택: B — 수동 API가 정상 운영 경로가 되지 않게 한다. 운영자는 자동 처리의 상태·근거·실패를 보고 안전한 판단이 불가능한 예외에 개입한다.
 - 구분: AI 주장 정정
-- 결과: [자동 동기화·복구 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-auto-reconciliation-plan.md), [Store 스펙](../.kiro/specs/store/design.md)
+- 결과: [자동 동기화·복구 계획](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/store-auto-reconciliation-plan.md), [Store 스펙](../specs/store/design.md)
 
 <a id="store-canonical-same-version-repair"></a>
 ## 67. Store의 동일 버전 내용 차이는 검증한 Catalog 정본으로 자동 교정한다
@@ -724,7 +724,7 @@
 - 내 의견: "심사는 하나의 프로젝트에서 하나만 진행할 수 있도록 하고 명시적 철회 > 재심사 요청의 흐름을 갖도록 하는것에 대해서는 어떻게 생각하는지 의견"
 - 선택: 프로젝트별 진행 중 심사 1건 + 명시적 철회 후 재심사 — 이 흐름 위에서 결정 53~61이 이어졌다.
 - 구분: 직접 제안
-- 결과: [Studio 스펙](../.kiro/specs/studio/design.md)
+- 결과: [Studio 스펙](../specs/studio/design.md)
 
 ## 77. MVP 재작성의 보안은 업무 권한까지 갖추고 DB 계정 분리 등은 후속으로 둔다
 - 문제: Store MVP 재작성 중 AI가 서비스별 전용 DB 계정 분리 등을 필수 보완으로 제시했다.
@@ -780,7 +780,7 @@
 - 내 의견: "B" / "30분에 똑같이 답으로 가자"
 - 선택: B, 30분·동일 응답 — 미가입 여부를 응답으로 드러내지 않는다. 비용: 실제 메일 연동 전까지 복구 경로가 완결되지 않는다.
 - 구분: 추천 수용
-- 결과: [Auth 스펙](../.kiro/specs/auth/design.md)
+- 결과: [Auth 스펙](../specs/auth/design.md)
 
 ## 84. 운영자 계정 관리는 상태와 역할을 함께 다루고 전환 시 토큰을 즉시 끊는다
 - 문제: 계정 관리 범위와 상태 전환 시 발급된 토큰 처리.
@@ -788,7 +788,7 @@
 - 내 의견: "대안 B로 가자 (상태+역할 관리)" / "규칙 전환에 즉시 끊기로 가자"
 - 선택: B + 즉시 끊기 — 정지·역할 변경이 기존 토큰 만료까지 미뤄지지 않게 한다. 비용: 전환마다 세션·토큰 무효화를 처리해야 한다.
 - 구분: 추천 수용
-- 결과: [Auth 스펙](../.kiro/specs/auth/design.md)
+- 결과: [Auth 스펙](../specs/auth/design.md)
 
 ## 85. Store 동기화 경보는 초기화 10분·실패 5분 임계값으로 시작한다
 - 문제: Store 자동 동기화·대조가 멈췄을 때 경보 기준.
@@ -796,7 +796,7 @@
 - 내 의견: "무엇을 위한 경보지? → 추천 임계값으로 설정"
 - 선택: 추천 임계값 — 자동 복구가 회복하지 못한 경우에만 사람이 개입하게 한다([결정 66](#store-automatic-reconciliation-first)).
 - 구분: 추천 수용
-- 결과: [Store 스펙](../.kiro/specs/store/design.md)
+- 결과: [Store 스펙](../specs/store/design.md)
 
 ## 86. 배포 비밀값은 배포 환경에서 외부 주입한다
 - 문제: 단일 호스트 배포를 준비하며 비밀값 보관 방식을 정해야 했다.
@@ -812,7 +812,7 @@
 - 내 의견: "C안을 비추천하는 이유는? → A안으로 진행해"
 - 선택: A — 기본 비활성·Gateway 미노출을 유지하고, 활성화해도 ADMIN 권한을 검증한다. 비용: 장애 때 활성화 절차가 한 단계 더 든다.
 - 구분: 추천 수용
-- 결과: [운영 절차](license-event-recovery-runbook.md)
+- 결과: [운영 절차](runbooks/license-event-recovery.md)
 
 ## 88. 백업은 일 1회 전체 백업에 변경 기록 보관을 더한다
 - 문제: 배포 환경의 데이터 백업·복구 수준.
@@ -2531,6 +2531,56 @@
   - 비용: Kafka 기준선에 층 2 kill·replay 시간·DLT 중복 수치가 없다. 독립 구현 비교에서 이 시나리오를 다루려면 T40을 먼저 꺼내야 한다.
 - 구분: 추천 수용
 - 결과: [PR #258](https://github.com/tlswltjq/esd-platform/pull/258)
+
+<a id="spec-root"></a>
+## 모듈 스펙을 `.kiro/specs/`에서 루트 `specs/`로 옮긴다
+- 문제: SDD는 유지하고 Kiro는 걷어 내기로 했다. 그런데 모듈 계약의 정본이 Kiro 전용처럼 보이는 숨김 폴더 `.kiro/specs/`에 있고, 리뷰 묶음 도구(`tools/ci/review_packet.py`)도 이 경로에 묶여 있었다.
+- 선택지: A 루트 `specs/<모듈>/` / B `docs/specs/<모듈>/` / C `.kiro/`에 그대로 두고 언급만 지운다 (추천: A — 계약(`specs/`)과 이유·근거·이력(`docs/`)이 폴더 수준에서 나뉘고, 특정 도구와 무관하다)
+- 내 의견: "A"
+- 선택: A — 추천을 받아들였다. `git mv .kiro/specs specs`로 옮기고 상대 링크를 새 위치로 다시 계산했다. `review_packet.py`의 모듈 경로와 요구사항 경로도 `specs/`로 바꿨다. EARS 수용 기준과 `requirements`·`design`·`tasks` 세 파일 구조는 Kiro와 무관한 SDD 형식이라 그대로 둔다.
+- 구분: 추천 수용
+- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+
+<a id="history-links-only"></a>
+## 지난 기록의 `.kiro` 경로는 링크 대상만 고치고, 본문 문장·인용은 당시 그대로 둔다
+- 문제: 스펙을 옮기면 결정·근거·결함·실험 기록 속 `.kiro/specs/...` 링크가 깨진다. 같은 기록에는 결정 149의 Kiro 대체 리뷰처럼 당시 사실로서 Kiro가 나오는 문장과 사용자 인용도 있다.
+- 선택지: A 링크 경로만 새 위치로 고치고 본문 문장·인용은 그대로 / B 본문 속 경로 언급까지 `specs/`로 바꾼다 / C 지난 기록은 손대지 않는다 (추천: A — 기록을 당시 근거로 두는 규칙([문서 안내](README.md))과 맞고, 깨진 링크만 없앤다)
+- 내 의견: "A"
+- 선택: A — 추천을 받아들였다. 마크다운 링크의 대상만 기계적으로 바꿨다. 링크가 아닌 문장 속 `.kiro/specs/...`(결정 81·151 등), 고정 커밋 URL, 실험 원본 JSON의 실행 호스트 경로는 당시 기록으로 남긴다. 현재 규칙을 말하는 문장(AGENTS·README·결정 기록 머리말·로드맵·PR 템플릿·현재 스펙)은 새 경로로 고쳤다.
+- 구분: 추천 수용
+- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+
+<a id="verification-output-root"></a>
+## 실제 스택 검증 산출물은 저장소 `runs/`에 두고, `ESD_SCRATCH`가 있을 때만 그 위치를 쓴다
+- 문제: 검증 스크립트가 Kiro Crew 런타임이 넣어 주던 `KIROCREW_SCRATCH`에서 산출물 위치를 읽었다. 변수가 없으면 `verify-auth-session-journey.py`·`verify-gateway-ownership.py`는 `KeyError`로 바로 실패했다. `verify-jib.py`는 Prometheus·백업 복구 모드만 이 변수를 쓰고 나머지는 `runs/`를 썼다.
+- 선택지: A 이름만 `ESD_SCRATCH`로 바꾼다 / B 기본값을 저장소 `runs/`로 통일하고 `ESD_SCRATCH`가 있을 때만 그 위치를 쓴다 / C 시스템 임시 폴더를 쓴다 (추천: B — 에이전트 런타임 의존이 없어지고, 이미 쓰던 `runs/` 규칙 하나로 모이며, 외부 보관도 변수 하나로 된다)
+- 내 의견: "B"
+- 선택: B — 추천을 받아들였다. 위치는 `tools/verification/support/output_root.py` 한 곳에서 정하고 세 스크립트가 쓴다. 비용: worktree를 지우면 그 안의 `runs/`도 사라지고, 큰 산출물이 저장소 디스크에 쌓인다. 오래 보관할 회차는 `ESD_SCRATCH`로 밖에 둔다.
+- 구분: 추천 수용
+- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+
+<a id="runbooks-folder"></a>
+## 운영 절차서는 `docs/runbooks/`에 모은다
+- 문제: 장애 때 따라 하는 절차서가 `docs/runbooks/`와 `docs/license-event-recovery-runbook.md`로 나뉘어 있어, 새 절차서를 어디에 둘지 기준이 없었다. 뒤의 파일은 Prometheus 경보 규칙(`infra/prometheus/alerts.yml`)과 그 테스트도 가리킨다.
+- 선택지: A `docs/runbooks/license-event-recovery.md`로 옮기고 경보·테스트를 포함한 참조를 모두 고친다 / B 그대로 두고 문서 안내 표로만 찾게 한다 / C A에 더해 `docs/backup-restore.md`도 옮긴다 (추천: A — 절차서는 `runbooks/`, 기준 문서는 `docs/`로 나뉜다. `backup-restore.md`는 설계·격리 연습 결과가 섞인 기준 문서라 옮기지 않는다)
+- 내 의견: "A"
+- 선택: A — 추천을 받아들였다. 경보 주석과 경보 테스트의 기대 문구를 같은 경로로 바꿨다. `runbooks/license-db-loss.md`(현재 적용하지 않는 참고 기록)는 그대로 둔다.
+- 구분: 추천 수용
+- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
+
+<a id="decision-name-ids"></a>
+## 새 결정은 번호 대신 영문 kebab 식별자로 부르고, 착수 때 예약하지 않는다
+- 문제: [결정 139](#decision-number-reservation)는 번호가 병합 순서로 바뀌는 문제(2026-11-07~09에 약 7번, 결정 135는 파일 23개 수정)를 막으려고 착수 때 draft PR로 번호를 예약하게 했다. 그 대가로 질문하기 전에 착수 커밋·draft PR이 먼저 있어야 하고(`gh`가 없으면 묻지도 못한다), 예약 도구·빈 번호 허용·끼워 넣기·상한([결정 194](#keep-decision-number-cap))이 붙었다. 번호가 필요한 것은 사용자가 대화에서 결정을 부르기 때문이고, 링크는 이미 이름 앵커다.
+- 선택지: A 그대로 유지(결정 139·194) / B 예약을 없애고 [결정 116](#decision-numbers) 방식(기록 때 main 최대 + 1, 겹치면 나중 병합 쪽이 바꿈) / C 번호를 없애고 이름으로 식별 (추천: A — 동시 세션을 전제로 한 지금 규칙에서 예약이 번호를 고정하는 정합한 방법이고, 막힌 원인인 `gh`는 예약을 없애도 PR에 필요하다. 세션을 하나씩만 돌린다면 B)
+- 내 의견: "작업번호 선점에대한 정책도 논의하고싶어 꼭 필요한가" / "C" / 식별자 모양(a 영문 kebab 앵커 그대로 / b 한글 이름 + 영문 앵커 / c 날짜 + 영문 이름, 추천: a): "a"
+- 선택: C — 추천과 다르게 골랐다. 식별자 모양은 추천(a)을 받아들였다.
+  - 새 결정은 `<a id="<식별자>"></a>` 바로 뒤의 번호 없는 `## <제목>`이다. 식별자는 영문 소문자·숫자 kebab 하나이고, 대화와 문서에서 `결정 <식별자>`로 부른다. 링크는 `[결정 spec-root](decisions.md#spec-root)`처럼 문구와 앵커가 같아야 한다.
+  - 번호 결정은 238에서 끝났다. 1~238은 번호와 앵커를 그대로 두고, 저장소의 "결정 N" 언급도 바꾸지 않는다.
+  - 예약을 없앤다: `tools/ci/next_decision_number.py`, `start_task.py --decisions`, PR 템플릿의 `결정 번호:` 줄. 식별자가 겹치면 나중에 병합하는 쪽이 바꾼다.
+  - CI `decision_numbers.py`는 번호 결정의 중복·순서, 기준 판에 없거나 238보다 큰 새 번호, 식별자 형식·앵커 하나, 앵커 중복, 링크 문구와 앵커 일치를 검사한다. 결정 194의 상한은 새 번호가 없어져 의미를 잃는다. `review_packet.py`는 `결정 <식별자>` 언급으로도 이 PR의 결정 원문을 찾는다.
+  - 비용: 번호보다 부르기 길고, 1~238의 번호 체계와 섞인다. 식별자로는 결정의 순서가 보이지 않는다(파일 순서가 기록 순서다).
+- 구분: 추천과 다른 선택
+- 결과: 이 결정을 기록한 PR(`docs/remove-kiro`)
 
 ---
 

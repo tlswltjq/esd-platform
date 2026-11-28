@@ -32,7 +32,7 @@ Catalog 내부 빌드 GET은 Catalog·Download가 공유하는 명시적 서비�
 요청에서 저장 경로·다른 사용자·플랫폼·버전을 선택하지 않는다. License·Catalog 상품 ID·코드가 일치한 현재 공개 빌드만 서명한다.
 저장소 계정은 읽기 전용이고 HEAD 후 GET URL을 발급한다. 발급 응답은 no-store다.
 URL은 만료 전 가진 사람이 반복 GET할 수 있으며 일회용·사용자 결박·공유 차단을 보장하지 않는다.
-[전체 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행·오류 처리](../.kiro/specs/download/design.md#사용-안내)
+[전체 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행·오류 처리](../specs/download/design.md#사용-안내)
 
 ## Payment MVP 경계
 
@@ -53,7 +53,7 @@ PortOne TEST 연동에서는 설정된 웹훅 POST만 서명·스토어·재전�
 Auth의 role_audit_log는 가입·부트스트랩 권한 부여를 남긴다.
 Payment는 원래 주문 입력, 공급자 결정과 최종 결과 이벤트 메타데이터를 보존한다. 구 payment_audit_log는 새 흐름에서 쓰지 않는다.
 
-현재 빌드·테스트는 로컬 호스트(Linux, Docker)에서 실행한다. 과거 OrbStack·OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](../.kiro/specs/payment/design.md#사용-안내)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
+현재 빌드·테스트는 로컬 호스트(Linux, Docker)에서 실행한다. 과거 OrbStack·OCI 기록은 당시 검증 근거로 보존한다. [Payment 검증](../specs/payment/design.md#사용-안내)은 실제 서명 JWT, 소유권, 중복·충돌·DLT, 독립 PG 커밋·응답 유실·롤백과 8개 앱의 재시작을 확인한다.
 API 계약이 바뀌면 OpenAPI 스냅샷도 함께 갱신한다.
 
 ## Settlement와 외부 모의 PG 경계

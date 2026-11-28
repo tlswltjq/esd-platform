@@ -1,6 +1,6 @@
 # 런북 — 장기 미확정·귀속 미확정 환불을 닫을 때
 
-[결정 127](../decisions.md#refund-delay-closure)의 운영 절차다. 계약은 [Payment R14](../../.kiro/specs/payment/requirements.md)와 [설계](../../.kiro/specs/payment/design.md)를 정본으로 한다.
+[결정 127](../decisions.md#refund-delay-closure)의 운영 절차다. 계약은 [Payment R14](../../specs/payment/requirements.md)와 [설계](../../specs/payment/design.md)를 정본으로 한다.
 
 시스템은 PG 취소를 실행하지 않는다. 돈은 운영자가 PortOne 콘솔에서 움직이고, 시스템은 PG를 다시 조회해 **같은 원결제의 전액 취소**가 확인될 때만 닫는다.
 

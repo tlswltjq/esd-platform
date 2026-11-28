@@ -36,7 +36,7 @@ tests:
                 (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
                 PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
                 GET /api/v1/admin/refunds?status=PENDING_LICENSE_GRANT의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
-                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/runbooks/license-event-recovery.md로
                 DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
           - exp_labels:
               application: order
@@ -50,7 +50,7 @@ tests:
                 (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
                 PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
                 GET /api/v1/admin/refunds?status=PENDING_LICENSE_SUSPENSION의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
-                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/runbooks/license-event-recovery.md로
                 DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
       - eval_time: 3m
         alertname: RefundLicenseGrantsDelayed
@@ -67,7 +67,7 @@ tests:
                 (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
                 PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
                 GET /api/v1/admin/refunds?status=PENDING_LICENSE_SUSPENSION의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
-                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/runbooks/license-event-recovery.md로
                 DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
           - exp_labels:
               application: order
@@ -81,7 +81,7 @@ tests:
                 (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
                 PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
                 GET /api/v1/admin/refunds?status=PENDING_LICENSE_RESTORATION의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
-                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/runbooks/license-event-recovery.md로
                 DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
 
   # 옛 배포의 status 라벨 없는 시계열도 같은 식으로 울린다(이름·식 호환).
@@ -107,7 +107,7 @@ tests:
                 (PENDING_LICENSE_GRANT는 LicenseGranted, PENDING_LICENSE_SUSPENSION은 LicenseSuspended,
                 PENDING_LICENSE_RESTORATION은 LicenseRestored, PENDING_APPROVAL_STOP은 LicenseSuspended 또는 LicenseApprovalCorrected).
                 GET /api/v1/admin/refunds?status=PENDING_LICENSE_GRANT의 진입 시각(licenseGrantWaitStartedAt·licenseSuspensionWaitStartedAt·
-                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/license-event-recovery-runbook.md로
+                licenseRestorationWaitStartedAt·approvalStopWaitStartedAt)으로 대상을 찾고, docs/runbooks/license-event-recovery.md로
                 DEAD 재큐잉·DLT 재투입·SENT 재발행을 확인한다. 새 이벤트를 만들거나 SQL로 상태를 바꾸지 않는다.
       - eval_time: 2m
         alertname: RefundLicenseGrantsDelayed

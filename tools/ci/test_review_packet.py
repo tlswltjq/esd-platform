@@ -6,7 +6,7 @@ import unittest
 import review_packet
 
 DECISIONS = ('# 결정\n\n<a id="one"></a>\n## 1. 첫째\n- 문제: 하나\n\n<a id="ten"></a>\n## 10. 열째\n- 문제: 열\n\n'
-             '## 100. 백째\n- 문제: 백\n\n---\n\n## 검증하며 드러난 것\n끝\n')
+             '## 100. 백째\n- 문제: 백\n\n<a id="spec-root"></a>\n## 스펙 위치\n- 문제: 루트\n\n---\n\n## 검증하며 드러난 것\n끝\n')
 AGENTS = '# 작업 기준\n\n## 2. 문서 규칙\n문서\n\n## 3. 코드 규칙\n\n- 명시적 타입\n\n## 4. 모듈 책임\n모듈\n'
 REQUIREMENTS = ('# 요구사항\n\n### R1. 접수\n#### 수용 기준\n1. `Receiver`가 받는다\n\n'
                 '### R2. 조회\n1. 읽기\n\n### R12. 보류\n1. `Holder`가 멈춘다\n\n## 범위 밖\n없음\n')
@@ -25,12 +25,24 @@ class SectionTest(unittest.TestCase):
         self.assertEqual(['## 100. 백째\n- 문제: 백\n'], review_packet.decision_sections(DECISIONS, [100]))
         self.assertEqual([], review_packet.decision_sections(DECISIONS, [7]))
 
+    def test_named_decision_section(self):
+        # 결정 decision-name-ids: 새 결정은 식별자로 찾는다.
+        self.assertEqual(['<a id="spec-root"></a>\n## 스펙 위치\n- 문제: 루트\n'],
+                         review_packet.decision_sections(DECISIONS, ['spec-root']))
+        self.assertEqual(['- 스펙 위치'], review_packet.decision_titles(DECISIONS, ['spec-root']))
+        self.assertEqual([], review_packet.decision_sections(DECISIONS, ['one']))
+
 
 class ReferenceTest(unittest.TestCase):
     def test_decision_numbers_split_joined_lists(self):
         self.assertEqual([110, 111, 122, 128, 140],
                          review_packet.decision_numbers('결정 110·111 과 결정 128·122', '[결정 140](x)'))
         self.assertEqual([], review_packet.decision_numbers('', None))
+
+    def test_decision_keys_keep_only_named_decisions_that_exist(self):
+        # 숫자 앵커(one)·없는 식별자는 이름 결정이 아니다.
+        self.assertEqual([10, 'spec-root'], review_packet.decision_keys(
+            DECISIONS, '결정 `spec-root`와 [결정 one](x), 결정 no-such-id', '결정 10'))
 
     def test_requirement_numbers_take_the_top_level(self):
         self.assertEqual({8, 12, 13}, review_packet.requirement_numbers('R12.10, R8-3', 'R13 절'))
@@ -40,7 +52,7 @@ class ReferenceTest(unittest.TestCase):
 
     def test_modules_and_changed_classes(self):
         files = ['apps/payment/src/main/java/a/Holder.java', 'apps/payment/src/test/java/a/HolderTest.java',
-                 '.kiro/specs/license/design.md', 'docs/decisions.md', 'tools/ci/x.py']
+                 'specs/license/design.md', 'docs/decisions.md', 'tools/ci/x.py']
         self.assertEqual(['license', 'payment'], review_packet.modules(files))
         self.assertEqual(['Holder'], review_packet.changed_classes(files))
 
@@ -57,6 +69,8 @@ class ReferenceTest(unittest.TestCase):
     def test_own_decisions_are_the_body_section_and_commit_subjects(self):
         body = '## 맡은 항목\n- 결정 번호: 5\n\n## 이번 PR의 결정\n\n- [결정 6](x) — 선택\n\n## 계획과 구현\n결정 7 참고\n'
         self.assertEqual([6, 9], review_packet.own_decisions(body, 'fix: 무엇 (결정 9)\n'))
+        body = '## 이번 PR의 결정\n\n- [결정 spec-root](x) — 선택\n'
+        self.assertEqual(['spec-root'], review_packet.own_decisions(body, '', DECISIONS))
 
     def test_diff_order_puts_production_code_first_and_docs_last(self):
         files = ['docs/a.md', 'apps/x/src/test/java/T.java', 'tools/ci/test_y.py', 'apps/x/src/main/java/M.java',
@@ -76,7 +90,7 @@ class BuildTest(unittest.TestCase):
         self.git('config', 'user.name', 't')
         self.write('AGENTS.md', AGENTS)
         self.write('docs/decisions.md', DECISIONS)
-        self.write('.kiro/specs/payment/requirements.md', REQUIREMENTS)
+        self.write('specs/payment/requirements.md', REQUIREMENTS)
         self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder {}\n')
         self.commit('base')
         self.base = self.git('rev-parse', 'HEAD').strip()
@@ -111,6 +125,15 @@ class BuildTest(unittest.TestCase):
         self.assertNotIn('1. `Holder`가 멈춘다', packet)
         self.assertNotIn('### R1. 접수', packet)
         self.assertNotIn('## 4. 모듈 책임', packet)
+
+    def test_named_own_decision_is_carried_in_full(self):
+        self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int w; }\n')
+        self.commit('docs: 위치 (결정 spec-root)')
+        packet, _, own = review_packet.build(self.root, self.base, 'HEAD', pr_body='결정 1 참고')
+        self.assertEqual(['spec-root'], own)
+        self.assertIn('## 이 PR의 결정(원문): spec-root', packet)
+        self.assertIn('## 스펙 위치\n- 문제: 루트', packet)
+        self.assertIn('- 1. 첫째', packet)
 
     def test_rereview_only_carries_the_new_commits_and_previous_findings(self):
         self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int x; }\n')

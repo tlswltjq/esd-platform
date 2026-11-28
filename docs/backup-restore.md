@@ -95,7 +95,7 @@ docker tag stove/minio:RELEASE.2025-04-22T22-12-26Z-local localhost/stove/minio:
 
 ## 검증하지 않은 것
 
-- Kafka까지 함께 잃는 경우. 이미 보낸(SENT) 이벤트를 소비 전에 잃으면 Outbox 재큐잉 대상이 아니다. 같은 ID 재발행([결정 129](decisions.md#orphan-license-grant-republish), [절차](license-event-recovery-runbook.md))은 Order·License가 소유한 정해진 타입에만 있다. 운영 Kafka의 복제 설정이 먼저다.
+- Kafka까지 함께 잃는 경우. 이미 보낸(SENT) 이벤트를 소비 전에 잃으면 Outbox 재큐잉 대상이 아니다. 같은 ID 재발행([결정 129](decisions.md#orphan-license-grant-republish), [절차](runbooks/license-event-recovery.md))은 Order·License가 소유한 정해진 타입에만 있다. 운영 Kafka의 복제 설정이 먼저다.
 - 덤프 이전의 특정 시점으로 되돌리기(잘못된 대량 변경 취소). 외부 PG·Kafka와 어긋나므로 별도 절차가 필요하다.
 - GTID를 켠 서버, 관리형 DB의 자체 백업.
 - 복사본을 다른 호스트로 보내는 전송과 스케줄러(cron·systemd 타이머).

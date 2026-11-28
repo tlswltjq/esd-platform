@@ -5,8 +5,8 @@
 License는 완료 주문 하나의 출처와 구매자·상품별 영구 이용 권한을 한 엔티티에 보존한다.
 Order는 PENDING·PAID 주문이 있는 동일 상품의 추가 구매를 차단한다. 선물·추가 수량은 후속 범위다.
 Download는 보유권과 현재 공개 빌드를 조회하고 전체 ZIP의 만료 URL을 발급한다.
-[Download MVP 범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행 안내](../../../.kiro/specs/download/design.md#사용-안내)
-[License 통합 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획) · [조회·실행 안내](../../../.kiro/specs/license/design.md#사용-안내)
+[Download MVP 범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/download-mvp-plan.md) · [실행 안내](../../../specs/download/design.md#사용-안내)
+[License 통합 범위](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/license-mvp-plan.md#통합-및-중복-구매-제한-수정-계획) · [조회·실행 안내](../../../specs/license/design.md#사용-안내)
 
 <a id="license"></a>
 ## License — 구매 출처를 보존하는 상품 이용 권한
