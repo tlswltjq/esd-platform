@@ -220,6 +220,32 @@ final class LocalStack implements AutoCloseable {
             mc("admin", "user", "add", "admin", reader, READER_PASSWORD);
             mc("admin", "policy", "attach", "admin", "build-read", "--user", reader);
         }
+        requireReadOnly("review-reader");
+    }
+
+    /**
+     * 읽기 전용 계정이 정말 쓰지도 지우지도 못하는지 확인한다. 준비물이 잘못돼 계정에 쓰기 권한이 붙으면, Review가
+     * 읽기 전용 계정으로만 빌드 저장소에 닿는다는 전제가 조용히 깨진 채 여정이 통과한다.
+     */
+    private void requireReadOnly(String reader) throws IOException, InterruptedException {
+        String fixture = "admin/" + BUCKET + "/iam-check.bin";
+        shell("printf 'read-only fixture' | mc pipe " + fixture);
+        mc("alias", "set", "reader", "http://localhost:9000", reader, READER_PASSWORD);
+        if (minio.execInContainer("sh", "-c", "printf forbidden | mc pipe reader/" + BUCKET + "/write-must-fail.bin")
+                .getExitCode() == 0) {
+            throw new IllegalStateException(reader + " 계정이 빌드 저장소에 쓸 수 있다");
+        }
+        if (minio.execInContainer("mc", "rm", "reader/" + BUCKET + "/iam-check.bin").getExitCode() == 0) {
+            throw new IllegalStateException(reader + " 계정이 빌드 저장소에서 지울 수 있다");
+        }
+        mc("stat", fixture);
+    }
+
+    private void shell(String script) throws IOException, InterruptedException {
+        Container.ExecResult result = minio.execInContainer("sh", "-c", script);
+        if (result.getExitCode() != 0) {
+            throw new IllegalStateException(script + " 실패: " + result.getStderr());
+        }
     }
 
     private void mc(String... arguments) throws IOException, InterruptedException {
