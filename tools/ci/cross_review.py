@@ -73,40 +73,48 @@ def check(session_lines, model):
     return errors
 
 
+def records(session_lines):
+    for line in session_lines:
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict) and isinstance(record.get('payload'), dict):
+            yield record
+
+
+def carries_packet(record, wanted):
+    payload = record['payload']
+    if record.get('type') != 'response_item' or payload.get('type') != 'message' or payload.get('role') != 'user':
+        return False
+    return any(isinstance(part, dict) and wanted in (part.get('text') or '') for part in payload.get('content') or [])
+
+
 def packet_errors(session_lines, packet):
     """세션의 사용자 메시지 가운데 리뷰 묶음 원문을 담은 것이 있는지 본다."""
     wanted = packet.strip()
     if not wanted:
         return ['리뷰 묶음이 비어 있다']
-    for line in session_lines:
-        try:
-            record = json.loads(line)
-        except ValueError:
-            continue
-        payload = record.get('payload') if isinstance(record, dict) else None
-        if record.get('type') != 'response_item' or not isinstance(payload, dict):
-            continue
-        if payload.get('type') != 'message' or payload.get('role') != 'user':
-            continue
-        for part in payload.get('content') or []:
-            if isinstance(part, dict) and wanted in (part.get('text') or ''):
-                return []
+    if any(carries_packet(record, wanted) for record in records(session_lines)):
+        return []
     return ['세션의 사용자 입력에 이번 리뷰 묶음이 없다']
 
 
-def completion_errors(session_lines, result):
-    """세션이 끝났고(task_complete) 그 마지막 답이 결과 파일과 같은지 본다."""
-    answers = []
-    for line in session_lines:
-        try:
-            record = json.loads(line)
-        except ValueError:
-            continue
-        payload = record.get('payload') if isinstance(record, dict) else None
-        if record.get('type') == 'event_msg' and isinstance(payload, dict) and payload.get('type') == 'task_complete':
-            answers.append((payload.get('last_agent_message') or '').strip())
+def completion_errors(session_lines, result, packet):
+    """리뷰 묶음이 (마지막으로) 들어간 뒤 세션이 끝났고(task_complete), 그 마지막 답이 결과 파일과 같은지 본다.
+
+    묶음보다 앞서 끝난 다른 작업의 답은 세지 않는다(PR #257 재리뷰 2 R1).
+    """
+    wanted = packet.strip()
+    answers = None
+    for record in records(session_lines):
+        if wanted and carries_packet(record, wanted):
+            answers = []
+        elif answers is not None and record.get('type') == 'event_msg' \
+                and record['payload'].get('type') == 'task_complete':
+            answers.append((record['payload'].get('last_agent_message') or '').strip())
     if not answers:
-        return ['세션이 끝난 기록(task_complete)이 없다']
+        return ['리뷰 묶음 뒤에 세션이 끝난 기록(task_complete)이 없다']
     if answers[-1] != result.strip():
         return ['세션의 마지막 답이 결과 파일과 다르다']
     return []
@@ -121,7 +129,7 @@ def verify(sessions, thread, model, packet, result):
     if path is None:
         return ['세션 기록을 찾지 못했다: ' + thread + ' (' + str(sessions) + ')']
     lines = path.read_text(encoding='utf-8').splitlines()
-    return check(lines, model) + packet_errors(lines, packet) + completion_errors(lines, result)
+    return check(lines, model) + packet_errors(lines, packet) + completion_errors(lines, result, packet)
 
 
 def default_codex():

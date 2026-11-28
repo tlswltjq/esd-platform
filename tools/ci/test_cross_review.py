@@ -95,9 +95,16 @@ class PacketTest(unittest.TestCase):
 class CompletionTest(unittest.TestCase):
     def test_session_must_complete_with_this_result(self):
         # PR #257 재리뷰 R1: 묶음을 넣고 답 전에 끊긴 세션으로 리뷰어 줄을 받지 않는다.
-        self.assertEqual([], cross_review.completion_errors(session_lines(), '지적 없음\n'))
-        self.assertTrue(cross_review.completion_errors(session_lines(complete=False), '지적 없음'))
-        self.assertTrue(cross_review.completion_errors(session_lines(answer='다른 답'), '지적 없음'))
+        self.assertEqual([], cross_review.completion_errors(session_lines(), '지적 없음\n', PACKET))
+        self.assertTrue(cross_review.completion_errors(session_lines(complete=False), '지적 없음', PACKET))
+        self.assertTrue(cross_review.completion_errors(session_lines(answer='다른 답'), '지적 없음', PACKET))
+
+    def test_completion_before_the_packet_does_not_count(self):
+        # PR #257 재리뷰 2 R1: 앞선 작업의 task_complete를 이번 묶음의 답으로 쓰지 않는다.
+        earlier = json.dumps({'type': 'event_msg', 'payload': {'type': 'task_complete', 'last_agent_message': '이전 답'}})
+        lines = session_lines(complete=False)
+        lines.insert(1, earlier)
+        self.assertTrue(cross_review.completion_errors(lines, '이전 답', PACKET))
 
 
 class FindSessionTest(unittest.TestCase):
