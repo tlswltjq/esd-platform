@@ -217,6 +217,9 @@ def counts(block):
 
 
 def build(root, base, head, since=None, pr_body='', previous='', size_cap=SIZE_CAP, input_cap=INPUT_CAP):
+    # 재리뷰 1 R1(PR #272): head를 커밋으로 한 번 확정한다. 이름(HEAD)으로 여러 번 읽으면 그 사이 움직인 head의 커밋이
+    # 앞서 읽은 diff와 함께 묶음에 실린다.
+    head = git(root, 'rev-parse', '--verify', head + '^{commit}').strip()
     packet, files, own = compose(root, base, head, since, pr_body, previous, list_docs=False)
     if len(packet.encode('utf-8')) <= size_cap:
         return packet, files, own
@@ -281,7 +284,7 @@ def compose(root, base, head, since, pr_body, previous, list_docs, list_deleted=
         out.append(previous.rstrip() + '\n')
     out.append('## diff (%s)\n' % rng)
     # 결정 review-gate-reviewed-commit: cross_review.py가 이 값을 worktree head와 대조해 `리뷰한 커밋:`으로 낸다.
-    out.append('%s: %s\n' % (TARGET_LABEL, git(root, 'rev-parse', '--verify', head + '^{commit}').strip()))
+    out.append('%s: %s\n' % (TARGET_LABEL, head))
     for _, block in sorted(shown, key=lambda b: (group(b[0]), b[0])):
         out.append('```diff\n' + block + '\n```\n')
     if listed:

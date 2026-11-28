@@ -190,6 +190,30 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(head, review_packet.target_commit(packet))
         self.assertIsNone(review_packet.target_commit('+리뷰 대상 커밋: ' + head + '\n 리뷰 대상 커밋: ' + head + '\n'))
 
+    def test_rereview_1_head_is_resolved_once_before_anything_is_read(self):
+        # 재리뷰 1 R1(PR #272): 묶음을 만드는 사이 HEAD가 움직여도 diff·기준 문서·대상 커밋이 같은 커밋을 가리킨다.
+        self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int v; }\n')
+        self.commit('feat: A')
+        first = self.git('rev-parse', 'HEAD').strip()
+        real, moved = review_packet.git, []
+
+        def moving(root, *args):
+            output = real(root, *args)
+            if args[0] == 'diff' and not moved:
+                moved.append(True)
+                self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int later; }\n')
+                self.commit('feat: B')
+            return output
+        review_packet.git = moving
+        try:
+            packet, _, _ = review_packet.build(self.root, self.base, 'HEAD')
+        finally:
+            review_packet.git = real
+        self.assertTrue(moved)
+        self.assertEqual(first, review_packet.target_commit(packet))
+        self.assertIn('int v', packet)
+        self.assertNotIn('int later', packet)
+
     def test_rereview_only_carries_the_new_commits_and_previous_findings(self):
         self.write('apps/payment/src/main/java/a/Holder.java', 'class Holder { int x; }\n')
         self.commit('first')
