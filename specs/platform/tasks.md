@@ -298,3 +298,10 @@
 - [ ] **T40. (동결 뒤 백로그) T39에서 재지 않은 Kafka 기준선 항목** ([결정 238](../../docs/decisions.md#kafka-baseline-closure)) — M에 필요할 때만 꺼낸다. 미측정 사유는 [E13 결과](../../docs/experiments.md#kafka-baseline-results) "측정하지 못하는 것"에 있다.
   - [ ] 층 2 시험 앱 프로세스 kill 단계(시나리오 5·6 층 2)와 격리 뒤 `quarantine/replay` 재투입 시간 측정 — 선행: `bench_messaging.py`에 시험 앱 종료·재기동 단계, 회차 절차에 관리자 인증 ops API 호출을 넣는다. 그때까지 층 2 kill은 층 1 kill 결과로 대신한다.
   - [ ] 별도 시나리오(결정 235 범위 밖): DLT 저장 성공 직후 원본 offset 커밋 실패로 생기는 DLT 중복.
+
+## CI·PR 도구
+
+[결정 rereview-cap-two](../../docs/decisions.md#rereview-cap-two)로 재리뷰 2회차에서 옮긴 지적이다.
+
+- [ ] `pr_finish.py main_ci_failure`가 main push CI를 최근 100건만 읽는다. 실패 뒤 취소·건너뜀이 100건 넘게 쌓이면 실패한 run을 찾지 못하고 복구 PR까지 막는다. 성공·실패를 찾거나 이력이 끝날 때까지 페이지를 넘겨 읽는다(PR #261 재리뷰 2 R1, medium)
+- [ ] `pr_finish.py fixes_main`이 HTML 주석과 fenced 코드 블록만 빼고 들여쓰기 코드 블록(4칸)은 뺀다. 들여쓴 예시 `    - main CI 복구: <URL>`을 복구 표시로 읽는다. 들여쓰기 코드 블록도 뺀다(PR #261 재리뷰 2 R2, medium)
