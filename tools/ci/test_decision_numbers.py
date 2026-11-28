@@ -200,6 +200,11 @@ class NamedDecisionTest(Fixture):
         self.write('docs/decisions.md', VALID + '<a id="spec-root"></a>\n\n## 스펙 위치\n')
         self.assertIn('앵커 바로 다음 줄', self.errors())
 
+    def test_rr1_named_heading_is_not_indented(self):
+        # PR #259 재리뷰 R1: review_packet.py는 줄 처음의 `## `만 이름 결정 제목으로 읽는다.
+        self.write('docs/decisions.md', VALID + '<a id="spec-root"></a>\n  ## 스펙 위치\n')
+        self.assertIn('들여 쓰지 않는다', self.errors())
+
     def test_heading_without_anchor_is_not_a_decision(self):
         self.write('docs/decisions.md', NAMED + '\n---\n\n## 검증하며 드러난 것\n')
         self.assertEqual(decision_numbers.check(self.root)[1][0], 3)

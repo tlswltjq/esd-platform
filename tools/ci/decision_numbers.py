@@ -143,6 +143,9 @@ def parse_decisions(text):
             if anchor_line != line_number - 1:
                 # PR #259 R2: review_packet.py는 앵커 바로 다음 줄만 이름 결정 제목으로 읽는다.
                 errors.append('docs/decisions.md:{}: 식별자 앵커 바로 다음 줄이 제목이어야 한다'.format(line_number))
+            if not line.startswith('## '):
+                # PR #259 재리뷰 R1: review_packet.py와 같은 형식 — 줄 처음의 `## `.
+                errors.append('docs/decisions.md:{}: 식별자 결정의 제목은 들여 쓰지 않는다'.format(line_number))
             if len(pending) != 1:
                 errors.append('docs/decisions.md:{}: 식별자 앵커는 하나여야 한다: {}'.format(
                     line_number, ','.join(pending)))
