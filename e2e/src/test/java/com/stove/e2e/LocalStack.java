@@ -80,6 +80,7 @@ final class LocalStack implements AutoCloseable {
     private final Map<StackApp, Process> processes = new EnumMap<>(StackApp.class);
     private final Map<String, Set<String>> credentialRecipients = new TreeMap<>();
     private final String settlementServiceKey = secret();
+    private final int storagePort;
     private boolean kafkaPaused;
     private final Thread shutdownHook = new Thread(this::stopProcesses, "local-stack-shutdown");
 
@@ -105,6 +106,9 @@ final class LocalStack implements AutoCloseable {
                 .withCommand("server", "/data")
                 .withExposedPorts(9000)
                 .waitingFor(Wait.forHttp("/minio/health/ready").forPort(9000));
+        // 저장소는 멈췄다 다시 띄울 수 있어야 한다(stopStorage). 호스트 포트를 정해 두면 다시 떠도 앱이 아는 주소 그대로다.
+        this.storagePort = freePort();
+        this.minio.setPortBindings(List.of("127.0.0.1:" + storagePort + ":9000"));
     }
 
     /**
@@ -227,6 +231,64 @@ final class LocalStack implements AutoCloseable {
     void pauseKafka() {
         kafka.getDockerClient().pauseContainerCmd(kafka.getContainerId()).exec();
         kafkaPaused = true;
+    }
+
+    /**
+     * 빌드 저장소(MinIO)를 실제로 멈춘다. 호스트 포트를 고정해 두었으므로 {@link #startStorage()}로 되살리면 같은 주소,
+     * 같은 객체로 돌아온다.
+     */
+    void stopStorage() {
+        minio.getDockerClient().stopContainerCmd(minio.getContainerId()).exec();
+    }
+
+    void startStorage() {
+        minio.getDockerClient().startContainerCmd(minio.getContainerId()).exec();
+        HttpRequest ready = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + storagePort + "/minio/health/ready"))
+                .timeout(Duration.ofSeconds(3)).GET().build();
+        Instant deadline = Instant.now().plusSeconds(120);
+        while (true) {
+            try {
+                if (HTTP.send(ready, HttpResponse.BodyHandlers.discarding()).statusCode() == 200) {
+                    return;
+                }
+            } catch (IOException notYet) {
+                // 아직 뜨는 중이다.
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("저장소 대기가 중단됐다", interrupted);
+            }
+            if (Instant.now().isAfter(deadline)) {
+                throw new IllegalStateException("저장소가 120초 안에 돌아오지 않았다");
+            }
+            sleep(Duration.ofSeconds(1));
+        }
+    }
+
+    /** 저장소 컨테이너에서 관리자 계정({@code admin} 별칭)으로 {@code mc}를 부른다. 예: {@code storage("rm", "admin/버킷/키")}. */
+    void storage(String... arguments) {
+        try {
+            mc(arguments);
+        } catch (IOException | InterruptedException failure) {
+            throw new IllegalStateException("mc " + String.join(" ", arguments) + " 를 실행하지 못했다", failure);
+        }
+    }
+
+    /** 저장소 컨테이너에서 셸 한 줄을 돌린다. 표준 입력이 필요한 {@code mc pipe}에 쓴다. */
+    void storageShell(String script) {
+        try {
+            shell(script);
+        } catch (IOException | InterruptedException failure) {
+            throw new IllegalStateException(script + " 를 실행하지 못했다", failure);
+        }
+    }
+
+    /** 이 스택이 앱들에 나눠 준 서비스 접근키. 내부 API를 그 앱처럼 불러 볼 때 쓴다. */
+    String serviceKey(String name) {
+        String value = environment.get(name);
+        if (value == null) {
+            throw new IllegalArgumentException(name + " 은 이 스택에 없다");
+        }
+        return value;
     }
 
     void resumeKafka() {
@@ -358,7 +420,7 @@ final class LocalStack implements AutoCloseable {
 
     private Map<String, String> baseEnvironment() {
         String publicAddress = address(StackApp.WEB_BFF);
-        String storage = "http://127.0.0.1:" + minio.getMappedPort(9000);
+        String storage = "http://127.0.0.1:" + storagePort;
         Map<String, String> values = new LinkedHashMap<>();
         values.put("SERVER_ADDRESS", "127.0.0.1");
         values.put("DB_HOST", "127.0.0.1");
@@ -559,6 +621,14 @@ final class LocalStack implements AutoCloseable {
             return Files.createTempDirectory(parent, run + "-");
         } catch (IOException failure) {
             throw new IllegalStateException("실행 디렉터리를 만들지 못했다: " + parent, failure);
+        }
+    }
+
+    private static int freePort() {
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            return socket.getLocalPort();
+        } catch (IOException failure) {
+            throw new IllegalStateException("빈 포트를 찾지 못했다", failure);
         }
     }
 

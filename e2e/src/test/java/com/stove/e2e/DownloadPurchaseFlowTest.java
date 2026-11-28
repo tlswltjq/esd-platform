@@ -24,9 +24,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,15 +35,17 @@ import java.util.UUID;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 @Tag("download")
+@ExtendWith(LocalStackExtension.class)
+@LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY, StackApp.REVIEW, StackApp.CATALOG,
+        StackApp.STORE, StackApp.ORDER, StackApp.PAYMENT, StackApp.LICENSE, StackApp.DOWNLOAD})
 class DownloadPurchaseFlowTest {
-    static Path evidence() { return Path.of(System.getProperty("stove.e2e.download-evidence")); }
-    static ObjectNode saved() throws Exception { return (ObjectNode) JSON.readTree(Files.readString(evidence())); }
-    static void save(ObjectNode state) throws Exception {
-        Files.writeString(evidence(), JSON.writeValueAsString(state));
-        Files.setPosixFilePermissions(evidence(), PosixFilePermissions.fromString("rw-------"));
-    }
+    /** 앞 걸음이 만든 상품·주문·티켓. 예전에는 실행기가 걸음마다 테스트를 따로 불러 파일로 넘겼다. */
+    private static String journey;
+    static ObjectNode saved() throws Exception { return (ObjectNode) JSON.readTree(journey); }
+    static void save(ObjectNode state) throws Exception { journey = JSON.writeValueAsString(state); }
     static Account buyer(ObjectNode state) throws Exception { return login(state.path("buyerEmail").asText(), "creator-password-1234"); }
     static Account creator(ObjectNode state) throws Exception { return login(state.path("creatorEmail").asText(), "creator-password-1234"); }
     static String code(ObjectNode state) { return state.path("product").path("productCode").asText(); }
@@ -90,7 +89,7 @@ class DownloadPurchaseFlowTest {
     static void stableLibrary(ObjectNode state, Account buyer) {
         assertThat(Stove.gateway.get("/api/v1/library/" + code(state), buyer.headers()).data()).isEqualTo(state.path("license"));
     }
-    @Test void preparePendingPurchase() throws Exception {
+    private static void preparePendingPurchase() throws Exception {
         Account creator = account(true); Account buyer = account(false); Project project = project(creator);
         approveAndPublish(project.id(), creator);
         String code = data(project.id(), creator).path("productCode").asText();
@@ -102,13 +101,13 @@ class DownloadPurchaseFlowTest {
         waitPaid(state.path("orderNo").asText(), buyer, "PENDING");
         assertThat(Stove.gateway.get(ticketPath(state), buyer.headers()).status()).isEqualTo(403); save(state);
     }
-    @Test void paidOrderDownloadsOriginalZip() throws Exception {
+    private static void paidOrderDownloadsOriginalZip() throws Exception {
         ObjectNode state = saved(); Account buyer = buyer(state); waitPaid(state.path("orderNo").asText(), buyer, "PAID");
         state.set("license", ReviewJourney.registeredLibrary(buyer, code(state)));
         JsonNode result = ticket(state, buyer); verifyZip(result, Base64.getDecoder().decode(state.path("zip").asText()));
         assertThat(result.path("version").asText()).isEqualTo("1"); save(state);
     }
-    @Test void failedAndOtherUsersCannotDownloadOrSelectAnotherOwner() throws Exception {
+    private static void failedAndOtherUsersCannotDownloadOrSelectAnotherOwner() throws Exception {
         ObjectNode state = saved(); Account failed = account(false); JsonNode order = order(state, failed);
         waitPaid(order.path("orderNo").asText(), failed, "FAILED");
         assertThat(Stove.gateway.get(ticketPath(state), failed.headers()).status()).isEqualTo(403);
@@ -123,19 +122,19 @@ class DownloadPurchaseFlowTest {
         assertThat(Stove.gateway.get("/v3/api-docs/download").body().path("paths").size()).isEqualTo(1);
         stableLibrary(state, buyer(state));
     }
-    @Test void unpublishedEditsStillDownloadPreviousPublishedBuild() throws Exception {
+    private static void unpublishedEditsStillDownloadPreviousPublishedBuild() throws Exception {
         ObjectNode state = saved(); Account creator = creator(state); long project = state.path("projectId").asLong();
         byte[] next = zip("new full build for current publication"); upload(project, creator, "2", next); page(project, creator, "Updated title", 1500);
         state.put("nextZip", Base64.getEncoder().encodeToString(next));
         JsonNode result = ticket(state, buyer(state)); assertThat(result.path("version").asText()).isEqualTo("1");
         verifyZip(result, Base64.getDecoder().decode(state.path("zip").asText())); save(state);
     }
-    @Test void newlyPublishedBuildUsesSamePermanentRight() throws Exception {
+    private static void newlyPublishedBuildUsesSamePermanentRight() throws Exception {
         ObjectNode state = saved(); approveAndPublish(state.path("projectId").asLong(), creator(state));
         JsonNode result = ticket(state, buyer(state)); assertThat(result.path("version").asText()).isEqualTo("2");
         verifyZip(result, Base64.getDecoder().decode(state.path("nextZip").asText())); stableLibrary(state, buyer(state));
     }
-    @Test void expiresAndReissuesTheActualStorageUrl() throws Exception {
+    private static void expiresAndReissuesTheActualStorageUrl() throws Exception {
         ObjectNode state = saved(); Account buyer = buyer(state); JsonNode original = ticket(state, buyer);
         Instant expires = Instant.parse(original.path("expiresAt").asText());
         Thread.sleep(Math.max(1, Duration.between(Instant.now(), expires.plusSeconds(1)).toMillis()));
@@ -143,25 +142,91 @@ class DownloadPurchaseFlowTest {
         JsonNode fresh = ticket(state, buyer); verifyZip(fresh, Base64.getDecoder().decode(state.path("nextZip").asText()));
         stableLibrary(state, buyer);
     }
-    @Test void prepareFreshUrlBeforeOutage() throws Exception {
+    private static void prepareFreshUrlBeforeOutage() throws Exception {
         ObjectNode state = saved(); state.set("activeTicket", ticket(state, buyer(state))); save(state);
     }
-    @Test void licenseOutageRejectsNewIssuanceButExistingUrlWorks() throws Exception {
+    private static void licenseOutageRejectsNewIssuanceButExistingUrlWorks() throws Exception {
         ObjectNode state = saved(); assertThat(Stove.gateway.get(ticketPath(state), buyer(state).headers()).status()).isEqualTo(503);
         verifyZip(state.path("activeTicket"), Base64.getDecoder().decode(state.path("nextZip").asText()));
     }
-    @Test void catalogOutagePreservesExistingFileAndLibrary() throws Exception {
+    private static void catalogOutagePreservesExistingFileAndLibrary() throws Exception {
         ObjectNode state = saved(); assertThat(Stove.gateway.get(ticketPath(state), buyer(state).headers()).status()).isEqualTo(503);
         verifyZip(state.path("activeTicket"), Base64.getDecoder().decode(state.path("nextZip").asText())); stableLibrary(state, buyer(state));
     }
-    @Test void storageOutageRejectsIssuance() throws Exception {
+    private static void storageOutageRejectsIssuance() throws Exception {
         ObjectNode state = saved(); assertThat(Stove.gateway.get(ticketPath(state), buyer(state).headers()).status()).isEqualTo(503); stableLibrary(state, buyer(state));
     }
-    @Test void missingOrChangedFileRejectsIssuance() throws Exception {
+    private static void missingOrChangedFileRejectsIssuance() throws Exception {
         ObjectNode state = saved(); assertThat(Stove.gateway.get(ticketPath(state), buyer(state).headers()).status()).isEqualTo(409); stableLibrary(state, buyer(state));
     }
-    @Test void restoredFileAndStatelessRestartRecoverDownloads() throws Exception {
+    private static void restoredFileAndStatelessRestartRecoverDownloads() throws Exception {
         ObjectNode state = saved(); JsonNode result = ticket(state, buyer(state));
         verifyZip(result, Base64.getDecoder().decode(state.path("nextZip").asText())); stableLibrary(state, buyer(state));
+    }
+
+    /**
+     * 실제 ZIP과 체크섬, 공개본 교체, URL 만료, 소유 거절, License·Catalog·저장소 정지, 사라지거나 바뀐 파일, 상태 없는
+     * 재시작을 한 흐름으로 본다. 테스트가 앱과 저장소를 직접 멈추고 되살린다(결정 e2e-stack-in-junit).
+     */
+    @Test
+    void downloadsFollowRightsAndPublicationsAndFailClosedThroughOutages(LocalStack stack) throws Exception {
+        // 처리를 끈 Payment: 결제 전에는 받을 수 없다.
+        stack.restart(StackApp.PAYMENT, "--stove.payment.processing-enabled=false");
+        preparePendingPurchase();
+        stack.restart(StackApp.PAYMENT);
+        paidOrderDownloadsOriginalZip();
+        PaymentFault.restart(stack, PaymentFault.DECLINE);
+        failedAndOtherUsersCannotDownloadOrSelectAnotherOwner();
+        unpublishedEditsStillDownloadPreviousPublishedBuild();
+        newlyPublishedBuildUsesSamePermanentRight();
+
+        // 2초짜리 URL: 만료된 URL은 저장소가 거절하고 새로 받으면 된다.
+        stack.restart(StackApp.DOWNLOAD, "--stove.download-storage.presign-ttl=PT2S");
+        expiresAndReissuesTheActualStorageUrl();
+        stack.restart(StackApp.DOWNLOAD);
+
+        prepareFreshUrlBeforeOutage();
+        stack.stop(StackApp.LICENSE);
+        licenseOutageRejectsNewIssuanceButExistingUrlWorks();
+        stack.start(StackApp.LICENSE);
+        prepareFreshUrlBeforeOutage();
+        stack.stop(StackApp.CATALOG);
+        catalogOutagePreservesExistingFileAndLibrary();
+        stack.start(StackApp.CATALOG);
+        stack.stopStorage();
+        try {
+            storageOutageRejectsIssuance();
+        } finally {
+            stack.startStorage();
+        }
+
+        // 공개 빌드 파일을 지우고, 크기가 다른 것으로 바꾸고, 되돌린다. 위치는 Catalog가 Download에만 알려 주는 값이다.
+        ObjectNode state = saved();
+        E2eClient.Response build = Stove.catalog.get("/internal/v1/products/" + code(state) + "/build",
+                Map.of("X-Download-Service-Key", stack.serviceKey("CATALOG_DOWNLOAD_SERVICE_KEY")));
+        assertThat(build.status()).as(build.toString()).isEqualTo(200);
+        String storagePath = build.data().path("storagePath").asText();
+        assertThat(storagePath).startsWith("s3://");
+        String object = "admin/" + storagePath.substring("s3://".length());
+        stack.storage("cp", object, "/tmp/download-original.zip");
+        stack.storage("rm", object);
+        missingOrChangedFileRejectsIssuance();
+        stack.storageShell("printf changed-size | mc pipe " + object);
+        missingOrChangedFileRejectsIssuance();
+        stack.storage("cp", "/tmp/download-original.zip", object);
+        restoredFileAndStatelessRestartRecoverDownloads();
+        stack.restart(StackApp.DOWNLOAD);
+        restoredFileAndStatelessRestartRecoverDownloads();
+
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='PAID'")).isEqualTo("1");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_order.purchase_order WHERE status='FAILED'")).isEqualTo("1");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_license.product_license")).isEqualTo("1");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_license.processed_event WHERE consumer_group='license-paid-order'"))
+                .isEqualTo("1");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_license.license_purchase")).isEqualTo("0");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_catalog.catalog_product")).isEqualTo("1");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_catalog.catalog_release WHERE status='COMPLETED'")).isEqualTo("2");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")).isEqualTo("0");
+        assertThat(stack.sql("SELECT COUNT(*) FROM stove_payment.purchase_payment")).isEqualTo("2");
     }
 }
