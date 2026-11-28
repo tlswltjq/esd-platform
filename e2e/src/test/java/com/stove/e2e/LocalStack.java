@@ -114,10 +114,9 @@ final class LocalStack implements AutoCloseable {
         int offset = portOffset();
         System.setProperty("stove.e2e.port-offset", Integer.toString(offset));
         String run = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now());
-        Path directory = repository.resolve("e2e/build/local-stack").resolve(run);
+        Path directory = runDirectory(repository.resolve("e2e/build/local-stack"), run);
         LocalStack stack = new LocalStack(repository, directory, offset);
         try {
-            Files.createDirectories(directory);
             Instant began = Instant.now();
             stack.startInfrastructure();
             Instant infrastructureReady = Instant.now();
@@ -382,10 +381,12 @@ final class LocalStack implements AutoCloseable {
     private static int portOffset() {
         String configured = System.getProperty("stove.e2e.port-offset", "");
         int offset = configured.isBlank() ? DEFAULT_PORT_OFFSET : Integer.parseInt(configured.strip());
+        int[] ephemeral = hostEphemeralRange();
         for (StackApp app : StackApp.values()) {
             int port = app.port() + offset;
-            if (port >= EPHEMERAL_START) {
-                throw new IllegalStateException("앱 포트 " + port + " 가 임시 포트 범위 안이다. stove.e2e.port-offset을 낮춘다");
+            if (port >= EPHEMERAL_START || (port >= ephemeral[0] && port <= ephemeral[1])) {
+                throw new IllegalStateException("앱 포트 " + port + " 가 임시 포트 범위 안이다(이 호스트 "
+                        + ephemeral[0] + "~" + ephemeral[1] + "). stove.e2e.port-offset을 바꾼다");
             }
             try (ServerSocket probe = new ServerSocket()) {
                 probe.setReuseAddress(true);
@@ -396,6 +397,33 @@ final class LocalStack implements AutoCloseable {
             }
         }
         return offset;
+    }
+
+    /**
+     * 이 호스트가 나가는 연결에 쓰는 포트 범위. 기본 시작값(32768)보다 낮게 잡힌 호스트에서는 검사 때 비어 있던 앱
+     * 포트를 다른 연결이 먼저 가져갈 수 있다. 읽을 수 없으면(리눅스가 아니면) 기본 범위로 본다.
+     */
+    private static int[] hostEphemeralRange() {
+        Path range = Path.of("/proc/sys/net/ipv4/ip_local_port_range");
+        if (Files.isReadable(range)) {
+            try {
+                String[] bounds = Files.readString(range).strip().split("\\s+");
+                return new int[] {Integer.parseInt(bounds[0]), Integer.parseInt(bounds[1])};
+            } catch (IOException | RuntimeException unreadable) {
+                // 아래 기본 범위로 본다.
+            }
+        }
+        return new int[] {EPHEMERAL_START, 65_535};
+    }
+
+    /** 실행마다 고유한 디렉터리. 같은 초에 시작한 두 실행의 로그와 증거가 섞이지 않는다. */
+    private static Path runDirectory(Path parent, String run) {
+        try {
+            Files.createDirectories(parent);
+            return Files.createTempDirectory(parent, run + "-");
+        } catch (IOException failure) {
+            throw new IllegalStateException("실행 디렉터리를 만들지 못했다: " + parent, failure);
+        }
     }
 
     private static String schemaScript() {
