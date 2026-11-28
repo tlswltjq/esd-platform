@@ -25,8 +25,6 @@ import com.stove.common.contract.payload.OrderPaymentCompletedEvent;
 import com.stove.common.contract.payload.OrderPaymentFailedEvent;
 import com.stove.common.contract.payload.OrderPlacedEvent;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -42,12 +40,18 @@ import org.apache.kafka.common.header.Header;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /** Completed publication services + Order; payment results are explicit test fixtures. */
 @Tag("order")
+@ExtendWith(LocalStackExtension.class)
+@LocalStackApps({StackApp.AUTH, StackApp.STUDIO, StackApp.WEB_BFF, StackApp.GATEWAY, StackApp.REVIEW, StackApp.CATALOG,
+        StackApp.STORE, StackApp.ORDER})
 class OrderPurchaseFlowTest {
-    private static Path evidence() { return Path.of(System.getProperty("stove.e2e.order-evidence")); }
-    private static JsonNode saved() throws Exception { return JSON.readTree(Files.readString(evidence())); }
+    /** 앞 걸음이 만든 주문·요청·결과. 예전에는 실행기가 걸음마다 테스트를 따로 불러 파일로 넘겼다. */
+    private static JsonNode state;
+    private static JsonNode saved() { return state; }
+    private static void save(JsonNode next) throws Exception { state = JSON.readTree(JSON.writeValueAsString(next)); }
     private static Account buyer(JsonNode s) throws Exception { return login(s.path("buyerEmail").asText(), "creator-password-1234"); }
     private static Account buyer(JsonNode s, String name) throws Exception {
         return login(s.path(name + "BuyerEmail").asText(), "creator-password-1234");
@@ -119,7 +123,7 @@ class OrderPurchaseFlowTest {
         }
     }
 
-    @Test void preparesOrdersWithRelayPaused() throws Exception {
+    private static void preparesOrdersWithRelayPaused() throws Exception {
         ReviewJourney.Account creator = account(true); ReviewJourney.Account buyer = account(false); ReviewJourney.Account other = account(false);
         ReviewJourney.Account reviewer = login(REVIEWER_EMAIL, REVIEWER_PASSWORD); ReviewJourney.Project project = project(creator);
         String code = data(project.id(), creator).path("productCode").asText();
@@ -156,15 +160,15 @@ class OrderPurchaseFlowTest {
         ObjectNode s = JSON.createObjectNode().put("buyerEmail", buyer.email()).put("pendingBuyerEmail", pendingBuyer.email()).put("failedBuyerEmail", failedBuyer.email()).put("code", code);
         s.set("first", first); s.set("firstRequest", firstRequest); s.set("pending", pending);
         s.set("pendingRequest", pendingRequest); s.set("failed", failed); s.set("currentProduct", current);
-        Files.writeString(evidence(), JSON.writeValueAsString(s));
+        save(s);
     }
-    @Test void queriesOrdersWhileBrokerDown() throws Exception {
+    private static void queriesOrdersWhileBrokerDown() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(order(s.path("first").path("orderNo").asText(), buyer)).isEqualTo(s.path("first"));
         assertThat(Stove.gateway.post("/api/v1/orders", s.path("firstRequest"), buyer.headers()).data()).isEqualTo(s.path("first"));
         assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(1);
     }
-    @Test void verifiesPublishedEventsAndPaymentResults() throws Exception {
+    private static void verifiesPublishedEventsAndPaymentResults(LocalStack stack) throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         String first = s.path("first").path("orderNo").asText(), pending = s.path("pending").path("orderNo").asText(), failed = s.path("failed").path("orderNo").asText();
         Map<String, OrderPlacedEvent> events = placed(Set.of(first, pending, failed)); OrderPlacedEvent a = events.get(first); OrderPlacedEvent b = events.get(pending); OrderPlacedEvent f = events.get(failed);
@@ -174,19 +178,18 @@ class OrderPurchaseFlowTest {
         send(success); send(success);
         send(OrderPaymentFailedEvent.of(failed, f.eventId(), "fixture-" + UUID.randomUUID(), f.buyerSubject(), f.amount(), f.currency(), "DECLINED", "Fixture final decline"));
         OrderPaymentCompletedEvent bad = OrderPaymentCompletedEvent.of(pending, b.eventId(), "fixture-" + UUID.randomUUID(), b.buyerSubject(), b.amount()-200, b.currency());
-        try (KafkaConsumer<String, String> dlt = consumer(Topics.PAYMENT + ".DLT")) {
-            send(bad); boolean found = false; long end = System.nanoTime() + Duration.ofSeconds(45).toNanos();
-            while (!found && System.nanoTime() < end)
-                for (ConsumerRecord<String, String> record : dlt.poll(Duration.ofMillis(500))) if (record.value().contains(bad.eventId())) found = true;
-            assertThat(found).isTrue();
-        }
+        // 금액이 주문과 다른 결과는 재시도 뒤 격리 표에 남고 그 주문 키가 멈춘다(결정 155). DB가 있는 앱은 DLT 토픽으로 보내지 않는다.
+        send(bad);
+        Awaitility.await().atMost(Duration.ofSeconds(45)).untilAsserted(() ->
+                assertThat(stack.sql("SELECT COUNT(*) FROM stove_order.consumer_quarantine WHERE consumer_group="
+                        + "'order-payment-result' AND event_id='" + bad.eventId() + "'")).as("격리된 결제 결과").isEqualTo("1"));
         state(first, buyer, "PAID"); state(failed, buyer(s, "failed"), "FAILED"); state(pending, buyer(s, "pending"), "PENDING");
         assertThat(order(first, buyer).path("amount").asLong()).isEqualTo(1000);
         ObjectNode changed = (ObjectNode)s;
         changed.set("completion", JSON.valueToTree(success)); changed.set("paid", order(first, buyer));
-        changed.set("failedResult", order(failed, buyer(s, "failed"))); Files.writeString(evidence(), JSON.writeValueAsString(changed));
+        changed.set("failedResult", order(failed, buyer(s, "failed"))); save(changed);
     }
-    @Test void queriesOrdersWithoutCatalog() throws Exception {
+    private static void queriesOrdersWithoutCatalog() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(Stove.gateway.get("/api/v1/storefront/products/" + s.path("code").asText()).status()).isEqualTo(200);
         assertThat(Stove.gateway.post("/api/v1/orders", s.path("firstRequest"), buyer.headers()).data()).isEqualTo(s.path("paid"));
@@ -194,7 +197,7 @@ class OrderPurchaseFlowTest {
         assertThat(Stove.gateway.post("/api/v1/orders", requestFor(s.path("currentProduct")), buyer.headers()).status()).isEqualTo(503);
         assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(1);
     }
-    @Test void verifiesPersistedResultsAfterOrderRestart() throws Exception {
+    private static void verifiesPersistedResultsAfterOrderRestart() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(order(s.path("paid").path("orderNo").asText(), buyer)).isEqualTo(s.path("paid"));
         assertThat(order(s.path("failedResult").path("orderNo").asText(), buyer(s, "failed"))).isEqualTo(s.path("failedResult"));
@@ -202,12 +205,52 @@ class OrderPurchaseFlowTest {
         // The following phase also verifies the timestamp after the replay has been consumed.
         assertThat(Stove.gateway.post("/api/v1/orders", s.path("firstRequest"), buyer.headers()).data()).isEqualTo(s.path("paid"));
     }
-    @Test void createsAfterCatalogRecovery() throws Exception {
+    private static void createsAfterCatalogRecovery() throws Exception {
         JsonNode s = saved(); ReviewJourney.Account buyer = buyer(s);
         assertThat(order(s.path("paid").path("orderNo").asText(), buyer)).isEqualTo(s.path("paid"));
         JsonNode recovered = create(requestFor(s.path("currentProduct")), buyer(s, "failed"));
         assertThat(recovered.path("amount").asLong()).isEqualTo(2000);
         placed(Set.of(recovered.path("orderNo").asText()));
         assertThat(Stove.gateway.get("/api/v1/orders", buyer.headers()).data().path("totalElements").asLong()).isEqualTo(1);
+    }
+
+    private static String count(LocalStack stack, String table, String condition) {
+        return stack.sql("SELECT COUNT(*) FROM stove_order." + table + (condition.isEmpty() ? "" : " WHERE " + condition));
+    }
+
+    /**
+     * 주문 스냅샷, 브로커 무응답 중 조회와 발행 복구, 결제 결과 반영, Catalog 정지 중 동작, 재시작 뒤 보존을 한 흐름으로
+     * 본다. 테스트가 Order·Catalog·브로커를 직접 멈추고 되살린다(결정 e2e-stack-in-junit).
+     */
+    @Test
+    void ordersSurviveBrokerAndCatalogOutagesAndRestarts(LocalStack stack) throws Exception {
+        // 릴레이를 끈 Order: 주문은 만들어지고 OrderPlaced는 Outbox에 남는다.
+        stack.restart(StackApp.ORDER, "--stove.outbox.relay-enabled=false");
+        preparesOrdersWithRelayPaused();
+        assertThat(count(stack, "outbox_event", "event_type='OrderPlaced' AND status='PENDING'")).isEqualTo("3");
+
+        // 브로커가 응답하지 않는 동안 다시 뜬 Order: 조회는 되고 이벤트는 그대로 남는다.
+        stack.stop(StackApp.ORDER);
+        stack.pauseKafka();
+        try {
+            stack.start(StackApp.ORDER);
+            queriesOrdersWhileBrokerDown();
+            assertThat(count(stack, "outbox_event", "event_type='OrderPlaced' AND status='PENDING'"))
+                    .as("브로커 무응답 중 남아 있는 OrderPlaced").isEqualTo("3");
+        } finally {
+            stack.resumeKafka();
+        }
+        verifiesPublishedEventsAndPaymentResults(stack);
+        assertThat(count(stack, "outbox_event", "event_type='OrderPlaced' AND status='SENT'")).isEqualTo("3");
+        assertThat(count(stack, "processed_event", "")).as("반영한 결제 결과(성공 1, 실패 1)").isEqualTo("2");
+
+        stack.stop(StackApp.CATALOG);
+        queriesOrdersWithoutCatalog();
+        stack.restart(StackApp.ORDER);
+        verifiesPersistedResultsAfterOrderRestart();
+        stack.start(StackApp.CATALOG);
+        createsAfterCatalogRecovery();
+        assertThat(count(stack, "processed_event", "")).as("다시 온 결제 결과는 한 번만 반영된다").isEqualTo("2");
+        assertThat(count(stack, "purchase_order", "")).isEqualTo("4");
     }
 }

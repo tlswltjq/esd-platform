@@ -326,7 +326,7 @@
     - [x] `verify-studio.py` → `studioE2eTest` — PR #281
     - [x] `verify-catalog.py` → `catalogE2eTest`·`withdrawalE2eTest` — PR #282. 브로커 장애는 컨테이너 일시 정지로 만든다(`LocalStack.pauseKafka`). 같은 키의 앞 이벤트(Store로 가는 공개 알림)만 유실되는 경우는 이 스택에 소비자가 없어 잡지 못한다. Store 여정(PR #283)에도 넣지 않았다 — 아래 마무리 항목.
     - [x] `verify-store.py` → `storeE2eTest` — PR #283
-    - [ ] `verify-order.py` → `orderE2eTest`
+    - [x] `verify-order.py` → `orderE2eTest` — PR #284
     - [ ] `verify-payment.py` → `paymentE2eTest`
     - [ ] `verify-license.py` → `licenseE2eTest`
     - [ ] `verify-download.py` → `downloadE2eTest`
