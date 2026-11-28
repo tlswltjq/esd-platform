@@ -311,10 +311,10 @@
 - [x] **T43. `e2e`의 옛 `e2eTest` 여정이 지금 없는 API를 부른다** — PR #275 ([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters))
   - 지운 것: `TrackBCommerceFlowTest`·`TrackCFulfillmentFlowTest`·`PaymentFailurePathTest`·`PaymentSimulatorE2eTest`·`PromotionOperationsE2eTest`(payment·settlement에 없는 콜백·시뮬레이터·`settlements/orders` 경로)와 `TrackACreatorFlowTest`(Studio에 없는 `credentials`·`store-page-revisions`·`submissions`·`ci`·`testers` 경로). `E2eClient`의 콜백 서명과 `postUnsigned`, `Journey`의 여정 값도 지웠다.
   - 남은 `e2eTest`는 관측 두 건(`OutboxDrainE2eTest`·`DeadLetterE2eTest`)이다. 여정에 붙여 도는 자리는 T49에서 정한다.
-- [ ] **T44. 소유권 격리 검증을 `:e2e`의 JUnit 여정으로 옮긴다(시범 1)** ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
-  - 지금: `verify-gateway-ownership.py`가 `stove_license.product_license`에 `status='ACTIVE'`를 직접 넣는다. License V10(2026-11-06, `chk_product_license_status`)은 `STORED`·`REGISTERED`·`SUSPENDED`·`REFUNDED`만 받아 `ERROR 3819`로 실패한다(2026-11-28 PR #268 로컬 실행). 라이브러리 조회는 `license_registration`을 읽으므로 상태 값만 고쳐서는 통과하지 못한다. [로드맵 0절](../../docs/roadmap.md#scope-freeze)의 "가입·로그인, 역할별 진입" 확인 경로다.
-  - 할 일: `:e2e`에 스택을 띄우고 제어하는 JUnit 확장(Testcontainers)을 만들고, 소유권 격리 검증(자기 것 200, 남의 것 404, 위조 헤더 404, 목록 격리, 창작자 격리)을 JUnit 테스트로 옮긴다. 구매 데이터는 DB에 직접 넣지 않고 실제 주문 API로 만든다. 옮긴 뒤 `verify-gateway-ownership.py`와 `support/gateway_ownership.py`를 지운다.
-  - 잴 것: 스택 기동 시간, 메모리, 기존 스크립트와의 코드량 차이. 실행은 `measure_guard.py`로 감싼다.
+- [x] **T44. 소유권 격리 검증을 `:e2e`의 JUnit 여정으로 옮긴다(시범 1)** — PR #277 ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit))
+  - `:e2e:ownershipE2eTest`(`OwnershipIsolationFlowTest` 3건)가 `LocalStackExtension`으로 스택을 띄우고 내린다. 인프라는 Testcontainers, 앱 12개는 `bootJar` 프로세스다. 구매는 실제 출시·주문 API로 만든다. `verify-gateway-ownership.py`·`support/gateway_ownership.py`는 지웠다.
+  - 잰 값(2026-11-28, OCI A1 4코어·23GB): 전체 231초, 그중 스택 기동이 인프라 16초 + 앱 12개 149초. 앱 프로세스 RSS 합 최대 5,290MiB, 컨테이너 최대 1,163MiB. 새 코드 760줄(테스트 154줄 + 스택 기반 606줄), 지운 파이썬 371줄.
+  - 남긴 것: 정산의 "남의 판매자를 질의해도 자기 범위로만 답한다"는 Settlement가 매출을 기록하지 않아(결정 settlement-consumption-off) 문이 열리는지만 본다. 매출이 다시 쌓이면(T41) 단언을 더한다. 앱별 비밀 허용 목록이 `ServiceCredentials.java`와 `support/service_credentials.py` 두 곳에 있다 — 파이썬 여정이 남아 있는 동안만이고, 전면 이전을 정할 때 한 곳으로 모은다.
 - [ ] **T49. 재시작 여정 하나를 단계 없이 한 테스트로 옮긴다(시범 2)** ([결정 e2e-stack-in-junit](../../docs/decisions.md#e2e-stack-in-junit)) — T44 뒤
   - 대상: `reviewRestartE2eTest`(`verify-review.py`가 단계 사이에 Review를 재시작한다). 테스트가 `stack.restart(...)`를 직접 불러 `phase` 속성·증거 파일 없이 재시작 전후를 한 메서드에서 단언하게 한다.
   - 판단: 되면 나머지 `verify-*.py` 여정의 이전 여부를 사용자에게 묻는다(그때 `e2eTest`의 관측 두 건을 여정 뒤에 붙이는 자리도 정한다). 안 되면 T44 상태에서 멈추고 이유를 결정 기록에 더한다. `verify-jib.py`(Jib 이미지 스택, 야간 구매 E2E와 측정)는 옮기지 않는다.

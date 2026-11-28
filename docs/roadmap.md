@@ -14,7 +14,7 @@
 
 | 여정 | 확인 경로 |
 |---|---|
-| 가입·로그인, 역할별 진입 | auth·gateway 통합 검증, `verify-gateway-ownership.py` |
+| 가입·로그인, 역할별 진입 | auth·gateway 통합 검증, `:e2e:ownershipE2eTest` |
 | 창작→심사→출시→검색, 업데이트·판매 중지/재개 | G4, `verify-g4-operations.py` |
 | 구매→지급→다운로드 | 야간 `stack E2E (verify-jib.py)`(`:e2e:purchaseE2eTest`) |
 

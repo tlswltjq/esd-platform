@@ -18,8 +18,7 @@ python3 tools/verification/verify-jib.py --help
 | `verify-jib.py --backup-restore` · `support/backup_restore_verification.py` | 구매 전 전체 백업과 binlog·빌드 연속 복사 뒤 MySQL·MinIO를 데이터째 삭제하고 `tools/operations/backup.py`로 복구. 테이블 체크섬·객체 해시 비교 후 새 구매·다운로드를 이어서 검증. [절차](../../docs/backup-restore.md) |
 | `verify-jib.py --prometheus-only` · `support/prometheus_verification.py` | 실제 Prometheus로 11개 수집 대상·필수 지표·운영 경보 로드 검증 |
 | `auth-bff.py` | 실행 중인 스택의 Auth/BFF 검증. [필수 설정](../../docs/auth-bff.md) 필요 |
-| `verify-gateway-ownership.py` · `support/gateway_ownership.py` | 실제 12개 앱(웹 BFF·API 게이트웨이 포함)·전용 DB에서 본인/타인 조회와 심사/운영 역할 진입 검증. 구매 자료는 DB 픽스처이며 실제 금융·구매 전이와 구분. 산출물은 저장소 `runs/`(`ESD_SCRATCH`로 바꿀 수 있다). [범위·재실행](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/gateway-service-ownership-verification.md) |
-| `support/service_credentials.py` · `test_service_credentials.py` | 현재 소유권 실행기의 앱별 비밀 선택과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [수신자 계약](../../docs/security.md#서비스-접근키-수신자와-경계)·[재실행](../../docs/testing.md#구조보안-경계-검사-실행) |
+| `support/service_credentials.py` · `test_service_credentials.py` | 격리 스택 실행기의 앱별 비밀 선택(`:e2e`의 `ServiceCredentials`가 같은 규칙을 쓴다)과 기본/로컬 Compose의 실제 키 수신자 검증. 값 대신 키 이름만 기록. [수신자 계약](../../docs/security.md#서비스-접근키-수신자와-경계)·[재실행](../../docs/testing.md#구조보안-경계-검사-실행) |
 | `support/boot_jars.py` · `test_boot_jars.py` | plain·test-fixtures를 제외한 실행 JAR 선택. 누락·복수 후보는 실패 |
 | `support/ports.py` · `test_ports.py` | 도구별 앱 포트 간격(1000 간격, 모두 32768 아래). 시작 전 사용 중·임시 포트 범위를 확인하고 실패하면 바로 멈춤. 기존 `*_PORT_OFFSET` 환경 변수로 바꿀 수 있음. [결정 105](../../docs/decisions.md#verification-tool-ports) |
 | `support/minio_image.py` | 검증용 MinIO 이미지 준비 |
