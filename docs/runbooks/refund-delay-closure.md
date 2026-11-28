@@ -2,6 +2,8 @@
 
 [결정 127](../decisions.md#refund-delay-closure)의 운영 절차다. 계약은 [Payment R14](../../specs/payment/requirements.md)와 [설계](../../specs/payment/design.md)를 정본으로 한다.
 
+PG 어댑터를 걷어낸 동안 PG 취소·조회와 종결 API(`…/closure`)는 조립되지 않아 이 절차는 실행할 수 없다([결정 remove-pg-adapters](../decisions.md#remove-pg-adapters)). PG를 되살린 뒤의 절차로 남긴다.
+
 시스템은 PG 취소를 실행하지 않는다. 돈은 운영자가 PortOne 콘솔에서 움직이고, 시스템은 PG를 다시 조회해 **같은 원결제의 전액 취소**가 확인될 때만 닫는다.
 
 ## 먼저 판단할 것 — 이 런북이 맞는 상황인가

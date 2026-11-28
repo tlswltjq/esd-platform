@@ -23,7 +23,6 @@ INFRA_SHARDS = (
         ':apps:payment:integrationTest',      # 405
         ':apps:payment:migrationTest',        # 205
         ':apps:store:integrationTest',        # 99
-        ':simulators:mock-pg:integrationTest',  # 23
     )),
     ('infra-order', (
         ':apps:order:integrationTest',        # 347

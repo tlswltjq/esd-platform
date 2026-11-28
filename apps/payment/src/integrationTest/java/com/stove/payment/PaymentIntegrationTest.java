@@ -5,6 +5,7 @@ import static com.stove.payment.PaymentFixtures.approved;
 import static com.stove.payment.PaymentFixtures.event;
 import static com.stove.payment.PaymentFixtures.id;
 import static com.stove.payment.PaymentFixtures.request;
+import static com.stove.payment.PaymentFixtures.result;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
@@ -31,7 +32,7 @@ import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
 import com.stove.common.test.OpenApiSnapshot;
 import com.stove.common.web.error.BusinessException;
-import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
+import com.stove.payment.adapter.pg.ImmediateApprovalPgGateway;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderRequest;
 import com.stove.payment.core.domain.PaymentRepository;
@@ -70,7 +71,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 
-class PaymentIntegrationTest extends PaymentIntegrationTestBase {
+class PaymentIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     @Autowired ReceiveOrderPayment receive;
     @Autowired ResolvePayment resolve;
     @Autowired PaymentRepository payments;
@@ -80,7 +81,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired KafkaTemplate<String,String> kafka;
     @Autowired KafkaListenerEndpointRegistry listeners;
     @Autowired OutboxEventRepository events;
-    @MockitoSpyBean SimulatedPgHttpGateway gateway;
+    @MockitoSpyBean ImmediateApprovalPgGateway gateway;
     @MockitoSpyBean OutboxRecorder outbox;
     @MockitoSpyBean ProcessedEventGuard guard;
     @LocalServerPort int port;
@@ -89,13 +90,10 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         listeners.stop();
         jdbc.update("DELETE FROM refund_execution");
         jdbc.update("DELETE FROM payment_order_lifecycle"); jdbc.update("DELETE FROM purchase_payment");
-        ExternalPgProcess.JDBC.update("DELETE FROM pg_settlement_item");
-        ExternalPgProcess.JDBC.update("DELETE FROM pg_settlement");
-        ExternalPgProcess.JDBC.update("DELETE FROM pg_charge");
         jdbc.update("DELETE FROM outbox_event");
         jdbc.update("DELETE FROM processed_event");
     }
-    private int count(String table) { return table.equals("pg_charge") ? ExternalPgProcess.JDBC.queryForObject("SELECT COUNT(*) FROM pg_charge",Integer.class) : jdbc.queryForObject("SELECT COUNT(*) FROM "+table,Integer.class); }
+    private int count(String table) { return jdbc.queryForObject("SELECT COUNT(*) FROM "+table,Integer.class); }
     private Payment stored(Payment p) { return payments.findById(p.getId()).orElseThrow(); }
     private void run(Payment p) { resolve.execute(p.getPaymentId()); }
     private void tx(Runnable action) { new TransactionTemplate(transactions).executeWithoutResult(s -> action.run()); }
@@ -148,8 +146,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         Payment p=receive.execute(request());
         doAnswer(inv -> { assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse(); return inv.callRealMethod(); }).when(gateway).charge(any());
         run(p); run(p);
-        Payment finalPayment=stored(p); assertThat(finalPayment.getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(count("pg_charge")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        Payment finalPayment=stored(p); assertThat(finalPayment.getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(count("outbox_event")).isEqualTo(1);
         OutboxEvent event=events.findAll().getFirst(); JsonNode body=mapper.readTree(event.getPayload());
         assertThat(event.getEventId()).isEqualTo(finalPayment.getResultEventId());
         assertThat(body.path("requestEventId").asText()).isEqualTo(p.getRequestEventId());
@@ -159,30 +156,23 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         assertThat(event.getEventType()).isEqualTo(EventType.ORDER_PAYMENT_COMPLETED);
         verify(gateway,times(1)).charge(any());
     }
-    @Test void supplierDeclineIsTheOnlyFailureAndFirstDecisionSurvivesConfigurationChange() {
+    @Test void supplierDeclineIsTheOnlyFailure() {
         Payment p=receive.execute(request());
-        ExternalPgProcess.restart("DECLINED",300);
-        PgResult decision=gateway.charge(p.chargeRequest());
-        ExternalPgProcess.restart("APPROVED",500);
-        assertThat(gateway.charge(p.chargeRequest())).isEqualTo(decision);
+        doReturn(result(p,PgResult.Decision.DECLINED)).when(gateway).charge(any());
         run(p);
         assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(stored(p).getFailureReasonCode()).isEqualTo("DECLINED");
         assertThat(events.findAll().getFirst().getEventType()).isEqualTo(EventType.ORDER_PAYMENT_FAILED);
-        assertThat(count("pg_charge")).isEqualTo(1);
-        ExternalPgProcess.restart("APPROVED",300);
     }
     @Test void lostResponseAfterSupplierCommitIsRecoveredWithTheOriginalKey() {
         Payment p=receive.execute(request());
         doAnswer(inv -> { inv.callRealMethod(); throw new PgUnavailable("response lost after commit"); }).when(gateway).charge(any());
         run(p);
         assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(stored(p).getLastErrorCode()).isEqualTo("PG_UNAVAILABLE");
-        assertThat(count("pg_charge")).isEqualTo(1); assertThat(count("outbox_event")).isZero();
+        assertThat(stored(p).getLastErrorCode()).isEqualTo("PG_UNAVAILABLE"); assertThat(count("outbox_event")).isZero();
         reset(gateway); run(p);
         assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(stored(p).getPaymentId()).isEqualTo(p.getPaymentId());
-        assertThat(count("pg_charge")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored(p).getPaymentId()).isEqualTo(p.getPaymentId()); assertThat(count("outbox_event")).isEqualTo(1);
     }
     @Test void resultAndOutboxRollbackDoesNotRollbackSupplierJournal() {
         Payment p=receive.execute(request());
@@ -191,11 +181,9 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         run(p);
         assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(stored(p).getResultEventId()).isNull();
-        assertThat(stored(p).getLastErrorCode()).isEqualTo("RESULT_UNCONFIRMED");
-        assertThat(count("pg_charge")).isEqualTo(1); assertThat(count("outbox_event")).isZero();
+        assertThat(stored(p).getLastErrorCode()).isEqualTo("RESULT_UNCONFIRMED"); assertThat(count("outbox_event")).isZero();
         reset(outbox); run(p);
-        assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(count("pg_charge")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+        assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(count("outbox_event")).isEqualTo(1);
     }
     @Test void invalidSupplierIdentityAmountProviderAndMissingResponseRemainPending() {
         Payment p=receive.execute(request()); PgResult r=approved(p);
@@ -209,7 +197,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         }
         doReturn(null).when(gateway).charge(any()); run(p);
         assertThat(stored(p).getLastErrorCode()).isEqualTo("PG_INVALID_RESULT");
-        assertThat(count("outbox_event")).isZero(); assertThat(count("pg_charge")).isZero();
+        assertThat(count("outbox_event")).isZero();
     }
     @Test void concurrentResolversUseOneSupplierDecisionAndOneResultEvent() throws Exception {
         Payment p=receive.execute(request()); CyclicBarrier barrier=new CyclicBarrier(2);
@@ -218,15 +206,8 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         try {
             Future<?> a=pool.submit(() -> run(p)); Future<?> b=pool.submit(() -> run(p));
             a.get(20,TimeUnit.SECONDS); b.get(20,TimeUnit.SECONDS);
-            assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PAID);
-            assertThat(count("pg_charge")).isEqualTo(1); assertThat(count("outbox_event")).isEqualTo(1);
+            assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PAID); assertThat(count("outbox_event")).isEqualTo(1);
         } finally { pool.shutdownNow(); }
-    }
-    @Test void duplicateSupplierKeyCannotBeReusedForDifferentOrderOrAmount() {
-        Payment p=receive.execute(request()); PgResult original=gateway.charge(p.chargeRequest());
-        assertThatThrownBy(() -> gateway.charge(new PgChargeRequest(p.getPaymentId(),id(),p.getAmount(),"KRW"))).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> gateway.charge(new PgChargeRequest(p.getPaymentId(),p.getOrderNo(),1,"KRW"))).isInstanceOf(IllegalArgumentException.class);
-        assertThat(gateway.charge(p.chargeRequest())).isEqualTo(original); assertThat(count("pg_charge")).isEqualTo(1);
     }
     @Test void transactionIdReuseCannotFinalizeAnotherPayment() {
         Payment a=receive.execute(request()); Payment b=receive.execute(request()); run(a); PgResult first=stored(a).supplierResult();
@@ -274,7 +255,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
             assertThat(stored(p).getResultEventId()).isEqualTo(confirmed.getResultEventId());
             assertThat(stored(p).getUpdatedAt()).isEqualTo(confirmed.getUpdatedAt());
             assertThat(stored(p).getNextAttemptAt()).isNull(); assertThat(stored(p).getLastErrorCode()).isNull();
-            assertThat(count("outbox_event")).isEqualTo(1); assertThat(count("pg_charge")).isEqualTo(1);
+            assertThat(count("outbox_event")).isEqualTo(1);
         } finally { release.countDown(); pool.shutdownNow(); }
     }
     @Test void chargesTheDiscountedCustomerAmountWithoutReapplyingPricingPolicy() {
@@ -282,7 +263,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         Payment p=receive.execute(new PaymentOrderRequest(r.eventId(),r.occurredAt(),r.orderNo(),r.buyerSubject(),r.productId(),r.productCode(),r.title(),r.contentVersion(),10000,1000,9000,"KRW"));
         run(p);
         assertThat(stored(p).getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(ExternalPgProcess.JDBC.queryForObject("SELECT amount FROM pg_charge",Long.class)).isEqualTo(9000);
+        verify(gateway).charge(new PgChargeRequest(p.getPaymentId(),p.getOrderNo(),9000,"KRW"));
         assertThat(stored(p).getListAmount()).isEqualTo(10000); assertThat(stored(p).getDiscountAmount()).isEqualTo(1000);
     }
     @Test void deadOutboxRequeuePreservesOriginalIdentityPayloadAndPaymentDecision() {
@@ -293,7 +274,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
         OutboxEvent requeued=events.findById(original.getId()).orElseThrow();
         assertThat(requeued.getStatus()).isEqualTo(OutboxEvent.OutboxStatus.PENDING);
         assertThat(requeued.getEventId()).isEqualTo(original.getEventId()); assertThat(requeued.getPayload()).isEqualTo(original.getPayload());
-        run(p); assertThat(count("outbox_event")).isEqualTo(1); assertThat(count("pg_charge")).isEqualTo(1);
+        run(p); assertThat(count("outbox_event")).isEqualTo(1);
     }
     record Response(int status,JsonNode body) { JsonNode data() { return body.path("data"); } }
     private Response http(String method,String path,String bearer) {
@@ -342,7 +323,7 @@ class PaymentIntegrationTest extends PaymentIntegrationTestBase {
             assertThat(count("purchase_payment")).isZero(); assertThat(count("processed_event")).isZero();
             send(event,mapper.writeValueAsString(event));
             Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(held(event.partitionKey())).isEqualTo(2));
-            assertThat(count("purchase_payment")).as("멈춘 키는 처리하지 않는다").isZero(); assertThat(count("pg_charge")).isZero();
+            assertThat(count("purchase_payment")).as("멈춘 키는 처리하지 않는다").isZero(); verifyNoInteractions(gateway);
         } finally { listeners.stop(); }
     }
     private int held(String key) {

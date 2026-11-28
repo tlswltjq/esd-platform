@@ -61,7 +61,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MySQLContainer;
 
-class RefundPreparationIntegrationTest extends PaymentIntegrationTestBase {
+class RefundPreparationIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     private static final Instant BASE = Payment.now();
     @Autowired ReceiveOrderPayment orderReceipt;
     @Autowired ReceiveRefundExecution receive;

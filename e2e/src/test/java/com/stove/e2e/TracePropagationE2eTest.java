@@ -82,7 +82,7 @@ class TracePropagationE2eTest {
         assertThat(response.headers().getFirst("X-Correlation-Id")).isEqualTo(trace);
         String number = response.data().path("orderNo").asText();
         String expected = System.getProperty("stove.e2e.tracing-expected-state", "PENDING");
-        SettlementPurchaseFlowTest.waitStatus(number, buyer, expected);
+        DownloadPurchaseFlowTest.waitPaid(number, buyer, expected);
         Awaitility.await().atMost(Duration.ofSeconds(40)).untilAsserted(() ->
                 assertThat(Stove.gateway.get("/api/v1/payments/" + number, buyer.headers()).status()).isEqualTo(200));
         JsonNode payment = Stove.gateway.get("/api/v1/payments/" + number, buyer.headers()).data();
@@ -101,7 +101,7 @@ class TracePropagationE2eTest {
             if (!name.startsWith(scenario())) continue;
             Account buyer = login(purchase.path("buyerEmail").asText(), "creator-password-1234");
             String number = purchase.path("orderNo").asText();
-            SettlementPurchaseFlowTest.waitStatus(number, buyer, "PAID");
+            DownloadPurchaseFlowTest.waitPaid(number, buyer, "PAID");
             String code = state.path("product").path("productCode").asText();
             ReviewJourney.registeredLibrary(buyer, code);
             String downloadTrace = freshTraceId();
@@ -111,12 +111,10 @@ class TracePropagationE2eTest {
             assertThat(ticket.status()).isEqualTo(200);
             verifyZip(ticket.data(), Base64.getDecoder().decode(state.path("zip").asText()));
             ((ObjectNode) purchase).put("downloadTraceId", downloadTrace).put("zipChecksum", ticket.data().path("checksum").asText());
-            Awaitility.await().atMost(Duration.ofSeconds(45)).untilAsserted(() ->
-                    assertThat(SettlementPurchaseFlowTest.sales(SettlementPurchaseFlowTest.admin()).path("content").findValuesAsText("orderNo")).contains(number));
             if (inspectTraces) {
                 String trace = purchase.path("traceId").asText();
                 JsonNode original = awaitTrace(trace, inspectPayment
-                        ? Set.of("gateway", "order", "payment", "license", "settlement", "catalog")
+                        ? Set.of("gateway", "order", "payment", "license", "catalog")
                         : Set.of("gateway", "order", "catalog"), spans -> {
                     assertHttpParent(spans, "gateway", "order");
                     assertHttpParent(spans, "order", "catalog");
@@ -159,15 +157,10 @@ class TracePropagationE2eTest {
             assertThat(s.attributes().get("payment.id")).isEqualTo(paymentId);
             assertThat(spans.stream().anyMatch(p -> p.id().equals(s.parent()) && p.service().equals("order"))).isTrue();
         });
-        for (String downstream : List.of("license", "settlement")) {
-            assertThat(spans.stream().filter(s -> s.service().equals(downstream))
-                    .anyMatch(s -> processing.stream().anyMatch(p -> hasAncestor(spans, s, p.id()))))
-                    .as("%s is a descendant of Payment %s", downstream, paymentId).isTrue();
-        }
-        assertThat(spans.stream().filter(s -> s.service().equals("payment") && isClient(s))
+        // 결정 settlement-consumption-off·in-process-pg-approval: Settlement 소비와 PG HTTP 호출이 없어 그 스팬은 보지 않는다.
+        assertThat(spans.stream().filter(s -> s.service().equals("license"))
                 .anyMatch(s -> processing.stream().anyMatch(p -> hasAncestor(spans, s, p.id()))))
-                .as("PG HTTP call is inside the payment attempt").isTrue();
-        assertHttpParent(spans, "settlement", "catalog");
+                .as("license is a descendant of Payment %s", paymentId).isTrue();
     }
 
     private static JsonNode awaitTrace(String traceId, Set<String> services, Consumer<List<TraceSpan>> assertions) {

@@ -42,23 +42,11 @@ gradle.projectsEvaluated {
                 observations[name] = [unitOutputOnIntegrationClasspath: false,
                         integrationExcludesMigration: true, checkIncludesBoth: true]
             }
-            def payment = rootProject.project(':apps:payment')
-            def jar = rootProject.project(':simulators:mock-pg').tasks.getByName('bootJar').archiveFile.get().asFile
-            ['integrationTest', 'migrationTest'].each { name ->
-                def task = payment.tasks.getByName(name)
-                require(covered(task, jar), "payment ${name}: supplier JAR content must be an input")
-                require(!task.classpath.files.collect { it.canonicalFile }.contains(jar.canonicalFile),
-                        "payment ${name}: supplier must remain an independent process")
-                require(task.dependsOn.contains(':simulators:mock-pg:bootJar'),
-                        "payment ${name}: supplier must be built first")
-            }
-            require(covered(payment.tasks.getByName('migrationTest'), rootProject.file('tools/migrations/mock-pg/migrate.py')),
-                    'payment: external importer must be an input')
             require(covered(rootProject.project(':apps:catalog').tasks.getByName('integrationTest'),
                     rootProject.file('tools/migrations/catalog/catalog-transition.sql')),
                     'catalog: external migration SQL must be an input')
             println JsonOutput.toJson([kind: 'verification_boundary_contract', applicationTestsExecuted: false,
-                    modules: observations, externalSupplierContentTracked: true, externalMigrationToolsTracked: true])
+                    modules: observations, externalMigrationToolsTracked: true])
         }
     }
 }

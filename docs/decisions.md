@@ -2728,6 +2728,15 @@
 - 구분: 추천 수용
 - 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268)
 
+<a id="settlement-consumption-off"></a>
+## PG가 없는 동안 settlement는 띄우되 이벤트 소비를 끈다
+- 문제: settlement는 `ORDER_PAID`마다 PG에서 결제 금액·수수료를 조회해 매출을 기록한다(`RecordPaidSale`). [결정 in-process-pg-approval](#in-process-pg-approval)대로 PG 포트를 "제공 안 함"으로 채우면 구매마다 조회가 실패해 4회 시도(7초 대기) 뒤 격리·키 정지가 되고 `ConsumerKeysQuarantined` 경보가 계속 울린다. 환불 확정 리스너도 같다.
+- 선택지: A settlement를 스택에서 내린다(코드·테스트만 유지) / B 앱은 띄우되 `ORDER_PAID`·환불 확정 리스너만 설정으로 끈다 / C 그대로 띄운다 (추천: A — 떠 있지만 아무 일도 하지 않는 앱과 끄는 스위치를 만들지 않는다)
+- 내 의견: "띄우되 소비만 끈다"
+- 선택: B — 이유는 말하지 않았다. 스위치는 `stove.settlement.consumption-enabled`(기본 꺼짐)이고, PG를 되살릴 때 켠다. 꺼져 있는 동안의 이벤트는 소비자 그룹 오프셋이 움직이지 않으므로 Kafka 보존 기간 안의 것만 나중에 따라잡는다.
+- 구분: 추천과 다른 선택
+- 결과: [PR #268](https://github.com/tlswltjq/esd-platform/pull/268)
+
 ---
 
 ## 검증하며 드러난 것

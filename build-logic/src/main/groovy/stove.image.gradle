@@ -1,4 +1,4 @@
-// 실행 모듈(앱·모의 PG)만 이미지로 만든다. 라이브러리와 E2E 모듈에는 적용하지 않는다.
+// 실행 모듈(앱)만 이미지로 만든다. 라이브러리와 E2E 모듈에는 적용하지 않는다.
 plugins {
     id 'com.google.cloud.tools.jib'
 }
@@ -7,7 +7,7 @@ plugins {
 // OCI 비교에서는 기반 이미지 다이제스트와 arm64를 명시해 양쪽 런타임을 고정한다.
 def imagePorts = [auth: 8091, "web-bff": 8080, gateway: 8093, studio: 8085, review: 8086,
                   catalog: 8081, store: 8087, order: 8082, payment: 8083,
-                  license: 8084, download: 8088, settlement: 8089, 'mock-pg': 8092]
+                  license: 8084, download: 8088, settlement: 8089]
 def targetArchitecture = providers.gradleProperty('stove.jib.platform').getOrElse(
         System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'arm64' : 'amd64')
 // registry는 루트 build.gradle이 정한다(기본 localhost/stove, 결정 135).
@@ -34,8 +34,7 @@ jib {
         user = '100:101'
         workingDirectory = '/app'
         ports = [imagePorts[project.name].toString()]
-        environment = [JAVA_OPTS: '-XX:MaxRAMPercentage=75 -Duser.timezone=' +
-                (project.name == 'mock-pg' ? 'UTC' : 'Asia/Seoul')]
+        environment = [JAVA_OPTS: '-XX:MaxRAMPercentage=75 -Duser.timezone=Asia/Seoul']
         // 기존 JAVA_OPTS 환경변수의 실행 시점 확장과 exec에 의한 SIGTERM 전달을 유지한다.
         entrypoint = ['sh', '-c', 'exec java $JAVA_OPTS -cp @/app/jib-classpath-file @/app/jib-main-class-file']
         creationTime = 'EPOCH'

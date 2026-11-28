@@ -5,7 +5,7 @@ from pathlib import Path
 from support.ports import application_offset
 from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
-from support.mock_pg_runtime import MockPgRuntime
+from support import payment_fault
 import os, socket, subprocess, time, urllib.request, tempfile, json, secrets
 repo=Path(__file__).resolve().parents[2]
 output_root=repo/"runs"
@@ -20,13 +20,12 @@ def free_port():
         return sock.getsockname()[1]
 ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=ensure_minio_image(repo)
-subprocess.run(["./gradlew",":simulators:mock-pg:bootJar",":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:download:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
+subprocess.run(["./gradlew",payment_fault.GRADLE_TASK,":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:download:bootJar",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; CREATE DATABASE stove_review; CREATE DATABASE stove_catalog; CREATE DATABASE stove_store; CREATE DATABASE stove_order; CREATE DATABASE stove_payment; CREATE DATABASE stove_license; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_review.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_catalog.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_store.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_order.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_payment.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';\n")
-pg=MockPgRuntime(repo,directory)
 compose=directory/"compose.yml"
 compose.write_text(f"""services:
-{pg.compose_service()}  mysql:
+  mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root1234
@@ -67,7 +66,6 @@ compose.write_text(f"""services:
     command: ["server", "/data"]
 """)
 docker=["docker","compose","-p",project,"-f",str(compose)]
-pg.docker=docker
 compose.chmod(0o600)
 processes=[]
 (directory/"containers-before.txt").write_text(subprocess.check_output(["docker","ps","--format","{{.ID}} {{.Names}}"],text=True))
@@ -108,7 +106,6 @@ try:
     subprocess.run(mc+["admin","user","add","admin","download-reader","isolated-read-only-password"],check=True,stdout=subprocess.DEVNULL)
     subprocess.run(mc+["admin","policy","attach","admin","review-build-read","--user","download-reader"],check=True,stdout=subprocess.DEVNULL)
 
-    pg.start()
     public=f"http://127.0.0.1:{8080+offset}"
     service_key=secrets.token_urlsafe(32)
     common=os.environ.copy()
@@ -132,7 +129,8 @@ try:
         jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         launch=["-jar",str(jar)]
-        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=pg.client_environment(app,common),cwd=repo,stdout=log,stderr=subprocess.STDOUT)
+        if app=="payment" and payment_fault.DECLINE in arguments: launch=payment_fault.launch(repo)
+        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))
     common["CATALOG_BASE_URL"]="http://127.0.0.1:"+str(apps["catalog"]+offset)
     def stop_app(name):
@@ -188,7 +186,7 @@ try:
     phase("preparePendingPurchase")
     restart("payment")
     phase("paidOrderDownloadsOriginalZip")
-    pg.start("DECLINED")
+    restart("payment",[payment_fault.DECLINE])
     phase("failedAndOtherUsersCannotDownloadOrSelectAnotherOwner")
     phase("unpublishedEditsStillDownloadPreviousPublishedBuild")
     phase("newlyPublishedBuildUsesSamePermanentRight")
@@ -227,7 +225,6 @@ try:
     assert sql("SELECT COUNT(*) FROM stove_license.license_purchase")=="0"
     assert sql("SELECT COUNT(*) FROM stove_catalog.catalog_product")=="1"
     assert sql("SELECT COUNT(*) FROM stove_catalog.catalog_release WHERE status='COMPLETED'")=="2"
-    assert pg.sql("SELECT COUNT(*) FROM pg_charge")=="2"
     assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="0"
     for table in ["purchase_payment"]:
         assert sql("SELECT COUNT(*) FROM stove_payment."+table)=="2"
@@ -237,7 +234,6 @@ try:
     (directory/"summary.json").write_text(json.dumps(summary,indent=2))
     print("PASS: ten apps; actual ZIP and checksum; published replacement; expiry; ownership denials; License/Catalog/storage outages; missing/changed files; stateless restart ("+str(len(phases))+" phases)",flush=True)
 finally:
-    pg.stop()
     for app,process,log in processes: process.terminate()
     for app,process,log in processes:
         try: process.wait(timeout=40)

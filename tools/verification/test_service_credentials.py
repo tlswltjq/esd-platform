@@ -23,15 +23,13 @@ class ServiceCredentialsTest(unittest.TestCase):
             actual = {app for app in apps if name in service_environment(app, inherited)}
             self.assertEqual(recipients, actual, name)
 
-    def test_settlement_portone_secret_reaches_only_settlement_and_is_recorded(self):
+    def test_leftover_pg_secrets_reach_no_application(self):
         apps = ['auth', 'web-bff', 'gateway', 'studio', 'review', 'catalog', 'store', 'order',
                 'payment', 'license', 'download', 'settlement']
-        inherited = {'SETTLEMENT_PORTONE_API_SECRET': 'settlement-portone-fixture',
-                     'PORTONE_API_SECRET': 'payment-portone-fixture'}
-        receivers = {app for app in apps if 'SETTLEMENT_PORTONE_API_SECRET' in service_environment(app, inherited)}
-        self.assertEqual({'settlement'}, receivers)
-        self.assertNotIn('PORTONE_API_SECRET', service_environment('settlement', inherited))
-        self.assertIn('SETTLEMENT_PORTONE_API_SECRET', credential_names(inherited))
+        inherited = {'PORTONE_API_SECRET': 'payment-portone-fixture', 'PORTONE_WEBHOOK_SECRET': 'webhook-fixture'}
+        for app in apps:
+            self.assertEqual({}, service_environment(app, inherited), app)
+        self.assertEqual(['PORTONE_API_SECRET', 'PORTONE_WEBHOOK_SECRET'], credential_names(inherited))
 
     def test_bootstrap_and_bff_credentials_are_separate(self):
         values = {'BFF_CLIENT_SECRET': 'bff-fixture', 'AUTH_ADMIN_PASSWORD': 'admin-fixture',
@@ -56,12 +54,6 @@ class ServiceCredentialsTest(unittest.TestCase):
         self.assertEqual({}, service_environment('gateway', {'DB_PASSWORD': 'db-fixture'}))
         self.assertEqual({}, service_environment('download', {'DB_PASSWORD': 'db-fixture'}))
         self.assertEqual({'DB_PASSWORD': 'db-fixture'}, service_environment('order', {'DB_PASSWORD': 'db-fixture'}))
-
-    def test_pg_keys_are_injected_by_the_pg_runtime_only(self):
-        values = {'MOCK_PG_PAYMENT_KEY': 'payment-fixture', 'MOCK_PG_SETTLEMENT_KEY': 'settlement-fixture',
-                  'MOCK_PG_CONTROL_KEY': 'control-fixture', 'MOCK_PG_DB_PASSWORD': 'db-fixture'}
-        for app in ['auth', 'catalog', 'order', 'payment', 'settlement']:
-            self.assertEqual({}, service_environment(app, values))
 
     def test_preserves_non_secret_runtime_settings_without_mutating_input(self):
         values = {'PATH': '/usr/bin', 'JAVA_HOME': '/jdk', 'SERVER_PORT': '28080',
@@ -89,21 +81,17 @@ class ServiceCredentialsTest(unittest.TestCase):
             'PAYMENT_ORDER_SERVICE_KEY': {'payment', 'order'},
             'PAYMENT_APPROVAL_PAYLOAD_KEY': {'payment'},
             'BFF_CLIENT_SECRET': {'auth', 'web-bff'},
-            'MOCK_PG_PAYMENT_KEY': {'payment', 'mock-pg'},
-            'MOCK_PG_SETTLEMENT_KEY': {'settlement', 'mock-pg'},
-            'MOCK_PG_CONTROL_KEY': {'mock-pg'},
             'DOWNLOAD_STORAGE_SECRET_KEY': {'catalog', 'download'},
         }
         environment = dict(os.environ)
         environment.update({name: 'g5-fixture-' + name.lower() for name in expected})
-        environment.update(MOCK_PG_DB_PASSWORD='g5-db-fixture', MOCK_PG_DB_ROOT_PASSWORD='g5-root-fixture')
         root = Path(__file__).resolve().parents[2]
         result = subprocess.run(['docker', 'compose', '--env-file', '/dev/null',
                                  '-f', 'docker-compose.apps.yml', '-f', 'docker-compose.apps.local.yml',
                                  'config', '--format', 'json'], cwd=root, env=environment,
                                 check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         services = json.loads(result.stdout)['services']
-        self.assertGreaterEqual(len(services), 13)
+        self.assertEqual(12, len(services))
         for name, recipients in expected.items():
             actual = {app for app, definition in services.items() if name in definition.get('environment', {})}
             self.assertEqual(recipients, actual, name)

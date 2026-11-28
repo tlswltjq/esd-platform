@@ -10,7 +10,7 @@
   - `api.listener`: `OrderEventListener`(`OrderPlaced`), `OrderExpiryListener`(`OrderExpired`), `RefundExecutionEventListener`(`RefundExecutionRequested`), 목표 `OrderPaymentResultRejectionListener`(가칭, `OrderPaymentResultRejected`), 목표 `SettlementRefundListener`(가칭, `SettlementRefundRecorded`). 각 리스너는 `*Mapper.from(envelope, payload)`로 봉투·본문·키를 검증해 내부 입력으로 바꾼다. 서비스·도메인은 이벤트 전체를 받지 않는다(AGENTS.md 3절).
   - `api.scheduler`: 위임만 한다. `PendingPaymentScheduler` → `ResolvePayment`, `PaymentApprovalScheduler` → `ResolvePaymentApproval`, `RefundLookupScheduler` → `ResolveRefundLookup`, `RefundRetryScheduler` → `ResolveRefundRetry`, 목표 `ChargeWatchScheduler`(가칭) → `ResolveChargeWatch`(가칭, R16).
   - `core.port`: `PgPaymentApprovalGateway`·`PaymentAttemptLookup`·`RefundCancellationGateway`·`RefundPaymentLookup`(PG), `OrderPaymentAdmissions`(Order 내부 명령 HTTP), 목표 `ProviderNotificationVerifier`·`ProviderNotificationReceipts`(가칭, 지금 `PortOneWebhookVerifier`·`PortOneWebhookReceipts`). 공급자 이름은 port 이름·값에 없다(R22).
-  - `adapter.pg`: 공급자 HTTP·서명·응답 분류·보장 기한 계산. `config`가 주소·키·기한 설정을 바인딩해 adapter에 값만 주입한다.
+  - `adapter.pg`: 공급자 HTTP·서명·응답 분류·보장 기한 계산. `config`가 주소·키·기한 설정을 바인딩해 adapter에 값만 주입한다. 지금은 공급자 adapter를 모두 걷어내고([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)) 외부 호출 없이 바로 승인하는 `ImmediateApprovalPgGateway` 하나만 있다([결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)).
 - 동기 의존: Payment → Order 명령 2개(승인 진행 접수·시도 실패 통지, P1.2-6), Payment → PG(승인·조회·취소), PG → Payment(통지 수신). 플랫폼 design "동기 의존" 표 행 그대로다.
 - 트랜잭션 경계(모든 PG·Order 호출 공통): ① 잠금 트랜잭션에서 대상·lease 확인 → ② 트랜잭션 밖 HTTP → ③ 잠금 트랜잭션에서 lease 소유·상태 재확인 뒤 상태 전이 + Outbox. 잠금 순서는 어디서나 `purchase_payment` → (`payment_approval` | `refund_execution` | `unlinked_charge` | `payment_charge_watch`)다. `payment_order_lifecycle`은 그보다 먼저 잠근다(주문 단위 직렬화, R11.2).
 
@@ -35,7 +35,7 @@
 | `next_failure_lookup_at`·`failure_history_checked_at` | 실패 시도 이력 수집 일정(상태 아님) | — |
 | `pg_paid_amount`·`pg_discount_amount` | PG 결제 구성 | `ck_payment_provider_amounts`(NULL 일치·`PAID`만·합계=amount) |
 | `order_response_kind`·`order_response_event_id` (목표 신설) | Order 반영 응답(`APPLIED` = `OrderPaid`, `REJECTED` = `OrderPaymentResultRejected`)과 그 `eventId` | CHECK 값 2개, 둘 다 NULL이거나 둘 다 값, `PAID`일 때만 `APPLIED`, `uk_purchase_payment_order_response(order_response_event_id)`. 응답 없는 `PAID` 결제를 게이지로 셈([결정 189](../../docs/decisions.md#payment-order-response)) |
-| `pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount` | 옛 PG 비용 사본 — **목표: 삭제** | `ck_payment_pg_fee`. 쓰는 곳은 `SimulatedPgHttpGateway`뿐이라, 그 경로를 없애는 PR(결정 162·T13 또는 PA-T16)에서 칸·CHECK·`Payment` 필드·`PgFee`·`PgResult.fee`를 함께 지운다([결정 192](../../docs/decisions.md#drop-payment-pg-fee)) |
+| `pg_fee_policy_id`·`pg_fee_rate_bps`·`pg_fee_amount` | 옛 PG 비용 사본 — **목표: 삭제** | `ck_payment_pg_fee`. 쓰던 `SimulatedPgHttpGateway`는 걷어냈고 `ImmediateApprovalPgGateway`는 비용을 주지 않아 지금 쓰는 곳이 없다. 칸·CHECK·`Payment` 필드·`PgFee`·`PgResult.fee`는 PA-T16에서 함께 지운다([결정 192](../../docs/decisions.md#drop-payment-pg-fee)) |
 | (목표) `(payment_id, amount)` 유일 키 | 환불 실행 금액 FK 대상 | MC-P1 |
 
 ### `payment_order_lifecycle` (주문 생명주기 사본, V31)
@@ -415,6 +415,8 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 
 모듈을 넘는 것은 플랫폼 I 번호를 링크한다.
 
+PortOne adapter를 HTTP 대역에 붙여 돌리던 통합 테스트(`PaymentApprovalIntegrationTest`·`PortOneWebhookIntegrationTest` 등)와 adapter는 걷어냈다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)). 표에서 이들을 가리키는 칸은 PG를 되살릴 때 다시 채운다.
+
 | ID | 불변식 | 지키는 곳 | 확인 테스트 |
 |---|---|---|---|
 | PI1 | 결제당 진행 중 시도 하나 | DB `uk_payment_approval_active`(V29) | `PaymentApprovalIntegrationTest#ownershipRolesAndChangedOrConcurrentCommandsCannotExposeOrDuplicateTheApproval` |
@@ -444,21 +446,22 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 
 ### core.port (공급자 중립)
 
-| 포트 | 계약 | adapter(지금) |
+| 포트 | 계약 | adapter(걷어내기 전 구현. 지금은 `OrderPaymentAdmissions` 말고 운영 구현 없음) |
 |---|---|---|
 | `PgPaymentApprovalGateway` | 확정 송신(고정 본문·멱등 키), 조회 → `ApprovalObservation`(core 상태 enum·금액·공급자 시도 ID), 결과 `confirmDeadline` | `PortOnePaymentApprovalGateway`, `AdmittedPortOnePgGateway` |
 | `PaymentAttemptLookup` | 실패 시도 이력 → `PgFailedPaymentAttempt`(실패 시각은 값) | `PortOnePaymentAttemptLookup` |
 | `RefundCancellationGateway` | 취소 송신 → 접수/성공/형식 거절/잔액 변화/인증·설정 오류/미확정 분류 결과, `cancellationResendDeadline` | `PortOneRefundCancellationGateway` |
 | `RefundPaymentLookup` | 전액 취소 확인·실패 확인·미취소 확인(`PgRefundConfirmation`·`PgRefundFailureConfirmation`·미취소 판정) | `PortOneRefundPaymentLookup` |
+| `PgGateway` | 결제 재개의 승인 결정(고정 `paymentId` 멱등) | 지금 `ImmediateApprovalPgGateway`(항상 승인, 공급자 값 `SIMULATED`, 비용 없음) |
 | (목표) `ChargeWatchLookup`(가칭) | 끝난 결제의 청구 여부 + `watch_until` | 신설 |
 | `OrderPaymentAdmissions` | Order 접수·실패 통지. Order 장애는 `OrderUnavailable`(가칭)로 PG 장애와 분리 | `HttpOrderPaymentAdmissions`(지금 `PgUnavailable`, MC-P6) |
 | (목표) `ProviderNotificationVerifier`·`ProviderNotificationReceipts` | 서명 검증·통지 접수 | `HmacPortOneWebhookVerifier`·`JdbcPortOneWebhookReceipts` |
 
 ### adapter 메모 (공급자 규칙 — core 계약 아님)
 
-공급자 이름과 공급자 값은 이 절에만 둔다(원칙 ②, R22).
+공급자 이름과 공급자 값은 이 절에만 둔다(원칙 ②, R22). 아래 규칙을 구현하던 PortOne adapter는 걷어냈고([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)), 이 절은 PG를 되살릴 때의 기준으로 남긴다.
 
-- 지금 공급자: PortOne V2 + 토스페이 채널(`tosspay_v2`). 저장된 `provider` 값은 `PORTONE_TEST`이고, 옛 `SIMULATED` 행은 읽기만 한다(결정 104·162). 기준 시뮬레이터는 PortOne 흉내 서버(`tools/verification/support/portone_fake.py`, 결정 141)이며 운영 코드는 주소 설정만 바꿔 붙는다. `simulators/mock-pg`·`SimulatedPgHttpGateway`는 없앤다(결정 162, PA-T15).
+- 걷어내기 전 공급자: PortOne V2 + 토스페이 채널(`tosspay_v2`), 저장된 `provider` 값 `PORTONE_TEST`. 지금 새 결제는 `ImmediateApprovalPgGateway`가 `provider` 값 `SIMULATED`로 확정한다([결정 in-process-pg-approval](../../docs/decisions.md#in-process-pg-approval)). `simulators/mock-pg`·`SimulatedPgHttpGateway`·PortOne 흉내 서버는 없다.
 - 관측 상태 변환: PortOne `READY` → `READY`, `PAY_PENDING` → `PENDING`, `PAID` → `PAID`, `FAILED` → `FAILED`, `CANCELLED`(전액) → `CANCELLED`, 부분 취소는 근거 오류. 변환은 `PortOnePaymentApprovalGateway`. `PAY_PENDING`이 "확정을 기다림"인지는 G7 확인(`[외부 대기]`).
 - 확정 송신 기한: PortOne `Idempotency-Key` 보장 기간 3시간. adapter 설정 키(가칭 `stove.payment.pg.portone.idempotency-window`)로 두고, 첫 준비 시각 + 3시간을 `confirmDeadline`·`cancellationResendDeadline`으로 core에 준다(결정 124·140, MC-P2, (1회차 지적 B7, 판정 전)). core에 `Duration.ofHours(3)`을 두지 않는다.
 - 끝난 결제 감시 기한(`watch_until`): PortOne이 READY 결제를 더 이상 승인할 수 없다고 보장하는 시점. 공급자 문서로 확인 전 `[외부 대기]`(결정 154). 간격 설정도 adapter.
@@ -472,7 +475,7 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 - 실패 종결 미취소 판정(`PgRefundUncancelled`): 결제 `PAID`·`amount.cancelled == 0`·취소 목록이 모두 `FAILED`일 때만 "미취소 확인됨"을 준다.
 - 통지 검증: Standard Webhooks `webhook-id`·`webhook-timestamp`(±5분)·`webhook-signature`(HMAC-SHA256, 회전 중 복수 서명), 원문 64 KiB 제한, 중복 헤더 거절. 종류 `Transaction.*`는 adapter가 "결제 조회 힌트"·"취소 조회 힌트"로 바꾼다. 통지 경로 이름의 `portone`은 중립 경로로 옮긴다(T28·PA-T17, edge·공급자 콘솔 주소 변경 필요).
 - 실패 시도 이력: `/payments/{paymentId}/transactions`를 조회해 스토어·채널·주문·금액을 대조. 공급자 원문 사유는 저장하지 않는다.
-- PG 시각(`requestedAt`·`cancelledAt`·`failedAt`·`paidAt`)은 값으로만 core에 넘긴다. adapter의 같은 비교(`PortOneRefundCancellationGateway.java:131`)도 없앤다(결정 163).
+- PG 시각(`requestedAt`·`cancelledAt`·`failedAt`·`paidAt`)은 값으로만 core에 넘긴다. adapter도 같은 비교를 하지 않는다(결정 163).
 - PG 비용: 승인 응답에 비용이 있어도 core에 넘기지 않는다(결정 165).
 
 ## 설정
@@ -485,9 +488,8 @@ PG 시각을 Payment 시각과 비교하는 지금의 CHECK(V17·V19 `chk_refund
 | `stove.payment.refund.lookup/execution/retry.enabled` | `false` | `RefundLookupConfiguration` 등 | 모든 환경 기본 꺼짐(켜기는 배포 설정). 꺼져 있으면 Order 게이지 "실행 준비 미수신"이 드러낸다(T15) |
 | (목표) 환불 실패 뒤·기한 뒤 조회 간격 시작값·상한 | 60초·10분 | 신설 | 없음(R19.1) |
 | (목표) 청구 감시 간격 | `[외부 대기]` | adapter 설정 | 없음 |
-| `stove.payment.pg.provider`(`PAYMENT_PG_PROVIDER`) | 지금 `SIMULATED`(`PaymentConfiguration.java:65,69` `matchIfMissing=true`) | `config` | 목표: 공급자 설정 하나, 개발·시험은 같은 adapter + 흉내 서버 주소(결정 162, PA-T15) |
-| `MOCK_PG_URI`·`MOCK_PG_PAYMENT_KEY` | — | — | 목표: 삭제(PA-T15) |
-| `PORTONE_API_BASE_URL`·`PORTONE_API_SECRET`·`PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`·`PORTONE_WEBHOOK_SECRET`·`PORTONE_WEBHOOK_URL` | 주소만 기본값 | `PortOneProperties` | 흉내 서버는 주소·키 값만 다름 |
+| `stove.payment.pg.provider`(`PAYMENT_PG_PROVIDER`) | `SIMULATED`(`PaymentConfiguration`의 `matchIfMissing=true`) | `PgProperties` | `SIMULATED`는 `ImmediateApprovalPgGateway`를 조립한다. `PORTONE_TEST`는 PG 포트 구현이 없어 기동하지 않는다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)). 목표: 공급자 설정 하나(결정 162, PA-T15) |
+| `PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`·`PORTONE_WEBHOOK_URL` | 빈 값 | `PortOneProperties` | `PORTONE_TEST` 조립에서만 읽는다. `MOCK_PG_URI`·`MOCK_PG_PAYMENT_KEY`·`PORTONE_API_BASE_URL`·`PORTONE_API_SECRET`·`PORTONE_WEBHOOK_SECRET`은 더 읽지 않는다 |
 | (목표) `stove.payment.pg.portone.idempotency-window` | 3시간 | adapter 설정 | 없음(MC-P2) |
 | `PAYMENT_ORDER_SERVICE_KEY`·`ORDER_URI` | 필수 | `PaymentApprovalProperties` | 없음 |
 | `PAYMENT_APPROVAL_PAYLOAD_KEY` | 필수(32바이트 Base64, 미완료 암호문이 있는 동안 교체 금지) | 같음 | 없음 |

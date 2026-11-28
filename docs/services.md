@@ -9,7 +9,7 @@
 Auth·Gateway의 완료 범위와 검증 기록은 [auth·Gateway/BFF](auth-bff.md),
 Studio의 완료 범위는 [Studio 완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/studio-simplification-plan.md#재작성-완료-기록), Review는 [Review 완료 기록](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/review-simplification-plan.md#재작성-완료-기록)을 본다.
 Catalog·Store·Order·Payment·License·Download·Settlement의 범위와 실행 결과는 각 MVP 완료 기록을 따른다. 신규 구현과 검증은 완료된 열한 모듈의 계약을 기준으로 한다.
-외부 모의 PG는 업무 모듈과 분리된 검증용 공급자이며 완료 모듈 수에 포함하지 않는다.
+PG 어댑터와 외부 모의 PG는 걷어냈다([결정 remove-pg-adapters](decisions.md#remove-pg-adapters)). 아래 Payment·Settlement 절의 PG 호출 계약은 코어에 남은 계약이며, 지금 조립되는 구현은 [PG 어댑터가 없는 동안](#pg-adapters-absent)를 따른다.
 
 읽는 순서는 비즈니스 흐름과 같다 — 크리에이터가 게임을 올리고(A), 이용자가 사고(B), 이용·정산된다(C).
 
@@ -230,12 +230,12 @@ Order의 PRODUCT_SALE_RESTRICTED는 새 승인 접수 전 관리자 제한이다
 |---|---|---|
 | GET | /api/v1/payments?page=0&size=20 | JWT sub 기준 본인 목록 |
 | GET | /api/v1/payments/{orderNo} | 본인 상세, 타인·없는 결제 404 |
-| GET | /api/v1/payments/{orderNo}/checkout | 본인 PENDING/PORTONE_TEST 결제의 공개 SDK 설정. 생성·승인 API가 아님 |
+| GET | /api/v1/payments/{orderNo}/checkout | 본인 PENDING/PORTONE_TEST 결제의 공개 SDK 설정. 생성·승인 API가 아님. `PORTONE_TEST`에서만 조립되며 지금은 제공하지 않음 |
 | GET | /api/v1/payments/{orderNo}/attempt-failures?page=0&size=20 | 본인 실패 시도 이력·수집 상태. no-store, DB 조회만 수행 |
-| POST | /api/v1/payments/webhooks/portone | 설정된 PortOne 서명·스토어 검증 뒤 내구 힌트 접수. 공개 edge가 Payment로 직접 전달 |
+| POST | /api/v1/payments/webhooks/portone | 설정된 PortOne 서명·스토어 검증 뒤 내구 힌트 접수. `PORTONE_TEST`에서만 조립되며 지금은 제공하지 않음(익명 401·MEMBER/ADMIN 403) |
 
 MEMBER 역할이 필요하다. 내부 요청·결과 이벤트 ID와 공급자 거래 ID는 API에 노출하지 않는다.
-provider는 SIMULATED 또는 PORTONE_TEST다. 고객 환불 접수는 Order API를 사용한다. Payment에 고객 취소·승인 결과 주입 API는 없다. ADMIN 전용 `/api/v1/admin/refund-cancellation-holds`는 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`는 장기·귀속 미확정 목록·상세·조사 이력/기록과 PG 재조회 근거 종결(`/{attemptId}/closure`, [결정 127](decisions.md#refund-delay-closure))을 제공한다. 최신 계약과 실행/미적용 범위는 [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)를 따른다. 웹훅은 최종 결제/환불 증명이 아니라 서버 PG 조회를 깨우는 힌트다. 공개 webhook 경로의 서명 검증과 회원 checkout의 JWT 인증을 구분한다.
+provider는 SIMULATED 또는 PORTONE_TEST다. 지금은 `SIMULATED`만 뜨고 `ImmediateApprovalPgGateway`가 외부 호출 없이 모든 결제를 승인한다(비용 미확인). `PORTONE_TEST`는 PG 포트 구현이 없어 기동하지 않으므로 checkout·웹훅·승인 접수(`/approvals`)·근거 종결(`/closure`) API와 환불의 PG 취소·조회는 조립되지 않는다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)). 고객 환불 접수는 Order API를 사용한다. Payment에 고객 취소·승인 결과 주입 API는 없다. ADMIN 전용 `/api/v1/admin/refund-cancellation-holds`는 중단 목록·상세·재개를, `/api/v1/admin/refund-delays`는 장기·귀속 미확정 목록·상세·조사 이력/기록과 PG 재조회 근거 종결(`/{attemptId}/closure`, [결정 127](decisions.md#refund-delay-closure))을 제공한다. 최신 계약과 실행/미적용 범위는 [환불 인계](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)를 따른다. 웹훅은 최종 결제/환불 증명이 아니라 서버 PG 조회를 깨우는 힌트다. 공개 webhook 경로의 서명 검증과 회원 checkout의 JWT 인증을 구분한다.
 
 기본 결제 수신은 OrderPlaced, 결과 발행은 OrderPaymentCompleted/OrderPaymentFailed다.
 입력은 api.listener의 Mapper에서 내부 값으로 변환한다. ReceiveOrderPayment가 원래 요청 전체를 비교하고 PENDING·Inbox를 함께 저장한다.
@@ -245,8 +245,8 @@ PG는 Payment 트랜잭션·행 잠금 밖에서 호출하고 같은 paymentId�
 최종 상태·이벤트 ID·시각은 고정하며 Order 상태는 Order가 결과 검증 뒤 변경한다.
 PortOne의 개별 FAILED는 별도 이력이며 최종 OrderPaymentFailed로 바꾸지 않는다. 같은 orderNo·paymentId·금액의 PENDING checkout으로 재결제한다. 서버가 원구매와 대조한 실패 근거를 V28에 보존하며, 승인·Outbox 커밋 뒤 별도로 수집한다. 이력 조회 실패는 내구 재예약하고 PAID 뒤에도 이력 GET만 재개한다. 종료/만료 정책과 실제 TEST 재결제 전체 검증은 후속이다.
 
-기본 결제는 purchase_payment에 저장한다. 모의 PG의 결정·비용은 독립된 simulators/mock-pg의 전용 MySQL에 저장한다. PortOne 웹훅/환불 실행·취소 예약/중단 이력은 후속 마이그레이션으로 추가했다.
-V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다. 공유 환경 전환은 [별도 절차](../tools/migrations/README.md)를 따른다.
+기본 결제는 purchase_payment에 저장한다. PortOne 웹훅/환불 실행·취소 예약/중단 이력은 후속 마이그레이션으로 추가했다.
+V12는 Payment에 비용 스냅샷만 추가한다. 구 simulated_payment_charge는 이관 근거로 보존하고 신규 결정을 쓰지 않는다.
 환불은 RefundExecutionRequested를 내구 접수한 뒤 고정 attemptId/본문과 최초 준비 3시간 창으로 취소·조회한다. 같은 실행의 재송신/조회 예약과 운영 중단 이력을 별도로 보존한다. 확인된 전액 취소/실행 성공/확정 실패는 결과 이벤트를 발행하며 원 purchase_payment의 PAID는 바꾸지 않는다. 오류별 자동 복구·운영 중단과 실제 TEST 범위는 [환불 계약](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/refund-session-handoff.md)을 따른다.
 Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 두지 않는다. 실제 운영 자금 이동·정산 환불 조정은 후속이다.
 
@@ -300,6 +300,7 @@ Settlement는 PG 명세를 직접 조회하며 Payment에 정산 중계 API를 �
 [실행](../tools/verification/README.md) · [모델](domain/models/settlement.md) · [범위·검증](https://github.com/tlswltjq/esd-platform/blob/0cc225bf/docs/settlement-mvp-plan.md)
 
 기존 OrderPaid를 소비해 판매자 매출·배분·월 마감과 PG 지급 명세 수령 대사를 담당한다.
+`SETTLEMENT_CONSUMPTION_ENABLED`(`stove.settlement.consumption-enabled`, 기본 `false`)가 `true`가 아니면 `ORDER_PAID`·환불 확정 리스너를 등록하지 않아 매출을 기록하지 않고 조회 API만 응답한다. PG를 되살릴 때 켠다([결정 settlement-consumption-off](decisions.md#settlement-consumption-off)).
 PG 비용은 플랫폼 전액 부담이다. 고객 결제액과 기존 주문·결제·이용권 계약은 유지한다.
 
 | 메서드 | 경로 | 권한·동작 |
@@ -314,7 +315,7 @@ PG 비용은 플랫폼 전액 부담이다. 고객 결제액과 기존 주문·�
 | GET | /api/v1/settlements/pg-receipts/{providerSettlementId} | ADMIN 명세·대사 사유 상세 |
 | POST | /api/v1/settlements/pg-receipts/{providerSettlementId}/reconcile | ADMIN 저장 명세 재대사 |
 
-본인 sellerSubject는 JWT sub다. PG 거래/비용·지급 명세는 Settlement 소유 포트와 HTTP 어댑터로 외부 PG에서 직접 조회한다.
+본인 sellerSubject는 JWT sub다. PG 거래/비용·지급 명세는 Settlement 소유 포트로 외부 PG에서 직접 조회하는 계약이다. 지금은 네 PG 포트가 모두 "제공 안 함" 어댑터라 PG 명세 수집 등 PG를 호출하는 작업은 503 `UPSTREAM_UNAVAILABLE`이다.
 상품 소유자는 Catalog 내부 GET으로 확인한다. 업무 모듈 DB를 직접 읽지 않는다.
 매출·월 합계·Inbox를 함께 커밋하고 원본 13개 값 비교·업무 유일 제약으로 중복과 출처 재사용을 검증한다.
 월 마감은 OPEN→CLOSED이며 마감 후 지연 거래는 현재 월에 반영한다. PG 수령은 별도의 명세 접수·대사 상태다.
@@ -387,8 +388,8 @@ Outbox·DLT 운영 기능은 모든 서비스에서 기본 비활성(`stove.mess
 | `BuildStorage` (studio) | — | **`S3BuildStorage`** | `stove.storage.provider` = `s3` |
 | `ReviewBuildStorage` (review) | — | **`S3ReviewBuildStorage`** | 읽기 전용 S3/MinIO 계정 |
 | `BuildStorage` (download) | — | **`S3BuildStorage`** | 읽기 전용 S3/MinIO HEAD·presigned GET |
-| `PgGateway` (payment) | 외부 모의 PG | `SimulatedPgHttpGateway` | PG 주소·Payment 전용 키 |
-| `PgPayments`·`PgSettlements` (settlement) | 외부 모의 PG | 각 HTTP 어댑터 | PG 주소·Settlement 읽기 키 |
+| `PgGateway` (payment) | `ImmediateApprovalPgGateway`(프로세스 안 항상 승인) | 없음 | `PAYMENT_PG_PROVIDER`=`SIMULATED`(기본) |
+| `PgPayments`·`PgSettlements`·`PgRefunds`·`PgStatementSource` (settlement) | `Unavailable*`(503 `UPSTREAM_UNAVAILABLE`) | 없음 | 항상 |
 | `CatalogOwners` (settlement) | — | `CatalogOwnerHttpClient` | Catalog 주소·전용 내부 키 |
 
 ### 실제로 동작하는 것
@@ -399,14 +400,11 @@ Review는 제출 스냅샷의 객체 존재·크기를 확인하고 심사자에
 Download의 `S3BuildStorage`도 읽기 전용 계정으로 HEAD·presigned GET을 사용한다.
 CDN 전략·자체 HMAC 토큰·파일 중계는 제공하지 않는다.
 
-### 외부 모의 PG의 범위
+<a id="pg-adapters-absent"></a>
+### PG 어댑터가 없는 동안
 
-simulators/mock-pg는 실제 HTTP·독립 프로세스·전용 MySQL로 결제 결정·비용·지급 명세를 보존한다.
-승인·거절과 지급 결과는 모의 결과이며 실제 금융 거래·은행 입금·판매자 송금은 수행하지 않는다.
-Payment·Settlement는 각자의 포트와 어댑터를 사용하고 공급자 구현 JAR·DB를 공유하지 않는다.
+`simulators/mock-pg`와 Payment·Settlement의 PG 어댑터(Simulated·PortOne·TossPay)는 걷어냈고 코어(도메인·포트·서비스)만 남겼다([결정 remove-pg-adapters](decisions.md#remove-pg-adapters)).
+Payment는 `ImmediateApprovalPgGateway` 하나로 결제를 확정한다. 실제 금융 거래가 아니며 거절·응답 유실은 검증 전용 설정으로만 만든다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)).
+Settlement는 PG 포트가 "제공 안 함"이고 이벤트 소비를 끈다([결정 settlement-consumption-off](decisions.md#settlement-consumption-off)).
 실제 PG 도입 시 공급자 계약에 따라 결제창·인증·서버 검증·웹훅·비용 확정·정산 자료 수집을 확장한다.
 현재 인터페이스나 URL 교체만으로 연동이 완성된다고 가정하지 않는다.
-
-PG의 Payment·Settlement·제어 키는 서로 다르며 제어 키는 검증 운영자만 사용한다.
-잘못된 키는 401, 유효한 다른 역할 키의 접근은 403이다. 키 미설정·중복이면 PG는 기동하지 않는다.
-Payment에 내장 승인 폴백을 두지 않는다. 기존 결제 결정은 [이관 절차](../tools/migrations/README.md)를 따른다.

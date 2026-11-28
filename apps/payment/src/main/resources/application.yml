@@ -72,10 +72,6 @@ stove:
       enabled: ${PAYMENT_REFUND_RETRY_ENABLED:false}
     pg:
       provider: ${PAYMENT_PG_PROVIDER:SIMULATED}
-      base-url: ${MOCK_PG_URI:http://localhost:8092}
-      api-key: ${MOCK_PG_PAYMENT_KEY:}
-      connect-timeout: 2s
-      read-timeout: 5s
     approval:
       order-base-url: ${ORDER_URI:http://localhost:8082}
       order-service-key: ${PAYMENT_ORDER_SERVICE_KEY:}
@@ -83,11 +79,8 @@ stove:
       order-connect-timeout: 2s
       order-read-timeout: 5s
     portone:
-      base-url: ${PORTONE_API_BASE_URL:https://api.portone.io}
-      api-secret: ${PORTONE_API_SECRET:}
       store-id: ${PORTONE_STORE_ID:}
       channel-key: ${PORTONE_CHANNEL_KEY:}
-      webhook-secret: ${PORTONE_WEBHOOK_SECRET:}
       webhook-url: ${PORTONE_WEBHOOK_URL:}
       connect-timeout: 2s
       read-timeout: 65s

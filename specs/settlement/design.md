@@ -63,14 +63,14 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 
 | ID | 트리거 | 종류 | 진입점 |
 |---|---|---|---|
-| E1 | `OrderPaid` 수신 | 소비 이벤트 | `OrderEventListener` → `SettlementOrderMapper.from` → `RecordPaidSale.execute` |
+| E1 | `OrderPaid` 수신 | 소비 이벤트 | `OrderEventListener` → `SettlementOrderMapper.from` → `RecordPaidSale.execute`. E1·E2 리스너는 `stove.settlement.consumption-enabled=true`일 때만 등록된다([설정](#설정)) |
 | E2 | 금융 확인 사실 수신(`RefundPaymentConfirmed`, 목표 `RefundLateCancellationConfirmed`) | 소비 이벤트 | `RefundEventListener` → `SettlementRefundMapper.from` → `RecordConfirmedRefund.execute` |
 | E3 | 구독 토픽의 그 밖의 `eventType` | 소비 이벤트 | 리스너가 건너뜀 + (그룹, 타입) 지표(P2.3-7, SE-T10) |
 | H1 | `POST /api/v1/settlements/sellers/{sellerSubject}/months/{month}/close` | HTTP(ADMIN) | `CloseSellerMonth.execute` |
 | H2 | `POST /api/v1/settlements/pg-transactions/{paymentId}/refresh` | HTTP(ADMIN) | `SynchronizePgTransaction.execute` |
 | H3 | `POST /api/v1/settlements/pg-statements` | HTTP(ADMIN) | `ReceivePgStatement.execute` |
 | H4 | `POST /api/v1/settlements/pg-statements/{id}/reconcile` | HTTP(ADMIN) | `ReconcilePgStatement.execute` |
-| J1 | 정산 자료 예약 수집 | 예약 작업 | `SynchronizePgStatements`(`S/config/PgStatementConfiguration.java:37`) |
+| J1 | 정산 자료 예약 수집 | 예약 작업 | `SynchronizePgStatements`. 지금은 예약을 조립하지 않아 J1·J2가 돌지 않는다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)) |
 | J2 | 정산 자료 예약 재대사 | 예약 작업 | `ReconcilePendingPgStatements.run` |
 | J3 | 대기 환불 게이지 수집 | 예약 작업(지표) | (목표) 대기 환불 게이지 |
 | O1 | 실패 보관 표 재투입 | 운영자 | 공통(결정 160) → E1·E2와 같은 행 |
@@ -367,19 +367,20 @@ platformNetAmount  = platformFeeAmount − pgFeeAmount          (음수 허용, 
 
 ## 외부 연동과 adapter 메모
 
+지금은 PG adapter(Simulated·PortOne·TossPay)를 모두 걷어내 네 PG 포트(`PgPayments`·`PgSettlements`·`PgRefunds`·`PgStatementSource`)가 항상 `Unavailable*` adapter(503 `UPSTREAM_UNAVAILABLE`)이고 주기 수집도 조립하지 않는다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)). 아래 표의 adapter 칸과 adapter 메모는 PG를 되살릴 때의 목표다.
+
 | 포트(`core.port`, 중립 계약) | adapter(목표) | 용도 |
 |---|---|---|
-| `PgPayments` | PG 승인 근거 읽기 adapter 하나(지금 `PortOnePaymentHttpClient`) | 주문 근거에 연결할 승인 근거·결제 구성·(보고되면) 비용 |
-| `PgRefunds` | PG 취소 근거 읽기 adapter 하나(지금 `PortOneRefundHttpClient`) | 전액 취소·성공 취소 ID·합계·원승인 구성 |
-| `PgStatementSource` | PG 정산 자료 adapter(지금 `TossPayStatementHttpClient`), 자격 미설정이면 `UnavailablePgStatementSource`(503) | 전체 페이지·원본 수집, 수집 가능 판정 |
+| `PgPayments` | PG 승인 근거 읽기 adapter 하나(지금 `UnavailablePgPayments`) | 주문 근거에 연결할 승인 근거·결제 구성·(보고되면) 비용 |
+| `PgRefunds` | PG 취소 근거 읽기 adapter 하나(지금 `UnavailablePgRefunds`) | 전액 취소·성공 취소 ID·합계·원승인 구성 |
+| `PgStatementSource` | PG 정산 자료 adapter(지금 `UnavailablePgStatementSource`, 503) | 전체 페이지·원본 수집, 수집 가능 판정 |
 | `CatalogOwners` | `CatalogOwnerHttpClient` | Catalog 소유자 GET, Settlement 전용 서비스 키 |
-| (제거) `PgSettlements` | `SimulatedPgSettlementHttpClient`·`UnavailablePgSettlements` 제거(결정 162) | — |
-| (제거) 시뮬레이터 분기 | `SimulatedPgPaymentHttpClient`·`UnavailablePgRefunds` 제거(결정 162) | — |
+| (제거 목표) `PgSettlements` | 지금 `UnavailablePgSettlements`. 포트째 제거(결정 162) | — |
 
 adapter 메모(공급자 규칙은 여기에만 둔다 — 원칙 ②, 결정 140):
 
-- **PortOne(승인·취소 읽기)**: `GET /payments/{paymentId}?storeId=...`만 호출한다. 응답의 `V2`·`PAID`·`KRW`·채널 유형 `TEST`·상점/채널 키·거래 ID(`pgTxId`)·총액/실결제/혜택을 엄격히 검증하고(숫자 문자열·누락·중복 JSON 키·후행 JSON·다른 채널 거절), 나노초 시각은 마이크로초로 정규화한다. 접수 대상은 `PAID`·취소액 0의 원승인과, 전액 성공 취소가 검증된 `CANCELLED` 원승인(늦은 원매출)이다. 외부 부담 혜택은 PG 공급자 `TOSSPAY_V2`의 즉시할인·포인트이며 정책 ID `TOSSPAY_EXTERNAL_BENEFIT_V1`로 저장한다. 공급자 식별 값은 지금 `PORTONE_TEST`(저장 값)다. 기본 URL HTTPS `api.portone.io`, 연결 2초·읽기 5초. 계약 검증에서만 루프백을 허용한다. 개발·여정·통합 테스트는 같은 adapter를 기준 시뮬레이터(PortOne 흉내 서버)에 붙인다(결정 141·162).
-- **토스페이(정산 자료)**: `POST /api/v2/settlement-details` 전체 페이지·원본 수집(결정 43). 조회 기준 `DUE`·`SETTLE`. 당일 `DUE` 자료는 KST 10시 이후 공개(그 전은 `NOT_YET_PUBLISHED`), 조회 가능 기간은 오늘부터 1년 전까지(밖은 `OUT_OF_RANGE`), 당일 `SETTLE`은 범위 밖 — 지금 이 규칙이 core `ReceivePgStatement`(`S/core/service/ReceivePgStatement.java:43-47`)에 있다(SE-T1). 거래 키 대응: PortOne `pgTxId` ↔ 토스페이 `payToken`, PortOne `paymentId` ↔ 토스페이 `orderNo`(내부 업무 `orderNo` 아님). 가맹점 키는 `sk_test_`/`sk_live_`이며 PortOne Secret과 서로 바꾸지 않는다. 키는 요청 본문에만 쓰고 원본·설정 문자열·로그에 남기지 않는다. 기본 URL HTTPS `pay.toss.im`, `max-pages` 100, 연결 2초·읽기 10초.
+- **PortOne(승인·취소 읽기, 걷어낸 adapter의 규칙)**: `GET /payments/{paymentId}?storeId=...`만 호출한다. 응답의 `V2`·`PAID`·`KRW`·채널 유형 `TEST`·상점/채널 키·거래 ID(`pgTxId`)·총액/실결제/혜택을 엄격히 검증하고(숫자 문자열·누락·중복 JSON 키·후행 JSON·다른 채널 거절), 나노초 시각은 마이크로초로 정규화한다. 접수 대상은 `PAID`·취소액 0의 원승인과, 전액 성공 취소가 검증된 `CANCELLED` 원승인(늦은 원매출)이다. 외부 부담 혜택은 PG 공급자 `TOSSPAY_V2`의 즉시할인·포인트이며 정책 ID `TOSSPAY_EXTERNAL_BENEFIT_V1`로 저장한다. 공급자 식별 값은 지금 `PORTONE_TEST`(저장 값)다. 기본 URL HTTPS `api.portone.io`, 연결 2초·읽기 5초. 계약 검증에서만 루프백을 허용한다. 개발·여정·통합 테스트는 같은 adapter를 기준 시뮬레이터(PortOne 흉내 서버)에 붙인다(결정 141·162).
+- **토스페이(정산 자료, 걷어낸 adapter의 규칙)**: `POST /api/v2/settlement-details` 전체 페이지·원본 수집(결정 43). 조회 기준 `DUE`·`SETTLE`. 당일 `DUE` 자료는 KST 10시 이후 공개(그 전은 `NOT_YET_PUBLISHED`), 조회 가능 기간은 오늘부터 1년 전까지(밖은 `OUT_OF_RANGE`), 당일 `SETTLE`은 범위 밖 — 지금 이 규칙이 core `ReceivePgStatement`(`S/core/service/ReceivePgStatement.java:43-47`)에 있다(SE-T1). 거래 키 대응: PortOne `pgTxId` ↔ 토스페이 `payToken`, PortOne `paymentId` ↔ 토스페이 `orderNo`(내부 업무 `orderNo` 아님). 가맹점 키는 `sk_test_`/`sk_live_`이며 PortOne Secret과 서로 바꾸지 않는다. 키는 요청 본문에만 쓰고 원본·설정 문자열·로그에 남기지 않는다. 기본 URL HTTPS `pay.toss.im`, `max-pages` 100, 연결 2초·읽기 10초.
 - 연결·조회 실패를 거절·미존재·지급 완료로 바꾸지 않는다. 불완전한 설정·미지원 공급자는 시작 때 거절하고 자동 대체·TEST→LIVE 자동 전환이 없다(R4.7).
 - PG 접근 키는 역할별로 나눈다. Settlement에는 읽기 전용 키만 주고 취소·승인 제어 키는 주지 않는다. 플랫폼 JWT·Gateway ADMIN은 PG 제어 권한이 아니다.
 - Catalog 소유자 GET은 `CATALOG_SETTLEMENT_SERVICE_KEY`(Download 키와 다름)를 쓰고 Gateway에 `/internal/**`을 더하지 않는다.
@@ -388,17 +389,11 @@ adapter 메모(공급자 규칙은 여기에만 둔다 — 원칙 ②, 결정 14
 
 | 설정 키 (환경 변수) | 기본값 | 역할 | 운영·테스트 차이 |
 |---|---|---|---|
-| `stove.settlement.pg-provider` (`SETTLEMENT_PG_PROVIDER`) | 지금 `SIMULATED` → 목표: 키 제거, 승인·취소 adapter는 하나(SE-T2) | 승인·취소 근거 adapter 선택 | 목표: 없음(모든 환경 같은 adapter, 주소만 다름) |
-| `stove.settlement.pg-base-url`·`pg-api-key` (`MOCK_PG_URI`·`MOCK_PG_SETTLEMENT_KEY`) | 지금 `http://localhost:8092` | 시뮬레이터 주소·키 | 목표: 제거(결정 162, SE-T2) |
-| `stove.settlement.portone.base-url`·`api-secret`·`store-id`·`channel-key` | `https://api.portone.io`, 나머지 빈 값(필수 주입) | 승인·취소 읽기 adapter | 기준 시뮬레이터는 `base-url`만 바꾼다. 테스트 전용 기본값 없음 |
+| `stove.settlement.consumption-enabled` (`SETTLEMENT_CONSUMPTION_ENABLED`) | false | `true`일 때만 `ORDER_PAID`·환불 확정 리스너를 등록한다. 꺼져 있으면 매출·환불을 기록하지 않고 조회 API만 응답한다([결정 settlement-consumption-off](../../docs/decisions.md#settlement-consumption-off)) | 같음. PG를 되살릴 때 켠다 |
 | `stove.settlement.catalog-base-url`·`catalog-key` | `http://localhost:8081`, 빈 값 | Catalog 소유자 조회 | 같음 |
-| `stove.settlement.connect-timeout`·`read-timeout` | 2s·5s | 승인·취소·Catalog HTTP 제한 | 같음 |
-| `stove.settlement.tosspay.enabled`·`scheduled-enabled` | false·true | 정산 자료 수집·예약 수집 | 같음 |
-| `stove.settlement.tosspay.base-url`·`api-key`·`merchant-id`·`environment` | `https://pay.toss.im`, 빈 값, 빈 값, `TEST` | 정산 자료 adapter | 같음. `environment=TEST`면 `identity-mapping-verified=true` 금지(`TossPayStatementProperties`) |
-| `stove.settlement.tosspay.portone-store-id`·`portone-channel-key`·`identity-mapping-verified` | 빈 값, 빈 값, false | 대조 범위·거래 키 대응 검증 | 같음. 목표: core 이름은 중립(`provider-store-id` 등)으로 읽되 환경 변수는 호환(SE-T1) |
-| `stove.settlement.tosspay.max-pages`·`poll-delay`·`lookback-days`·타임아웃 | 100·1h·7(1–31)·2s/10s | 수집 범위·주기 | 같음 |
+| `stove.settlement.connect-timeout`·`read-timeout` | 2s·5s | Catalog HTTP 제한 | 같음 |
 | `stove.outbox.relay-enabled` | 지금 false → 목표 true(SE-T3) | 반영 확인 사실 발행 | 같음 |
 | `stove.messaging.ops.enabled` | 지금 false → 목표: 실패 보관 재투입·재발행 ADMIN 경로를 켬(결정 160·161, SE-T3) | 운영 경로 | 같음 |
 | (목표) `republish-owner` | `settlement` | 재발행 허용 이벤트(현행 2종) | 같음 |
 
-운영 계약에 테스트 전용 경로·기본값을 두지 않는다(원칙 ⑦). 지금 남은 예외는 시뮬레이터 공급자 기본값(`SIMULATED`·`MOCK_PG_URI`)이며 SE-T2가 없앤다. 계약 검증의 루프백 허용은 adapter 테스트 구성(`SettlementProviderConfigurationTest`)에만 있다.
+운영 계약에 테스트 전용 경로·기본값을 두지 않는다(원칙 ⑦). PG 공급자·주소·키 설정(`SETTLEMENT_PG_PROVIDER`·`MOCK_PG_*`·`SETTLEMENT_PORTONE_*`·`SETTLEMENT_TOSSPAY_ENABLED`·`TOSSPAY_*`)은 adapter와 함께 없앴다([결정 remove-pg-adapters](../../docs/decisions.md#remove-pg-adapters)).

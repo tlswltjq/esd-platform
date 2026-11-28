@@ -16,7 +16,7 @@ import com.stove.common.contract.Topics;
 import com.stove.common.messaging.outbox.OutboxEvent;
 import com.stove.common.messaging.outbox.OutboxEventRepository;
 import com.stove.common.messaging.outbox.OutboxRecorder;
-import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
+import com.stove.payment.adapter.pg.ImmediateApprovalPgGateway;
 import com.stove.payment.api.listener.OrderEventListener;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderRequest;
@@ -34,7 +34,6 @@ import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.otel.bridge.OtelTracer;
 import io.micrometer.tracing.propagation.Propagator;
 import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.sdk.common.CompletableResultCode;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
@@ -73,7 +72,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @AutoConfigureObservability
 @Import(PaymentTracingIntegrationTest.TracingConfiguration.class)
 @TestPropertySource(properties = {"management.tracing.sampling.probability=1", "management.otlp.tracing.export.enabled=false"})
-class PaymentTracingIntegrationTest extends PaymentIntegrationTestBase {
+class PaymentTracingIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     @Autowired OrderEventListener listener;
     @Autowired ReceiveOrderPayment receive;
     @Autowired ResolvePayment resolve;
@@ -87,7 +86,7 @@ class PaymentTracingIntegrationTest extends PaymentIntegrationTestBase {
     @Autowired RecordingExporter exporter;
     @Autowired SdkTracerProvider provider;
     @Autowired PaymentTracing tracing;
-    @MockitoSpyBean SimulatedPgHttpGateway gateway;
+    @MockitoSpyBean ImmediateApprovalPgGateway gateway;
     @MockitoSpyBean OutboxRecorder outbox;
     @MockitoSpyBean PaymentTraceContexts contexts;
 
@@ -120,9 +119,6 @@ class PaymentTracingIntegrationTest extends PaymentIntegrationTestBase {
         assertResult(b, traceB);
         assertAttempts(a, traceA, 1);
         assertAttempts(b, traceB, 1);
-        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                assertThat(exporter.spans().stream().filter(s -> s.getKind() == SpanKind.CLIENT
-                        && s.getTraceId().equals(traceA)).count()).isGreaterThanOrEqualTo(2));
         assertNoScope();
     }
 
@@ -273,7 +269,6 @@ class PaymentTracingIntegrationTest extends PaymentIntegrationTestBase {
         resolve.execute(paymentId);
         assertResult(input, trace);
         assertAttempts(input, trace, 3);
-        assertThat(ExternalPgProcess.JDBC.queryForObject("SELECT COUNT(*) FROM pg_charge WHERE payment_id=?", Integer.class, paymentId)).isEqualTo(1);
         assertNoScope();
     }
 

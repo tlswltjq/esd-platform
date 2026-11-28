@@ -169,18 +169,16 @@ class TracingVerification:
             "payment": self.sql("SELECT COUNT(*) FROM stove_payment.purchase_payment WHERE status='PAID'"),
             "payment_outbox": self.sql("SELECT COUNT(*) FROM stove_payment.outbox_event WHERE event_type='OrderPaymentCompleted' AND status='SENT'"),
             "order_inbox": self.sql("SELECT COUNT(*) FROM stove_order.processed_event"),
-            "license": self.sql("SELECT COUNT(*) FROM stove_license.product_license"),
-            "pg": self.capture(self.docker + ["exec", "-T", "pg-mysql", "mysql", "-umock_pg", "-p" + self.pg_password,
-                                              "-N", "-e", "SELECT COUNT(*) FROM mock_pg.pg_charge"], stderr=subprocess.DEVNULL)}
+            "license": self.sql("SELECT COUNT(*) FROM stove_license.product_license")}
         if not self.foundation_only:
             checks["trace_metadata"] = self.sql("SELECT COUNT(*) FROM stove_payment.payment_request_trace")
         if any(value != str(count) for value in checks.values()):
-            raise RuntimeError("Purchase/PG/Outbox/license counts disagree: " + str(checks))
+            raise RuntimeError("Purchase/Outbox/license counts disagree: " + str(checks))
         return checks
 
     def set_sampling(self, probability):
         configuration = json.loads(self.compose.read_text())
-        names = [name for name in configuration["services"] if name in self.app_names and name != "mock-pg"]
+        names = [name for name in configuration["services"] if name in self.app_names]
         for name in names:
             configuration["services"][name]["environment"]["TRACING_SAMPLE_RATE"] = str(probability)
         self.compose.write_text(json.dumps(configuration, indent=2))
@@ -191,8 +189,8 @@ class TracingVerification:
             self.run(self.docker + ["up", "-d", "--no-deps", "--force-recreate", "--wait", "--wait-timeout", "180", *group],
                      "sampling-" + str(probability) + "-" + str(index))
 
-    def verify(self, result, app_names, pg_password):
-        self.app_names, self.pg_password = app_names, pg_password
+    def verify(self, result, app_names):
+        self.app_names = app_names
         result["tracing"] = {"images": self.images, "tempo_url": self.tempo_url, "grafana_url": self.grafana_url,
                              "sampling": 1, "phases": self.phases, "trace_policy": "saved-parent-child-span",
                              "revision": self.revision, "dirty": self.dirty,
@@ -200,8 +198,6 @@ class TracingVerification:
                              "tempo_retention": "1h"}
         settings = {}
         for name in app_names:
-            if name == "mock-pg":
-                continue
             container = self.capture(self.docker + ["ps", "-q", name])
             info = json.loads(self.capture(["docker", "inspect", container]))[0]
             environment = dict(entry.split("=", 1) for entry in info["Config"]["Env"])

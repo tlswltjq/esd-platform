@@ -26,8 +26,9 @@ LAG_INTERVAL_SECONDS = 10
 # 예정 시각보다 이만큼 늦게 출발한 요청이 있으면 도착률을 지키지 못한 회차다.
 LATE_START_MS = 100.0
 # 결제 성공 주문 하나마다 한 번씩 처리해야 하는 소비 그룹(구매 여정, 2026-11-16 실측 기준).
+# Settlement 는 PG 조회가 없는 동안 소비하지 않아(결정 settlement-consumption-off) settlement-paid-order 그룹이 없다.
 PURCHASE_GROUPS = ["payment-order-request", "order-payment-result", "license-paid-order",
-                   "order-license-grant", "settlement-paid-order"]
+                   "order-license-grant"]
 
 
 # 메시징을 쓰는 앱(Outbox 발행 또는 Inbox 소비). 재전달 차단 수를 이 앱들에서 읽는다. Store 는 DB(Inbox)가 없어 넣지 않는다.

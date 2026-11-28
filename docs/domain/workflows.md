@@ -62,7 +62,7 @@ Store 시작 전 공개 상품은 Catalog의 기존 목록·상세 HTTP API로 �
 1. Store에서 공개 상품을 찾고 코드·contentVersion·가격을 확인한다.
 2. MEMBER가 requestId·productCode·expectedContentVersion·expectedAmount로 주문한다. 구매자는 JWT sub다.
 3. Order가 Catalog 공개 상세와 기존 PENDING·PAID 주문을 확인한다. 동일 상품의 추가 구매를 차단하고, 가능하면 상품·금액 스냅샷과 OrderPlaced Outbox를 함께 저장한다. 최종 FAILED 이후 새 요청은 허용한다.
-4. Payment가 OrderPlaced를 내부 입력으로 바꾸고 PENDING·Inbox를 접수한다. 주기 실행이 고정 paymentId로 모의 PG를 호출하고 승인·거절 결과·Outbox를 함께 확정한다.
+4. Payment가 OrderPlaced를 내부 입력으로 바꾸고 PENDING·Inbox를 접수한다. 주기 실행이 고정 paymentId로 PgGateway를 호출하고 승인·거절 결과·Outbox를 함께 확정한다. 지금 PgGateway 구현은 외부 호출 없이 바로 승인한다([결정 in-process-pg-approval](../decisions.md#in-process-pg-approval)).
 5. Order가 원래 주문·요청·구매자·금액·통화가 맞는 결과를 PENDING → PAID/FAILED로 반영하고 최초 PAID이면 OrderPaid Outbox를 함께 저장한다.
 6. License가 OrderPaid의 출처 전체를 포함한 상품 보유권 한 행과 Inbox를 함께 저장한다. 같은 원본 재전달은 변화가 없고 다른 주문의 동일 상품은 충돌이다.
 7. 구매자는 내 주문·내 결제와 내 라이브러리에서 상태·권한을 확인한다. 재출시해도 기존 스냅샷은 유지하고 Catalog 중단 중에도 기존 조회·동일 요청 재조회가 가능하다.
@@ -75,7 +75,7 @@ flowchart LR
     O --> C[Catalog 공개 상세 확인]
     C --> F[스냅샷·Outbox 고정]
     F --> P[OrderPlaced]
-    P --> T[Payment 모의 PG·결과 Outbox]
+    P --> T[Payment 승인·결과 Outbox]
     T --> R[Order 결과 검증]
     R --> Q[내 주문 PAID/FAILED 조회]
     R -->|최초 PAID·OrderPaid| L[License 권한·구매 근거·Inbox]
@@ -85,15 +85,17 @@ flowchart LR
 ```
 
 Order PAID와 License 지급 사이에는 이벤트 전달 지연이 있다. 추가 구매 확정 절차는 없다.
-실제 PG·환불·권한 회수·판매자 송금은 후속 범위다. Settlement는 OrderPaid를 받아 PG·Catalog 근거를 대조하고 매출·월 합계를 기록한다. 다운로드 URL 발급은 License·Catalog에 동기 조회하며 파일은 저장소가 전송한다.
+실제 PG·환불·권한 회수·판매자 송금은 후속 범위다. Settlement는 OrderPaid를 받아 PG·Catalog 근거를 대조하고 매출·월 합계를 기록하는 계약이지만, PG가 없는 동안 소비를 꺼 매출을 기록하지 않는다([결정 settlement-consumption-off](../decisions.md#settlement-consumption-off)). 다운로드 URL 발급은 License·Catalog에 동기 조회하며 파일은 저장소가 전송한다.
 [주문 실행](../../tools/verification/README.md) · [Payment 검증](../../tools/verification/README.md) · [License 조회·아홉 앱 검증](../../tools/verification/README.md) · [Download·열 앱 검증](../../tools/verification/README.md)
 
 <a id="operations-flow"></a>
 
 ## 운영자: PG 명세를 대사하고 판매자 금액을 마감한다
 
+아래는 Settlement 코어의 계약이다. PG 어댑터와 외부 모의 PG를 걷어내 지금 1~4는 실행되지 않는다(소비 꺼짐, 명세 수집은 503, [결정 remove-pg-adapters](../decisions.md#remove-pg-adapters)·[결정 settlement-consumption-off](../decisions.md#settlement-consumption-off)).
+
 1. Settlement가 OrderPaid의 전체 입력과 외부 PG 승인·비용, Catalog 불변 소유자를 대조하고 매출·월 합계·Inbox를 함께 저장한다.
-2. 외부 모의 PG가 미정산 승인 거래의 지급 명세를 자기 DB에 확정한다. 검증 운영자가 PG 제어 API로 회차를 실행하며 Payment·Settlement가 생성하지 않는다.
+2. 외부 PG가 미정산 승인 거래의 지급 명세를 확정한다. Payment·Settlement가 생성하지 않는다.
 3. ADMIN이 기존 정산번호로 명세를 수집하면 Settlement가 공급자 원문 값 전체를 보존하고 매출과 대조한다.
 4. 내부 매출이 없으면 REPORTED_PAID로 기다리고 값이 다르면 MISMATCH로 남긴다. 모든 항목이 일치하면 SIMULATED_RECEIVED로 모의 수령을 한 번 확정한다.
 5. ADMIN은 현재 KST 월보다 이전 월을 판매자별로 마감한다. CLOSED 이후 지연 매출은 현재 월에 기록하고 원래 saleMonth를 보존한다.
@@ -162,6 +164,6 @@ PG 회차·플랫폼 모의 수령·판매자 월 마감은 별개의 주기와 
 | U1 | Order는 결과가 연결된 진행에서 왔을 때만 `PAID`로 반영한다 | `Order.apply`는 `PENDING` 주문의 결과에서 기한과 `paymentId`를 대조하지 않는다(대조는 `PAYMENT_PROCESSING`일 때만). 기한이 지났지만 아직 `EXPIRED`가 아닌 `PENDING` 주문, 시도 실패로 `PENDING`에 돌아온 주문(`payment_id` NULL)에 이전 시도의 늦은 `OrderPaymentCompleted`가 오면 `PAID`·`OrderPaid`가 된다. Payment가 그런 결과를 보낼 수 있는지는 확인하지 못했다(order design 찾은 불일치 2) | 불명. 생기면 보유권 지급과 정산 매출이 생긴다. I1은 금액만 보장한다 |
 | U2 | Order·Payment도 다른 모듈의 시각을 거부 조건으로 쓰지 않는다(I9를 네 모듈로 넓힌 것) | 코드에 다른 모듈 시각과의 선후 비교가 남아 있다. Order: `Refund.recordFailure`·`Refund.verifyPaymentIdentity`(`input.occurredAt().isBefore(attempt.getStartedAt())`, Payment 시각 vs Order 시각), `RefundAttempt.recordRefundFailure`(`at.isBefore(input.occurredAt())`), `RefundAttempt.recordRestoration`·`RefundApprovalStop.observeRestored`(License 시각 vs `restorationRequestedAt`), `RefundAttempt.recordCancellationSuccess`, `RefundAttempt.afterRetrySuspension`, `RefundApprovalStop.observeSuspension`. Payment: `ReceiveRefundExecution`(요청 `occurredAt` vs `failureConfirmedAt`). 시계 차이로 재현하지 않았고, 이 비교가 낡은 요청을 막는 다른 역할이 있는지도 확인하지 못했다 | 불명. D-052와 같은 모양이면 호스트 시계가 어긋날 때 환불 완료·실패·복구 이벤트가 재시도 뒤 DLT로 가 환불이 진행 중 상태에 남는다(추정) |
 | U3 | 앞 모듈 기록이 있으면 뒤 모듈이 결국 반영한다(I3·I4의 정방향: `PAID` → 구매 근거·매출, `COMPLETED` → `REFUNDED`·환불 정산) | 반영은 Kafka 전달에 달려 있고 처리 예외는 공통 재시도 뒤 DLT로 간다. DLT에 간 사건을 다시 반영하는 일반 경로, 모듈 사이 누락을 세는 게이지는 이번에 확인하지 못했다(결정 125·129의 지급·정지·복구 대기 게이지는 Order 쪽 일부 단계만 센다) | 누락되면 고객 보유권 미지급, 정산 매출·환불 조정 누락. 검사기는 정방향 차이를 "지연"으로 세고 기준 시간을 따로 정해야 한다(새 정책 필요) |
-| U4 | 환불 완료가 정산에 반영된다(SIMULATED 공급자) | `pg-provider=SIMULATED`면 Settlement가 `RefundPaymentConfirmed`를 `UPSTREAM_UNAVAILABLE`로 거절하고(`UnavailablePgRefunds.require`) 재시도 뒤 DLT로 간다(settlement design 찾은 불일치 7). 의도된 미연동이다 | SIMULATED 환경의 환불은 판매자 월 환불 합계에 들어가지 않아 순액이 크게 남는다. I4의 정산 쪽 검사는 PORTONE_TEST에서만 의미가 있다 |
+| U4 | 환불 완료가 정산에 반영된다(SIMULATED 공급자) | `pg-provider=SIMULATED`면 Settlement가 `RefundPaymentConfirmed`를 `UPSTREAM_UNAVAILABLE`로 거절하고(`UnavailablePgRefunds.require`) 재시도 뒤 DLT로 간다(settlement design 찾은 불일치 7). 의도된 미연동이다 | SIMULATED 환경의 환불은 판매자 월 환불 합계에 들어가지 않아 순액이 크게 남는다. I4의 정산 쪽 검사는 PORTONE_TEST에서만 의미가 있다. 지금은 `pg-provider` 설정이 없고 모든 환경에서 Settlement가 환불 확정을 소비하지 않는다([결정 settlement-consumption-off](../decisions.md#settlement-consumption-off)) |
 | U5 | 늦은 `RefundExecutionSucceeded`(귀속 보강)가 정산에 반영된다 | Settlement 리스너는 `RefundPaymentConfirmed`만 처리한다(`RefundEventListener`). 정산 금액은 첫 금융 확인(`RefundPaymentConfirmed`) 하나로 정해지므로 금액에는 영향이 없어 보이지만, 설계·요구사항(Settlement R6)이 말하는 보강 처리가 필요한지 확인하지 못했다(settlement design 찾은 불일치 6) | 불명. 금액 영향은 없을 것으로 본다(추정) |
 | U6 | 판매자 월 마감은 PG 비용 확정 여부와 무관하고, 운영 경로에서 PG 비용이 확정될 수 있다 | 마감은 비용을 읽지 않는다(I7). 그러나 비용 연결 `MATCHED_REPORTED`는 `PORTONE_LIVE`·`LIVE`를 요구하는데 `PgEvidence`·`PgFunding`이 이를 만들지 못해, 지금 코드로는 토스페이 수집본 비용이 확정될 수 없다(settlement design 찾은 불일치 5). G7 범위다(결정 142) | 지금은 비용이 계속 미확정(NULL)으로 남는다. I7은 지켜진다 |

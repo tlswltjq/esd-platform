@@ -5,7 +5,7 @@ from pathlib import Path
 from support.ports import application_offset
 from support.boot_jars import application_jar
 from support.minio_image import ensure_minio_image
-from support.mock_pg_runtime import MockPgRuntime
+from support import payment_fault
 import secrets
 import os, socket, subprocess, time, urllib.request, tempfile, json
 repo=Path(__file__).resolve().parents[2]
@@ -24,13 +24,12 @@ def free_port():
         return sock.getsockname()[1]
 ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=ensure_minio_image(repo)
-subprocess.run(["./gradlew",":simulators:mock-pg:bootJar",":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:license:writeVerificationClasspath",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
+subprocess.run(["./gradlew",payment_fault.GRADLE_TASK,":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:license:writeVerificationClasspath",":e2e:compileTestJava","--offline","--no-daemon"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; CREATE DATABASE stove_review; CREATE DATABASE stove_catalog; CREATE DATABASE stove_store; CREATE DATABASE stove_order; CREATE DATABASE stove_payment; CREATE DATABASE stove_license; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_review.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_catalog.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_store.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_order.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_payment.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%';\n")
-pg=MockPgRuntime(repo,directory)
 compose=directory/"compose.yml"
 compose.write_text(f"""services:
-{pg.compose_service()}  mysql:
+  mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root1234
@@ -71,7 +70,6 @@ compose.write_text(f"""services:
     command: ["server", "/data"]
 """)
 docker=["docker","compose","-p",project,"-f",str(compose)]
-pg.docker=docker
 compose.chmod(0o600)
 processes=[]
 def ready(url):
@@ -108,7 +106,6 @@ try:
     if denied_delete.returncode==0: raise RuntimeError("Review storage account unexpectedly has delete access")
     subprocess.run(mc+["stat","admin/stove-builds/iam-check.bin"],check=True,stdout=subprocess.DEVNULL)
     print("PASS: Review storage account cannot upload or delete",flush=True)
-    pg.start()
     public=f"http://127.0.0.1:{8080+offset}"
     common=os.environ.copy()
     common["CATALOG_STORE_SERVICE_KEY"]=secrets.token_urlsafe(32)
@@ -131,12 +128,14 @@ try:
         jar=application_jar(repo,app)
         log=open(directory/(app+".log"),"a")
         launch=["-jar",str(jar)]
-        if fault:
+        if fault and app=="payment":
+            launch=payment_fault.launch(repo)
+        elif fault:
             assert app=="license"
             classpath=(repo/"apps/license/build/verification-classpath.txt").read_text()
             launch=["-cp",classpath,"com.stove.license.LicenseServiceApplication",
                 "--spring.main.sources=com.stove.license.verification.LicenseFaultConfiguration"]
-        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=pg.client_environment(app,common),cwd=repo,stdout=log,stderr=subprocess.STDOUT)
+        process=subprocess.Popen(["java","-Xmx256m",*launch,"--server.port="+str(port+offset),*arguments],env=common,cwd=repo,stdout=log,stderr=subprocess.STDOUT)
         processes.append((app,process,log))
     common["CATALOG_BASE_URL"]="http://127.0.0.1:"+str(apps["catalog"]+offset)
     def stop_app(name):
@@ -174,7 +173,6 @@ try:
     def check(query,expected,description):
         wait_for(lambda:sql(query)==str(expected),description,90)
     def restart_payment(arguments=(),fault=False):
-        if pg.decision != "APPROVED": pg.start()
         stop_app("payment"); start_app("payment",arguments,fault); wait_for(apps_ready,"Payment restarted",180)
     def restart_license(arguments=(),fault=False):
         stop_app("license"); start_app("license",arguments,fault); wait_for(apps_ready,"License restarted",180)
@@ -210,7 +208,7 @@ try:
     phase("approvedOrderGrantsOneProduct")
     expect_rights(granted=["approved","repurchase"])
     first=sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")
-    pg.start("DECLINED")
+    restart_payment([payment_fault.DECLINE],True)
     phase("declinedOrderDoesNotAddAPurchase")
     expect_rights(pending=["declined"])
     restart_payment()
@@ -271,9 +269,8 @@ try:
     phase("ownershipSecurityAndStableRightsAfterRestart")
     expect_rights()
     assert sql("SELECT CONCAT(license_id,'|',acquired_at) FROM stove_license.product_license ORDER BY id LIMIT 1")==first
-    # 결정 106: 결제한 주문은 지급한 주문 전부, PG에 간 주문은 거기에 거절된 주문을 더한 것이다(재구매분은 보관함에 남는다).
+    # 결정 106: 결제한 주문은 지급한 주문 전부, 결제를 시도한 주문은 거기에 거절된 주문을 더한 것이다(재구매분은 보관함에 남는다).
     charged=len(granted_orders)+len(order_numbers("declined"))
-    assert pg.sql("SELECT COUNT(*) FROM pg_charge")==str(charged)
     assert sql("SELECT COUNT(*) FROM stove_payment.simulated_payment_charge")=="0"
     # New OrderPaid records never create another payment.
     for table in ["purchase_payment","processed_event","outbox_event"]:
@@ -320,7 +317,6 @@ try:
     print("PASS: nine apps; approval/decline/pending; repurchase kept in storage, failed retry and separate owners; License catch-up; commit-before-ACK halt/redelivery; broker/Catalog outage; Order Outbox restart and original replay; refund completion then repurchase and registration (15 phases)",flush=True)
 
 finally:
-    pg.stop()
     for app,process,log in processes: process.terminate()
     for app,process,log in processes:
         try: process.wait(timeout=40)

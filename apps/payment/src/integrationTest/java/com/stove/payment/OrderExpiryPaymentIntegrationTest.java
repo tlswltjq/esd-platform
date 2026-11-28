@@ -12,7 +12,6 @@ import com.stove.common.contract.EventHeaders;
 import com.stove.common.contract.EventType;
 import com.stove.common.contract.payload.OrderExpiredEvent;
 import com.stove.common.web.error.BusinessException;
-import com.stove.payment.adapter.pg.SimulatedPgHttpGateway;
 import com.stove.payment.core.domain.OrderExpiryInput;
 import com.stove.payment.core.domain.Payment;
 import com.stove.payment.core.domain.PaymentOrderRequest;
@@ -21,6 +20,7 @@ import com.stove.payment.core.domain.PaymentOrderLifecycleRepository;
 import com.stove.payment.core.domain.PaymentRepository;
 import com.stove.payment.core.domain.PaymentStatus;
 import com.stove.payment.core.service.ApplyOrderExpiry;
+import com.stove.payment.core.port.PgGateway;
 import com.stove.payment.core.port.OrderPaymentLifecycleLocks;
 import com.stove.payment.core.service.ReceiveOrderPayment;
 import com.stove.payment.core.service.ResolvePayment;
@@ -44,14 +44,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.MessageListenerContainer;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-@TestPropertySource(properties = {"stove.payment.pg.base-url=http://127.0.0.1:1", "stove.payment.pg.api-key=unused-expiry-fixture"})
 class OrderExpiryPaymentIntegrationTest extends PaymentDatabaseIntegrationTestBase {
-    @MockitoBean(enforceOverride = true) SimulatedPgHttpGateway gateway;
+    @MockitoBean(enforceOverride = true) PgGateway gateway;
     @Autowired ReceiveOrderPayment receive;
     @Autowired ApplyOrderExpiry expire;
     @Autowired OrderPaymentLifecycleLocks locks;

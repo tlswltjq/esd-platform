@@ -163,7 +163,7 @@ def benchmark_runtime(root, method, keep=False):
     offset = 40000
     public = "http://127.0.0.1:" + str(MODULES["web-bff"] + offset)
     ports = {name: free_port() for name in ["mysql", "redis", "kafka", "minio"]}
-    keys = {name: secrets.token_urlsafe(24) for name in ["catalog", "settlement", "payment", "pg-settlement", "control", "pg-db"]}
+    keys = {name: secrets.token_urlsafe(24) for name in ["catalog", "settlement"]}
     env = os.environ.copy()
     env.update(AUTH_ISSUER=public, BFF_PUBLIC_AUTH_BASE=public, BFF_REDIRECT_URI=public + "/login/oauth2/code/gateway-bff",
         AUTH_REVIEWER_PASSWORD="reviewer-password-1234", AUTH_ADMIN_PASSWORD="admin-password-1234")
@@ -181,7 +181,7 @@ def benchmark_runtime(root, method, keep=False):
             data=manifest, method="PUT", headers={"Content-Type": content_type})
         with urllib.request.urlopen(request):
             pass
-    names = [name for name in MODULES if name not in {"web-bff", "gateway", "download", "mock-pg"}]
+    names = [name for name in MODULES if name not in {"web-bff", "gateway", "download"}]
     init = output / "init.sql"
     init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in names))
     minio_image = "localhost/stove/minio:RELEASE.2025-04-22T22-12-26Z-local"  # decision 135
@@ -191,7 +191,6 @@ def benchmark_runtime(root, method, keep=False):
     services = {
         "mysql": {"image": "mysql:8.0", "environment": {"MYSQL_ROOT_PASSWORD": "root1234", "MYSQL_USER": "stove", "MYSQL_PASSWORD": "stove1234"},
                   "volumes": [str(init) + ":/docker-entrypoint-initdb.d/01-schema.sql:ro"]},
-        "pg-mysql": {"image": "mysql:8.0", "environment": {"MYSQL_ROOT_PASSWORD": keys["pg-db"], "MYSQL_DATABASE": "mock_pg", "MYSQL_USER": "mock_pg", "MYSQL_PASSWORD": keys["pg-db"]}},
         "redis": {"image": "redis:7-alpine"},
         "minio": {"image": minio_image, "ports": ["127.0.0.1:" + str(ports["minio"]) + ":9000"],
                   "environment": {"MINIO_ROOT_USER": "stove", "MINIO_ROOT_PASSWORD": "stove1234"}, "command": ["server", "/data"]},
@@ -211,8 +210,7 @@ def benchmark_runtime(root, method, keep=False):
             AUTH_REVIEWER_EMAIL="reviewer-check@review.local", AUTH_REVIEWER_PASSWORD="reviewer-password-1234",
             AUTH_ADMIN_EMAIL="admin-check@review.local", AUTH_ADMIN_PASSWORD="admin-password-1234",
             CATALOG_DOWNLOAD_SERVICE_KEY=keys["catalog"], CATALOG_SETTLEMENT_SERVICE_KEY=keys["settlement"],
-            MOCK_PG_PAYMENT_KEY=keys["payment"], MOCK_PG_SETTLEMENT_KEY=keys["pg-settlement"], MOCK_PG_CONTROL_KEY=keys["control"],
-            MOCK_PG_DB_PASSWORD=keys["pg-db"], STORAGE_PRESIGN_ENDPOINT="http://127.0.0.1:" + str(ports["minio"]),
+            STORAGE_PRESIGN_ENDPOINT="http://127.0.0.1:" + str(ports["minio"]),
             STORAGE_BUCKET="stove-builds", STUDIO_ASSET_PUBLIC_BASE_URL=public,
             REVIEW_STORAGE_ACCESS_KEY="review-reader", REVIEW_STORAGE_SECRET_KEY="isolated-read-only-password",
             DOWNLOAD_STORAGE_ACCESS_KEY="download-reader", DOWNLOAD_STORAGE_SECRET_KEY="isolated-read-only-password")
@@ -227,17 +225,15 @@ def benchmark_runtime(root, method, keep=False):
     compose.write_text(json.dumps({"services": services}, indent=2))
     compose.chmod(0o600)
     docker = ["docker", "compose", "-p", project, "-f", str(compose)]
-    infra = ["mysql", "pg-mysql", "redis", "kafka", "minio"]
+    infra = ["mysql", "redis", "kafka", "minio"]
     succeeded = False
     try:
         run(docker + ["up", "-d", *infra], source, output / "infra-up.log")
         wait(lambda: ready("http://127.0.0.1:" + str(ports["minio"]) + "/minio/health/ready"), "MinIO")
         def mysql_ready(name):
-            password = "root1234" if name == "mysql" else keys["pg-db"]
-            return subprocess.run(docker + ["exec", "-T", "-e", "MYSQL_PWD=" + password, name, "mysql", "-h127.0.0.1", "-uroot", "-e", "SELECT 1"],
+            return subprocess.run(docker + ["exec", "-T", "-e", "MYSQL_PWD=root1234", name, "mysql", "-h127.0.0.1", "-uroot", "-e", "SELECT 1"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-        for name in ["mysql", "pg-mysql"]:
-            wait(lambda: mysql_ready(name), name)
+        wait(lambda: mysql_ready("mysql"), "mysql")
         mc = docker + ["exec", "-T", "minio", "mc"]
         for arguments in [["alias", "set", "admin", "http://localhost:9000", "stove", "stove1234"], ["mb", "admin/stove-builds"]]:
             subprocess.run(mc + arguments, check=True, stdout=subprocess.DEVNULL)
@@ -254,7 +250,7 @@ def benchmark_runtime(root, method, keep=False):
         readiness = {}
         # Store's initial snapshot requires a ready Catalog. Limit simultaneous JVM
         # startup on four cores so a 3s DB connect timeout does not measure CPU starvation.
-        groups = [["mock-pg", "auth", "gateway", "web-bff"], ["studio", "review", "catalog"],
+        groups = [["auth", "gateway", "web-bff"], ["studio", "review", "catalog"],
                   ["store", "order", "payment"], ["license", "download", "settlement"]]
         for index, group in enumerate(groups):
             run(docker + ["up", "-d", *group], source, output / ("apps-up-" + str(index) + ".log"))

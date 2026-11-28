@@ -9,6 +9,5 @@
 | `payment/payment-transition.sql` | 구 Payment 쓰기·릴레이 중지 후 구 Outbox 보존·격리. Kafka 시작점 별도 점검 |
 | `license/license-merge-preflight.sql` | Order V10·License V4 전환 전 읽기 전용 점검. 현재 스키마에 그대로 실행하지 않음 |
 | `store/store-schema.sql` | 기존 개발 DB에 Store 스키마·권한 추가 |
-| `mock-pg/migrate.py` | Payment V11 내장 PG 결정의 외부 PG 복사. 쓰기 중지, 기존 행 일치 확인, 비용 미산정 유지 |
 
-각 모듈 guide의 전환 절차와 SQL 헤더를 먼저 확인한다. `python3 tools/migrations/mock-pg/migrate.py --help`로 입력을 확인한다. PG 이관은 환경 변수 `SOURCE_MYSQL_PASSWORD`, `TARGET_MYSQL_PASSWORD`를 사용한다. 이번 정리에서는 실제 자료 전환을 실행하지 않는다.
+각 모듈 guide의 전환 절차와 SQL 헤더를 먼저 확인한다. 이번 정리에서는 실제 자료 전환을 실행하지 않는다.

@@ -4,7 +4,6 @@
 from pathlib import Path
 from support.ports import application_offset
 from support.minio_image import ensure_minio_image
-from support.mock_pg_runtime import MockPgRuntime
 from support.service_credentials import credential_names, service_environment
 from support.boot_jars import application_jar
 from support.output_root import output_root
@@ -32,13 +31,12 @@ def free_port():
         return sock.getsockname()[1]
 ports={name:free_port() for name in ["mysql","redis","kafka","minio"]}
 minio_image=ensure_minio_image(repo)
-subprocess.run(["./gradlew",":simulators:mock-pg:bootJar",":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:download:bootJar",":apps:settlement:bootJar",":e2e:compileTestJava","--offline","--no-daemon","--max-workers=2"],check=True,cwd=repo)
+subprocess.run(["./gradlew",":apps:auth:bootJar",":apps:web-bff:bootJar",":apps:gateway:bootJar",":apps:studio:bootJar",":apps:review:bootJar",":apps:catalog:bootJar",":apps:store:bootJar",":apps:order:bootJar",":apps:payment:bootJar",":apps:license:bootJar",":apps:download:bootJar",":apps:settlement:bootJar",":e2e:compileTestJava","--offline","--no-daemon","--max-workers=2"],check=True,cwd=repo)
 init=directory/"init.sql"
 init.write_text("CREATE DATABASE stove_auth; CREATE DATABASE stove_studio; CREATE DATABASE stove_review; CREATE DATABASE stove_catalog; CREATE DATABASE stove_store; CREATE DATABASE stove_order; CREATE DATABASE stove_payment; CREATE DATABASE stove_license; CREATE DATABASE stove_settlement; GRANT ALL PRIVILEGES ON stove_auth.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_studio.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_review.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_catalog.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_store.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_order.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_payment.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_license.* TO 'stove'@'%'; GRANT ALL PRIVILEGES ON stove_settlement.* TO 'stove'@'%';\n")
-pg=MockPgRuntime(repo,directory)
 compose=directory/"compose.yml"
 compose.write_text(f"""services:
-{pg.compose_service()}  mysql:
+  mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root1234
@@ -79,7 +77,6 @@ compose.write_text(f"""services:
     command: ["server", "/data"]
 """)
 docker=["docker","compose","-p",project,"-f",str(compose)]
-pg.docker=docker
 compose.chmod(0o600)
 processes=[]
 (directory/"containers-before.txt").write_text(subprocess.check_output(["docker","ps","--format","{{.ID}} {{.Names}}"],text=True))
@@ -121,12 +118,10 @@ try:
     subprocess.run(mc+["admin","policy","attach","admin","review-build-read","--user","download-reader"],check=True,stdout=subprocess.DEVNULL)
 
     os.environ['SERVER_ADDRESS']='127.0.0.1'
-    pg.start()
     public=f"http://127.0.0.1:{8080+offset}"
     service_key=secrets.token_urlsafe(32)
     settlement_service_key=secrets.token_urlsafe(32)
     common=os.environ.copy()
-    common.update(PAYMENT_PG_PROVIDER='SIMULATED',SETTLEMENT_TOSSPAY_ENABLED='false')
     common["CATALOG_STORE_SERVICE_KEY"]=secrets.token_urlsafe(32)
     common["CATALOG_ORDER_SERVICE_KEY"]=secrets.token_urlsafe(32)
     common['PAYMENT_ORDER_SERVICE_KEY']=secrets.token_urlsafe(32)
@@ -146,7 +141,7 @@ try:
     credential_recipients={}
     def start_app(app,arguments=(),fault=False):
         port=apps[app]
-        app_environment=pg.client_environment(app,service_environment(app,common))
+        app_environment=service_environment(app,common)
         if app in {"catalog","settlement"}: app_environment["CATALOG_SETTLEMENT_SERVICE_KEY"]=settlement_service_key
         credential_recipients[app]=credential_names(app_environment)
         (directory/'credential-recipients.json').write_text(json.dumps(credential_recipients,indent=2))
@@ -197,7 +192,6 @@ try:
     runpy.run_path(str(repo/"tools/verification/support/gateway_ownership.py"),
                   init_globals={"base":public,"sql":sql,"directory":directory})
 finally:
-    pg.stop()
     for app,process,log in processes: process.terminate()
     for app,process,log in processes:
         try: process.wait(timeout=40)

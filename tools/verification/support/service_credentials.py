@@ -18,14 +18,13 @@ _ALLOWED = {
                                              'CATALOG_DOWNLOAD_STORAGE_SECRET_KEY'},
     'store': _DB | {'CATALOG_STORE_SERVICE_KEY'},
     'order': _DB | {'CATALOG_ORDER_SERVICE_KEY', 'PAYMENT_ORDER_SERVICE_KEY'},
-    'payment': _DB | {'PAYMENT_ORDER_SERVICE_KEY', 'PAYMENT_APPROVAL_PAYLOAD_KEY',
-                      'PORTONE_API_SECRET', 'PORTONE_WEBHOOK_SECRET'},
+    'payment': _DB | {'PAYMENT_ORDER_SERVICE_KEY', 'PAYMENT_APPROVAL_PAYLOAD_KEY'},
     'license': _DB,
     'download': _READER | {'CATALOG_DOWNLOAD_SERVICE_KEY'},
-    # Settlement's PortOne secret is named apart from Payment's (docker-compose.settlement-portone.yml).
-    'settlement': _DB | {'CATALOG_SETTLEMENT_SERVICE_KEY', 'SETTLEMENT_PORTONE_API_SECRET'},
+    'settlement': _DB | {'CATALOG_SETTLEMENT_SERVICE_KEY'},
 }
-_PREFIXES = ('CATALOG_', 'PAYMENT_', 'MOCK_PG_', 'PORTONE_', 'SETTLEMENT_PORTONE_', 'AUTH_', 'BFF_',
+# PORTONE_ stays a credential prefix: a leftover PG secret in the shell must not reach any app (결정 remove-pg-adapters).
+_PREFIXES = ('CATALOG_', 'PAYMENT_', 'PORTONE_', 'AUTH_', 'BFF_',
              'STORAGE_', 'REVIEW_STORAGE_', 'DOWNLOAD_STORAGE_')
 
 

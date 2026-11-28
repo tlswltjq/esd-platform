@@ -9,7 +9,7 @@
   앱끼리는 프로젝트 의존이 없지만, ``common:test``의 배포 계약 테스트가 모든 앱의 ``application.yml``을 읽는다
   (``common/test/build.gradle``의 ``inputs.files``, PR #208 R1).
 - 이름 바꾸기는 옛 경로와 새 경로를 둘 다 본다(``--no-renames``, PR #208 R2).
-- 그 밖의 경로(``common/``, 빌드 설정, ``simulators/``, ``infra/``, ``tools/``, ``.github/``, ``e2e/`` 등)가 하나라도 있으면 전체.
+- 그 밖의 경로(``common/``, 빌드 설정, ``infra/``, ``tools/``, ``.github/``, ``e2e/`` 등)가 하나라도 있으면 전체.
 - 변경 목록이 비었으면(얻지 못했으면) 전체.
 
 예: ``python3 -I -B tools/ci/build_scope.py --event pull_request --base HEAD^1 >> "$GITHUB_OUTPUT"``

@@ -3,7 +3,6 @@ package com.stove.payment;
 import static com.stove.payment.PaymentFixtures.id;
 import static com.stove.payment.PaymentFixtures.request;
 import static com.stove.payment.PortOneFixtures.CHANNEL;
-import static com.stove.payment.PortOneFixtures.SECRET;
 import static com.stove.payment.PortOneFixtures.STORE;
 import static com.stove.payment.RefundFixtures.execution;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +36,12 @@ import com.stove.payment.core.domain.RefundExecutionRepository;
 import com.stove.payment.core.domain.RefundExecutionStatus;
 import com.stove.payment.core.domain.RefundLookupResult;
 import com.stove.payment.core.port.RefundPaymentLookup;
+import com.stove.payment.core.port.PgGateway;
+import com.stove.payment.core.port.PgPaymentApprovalGateway;
+import com.stove.payment.core.port.PaymentAttemptLookup;
+import com.stove.payment.core.port.RefundCancellationGateway;
+import com.stove.payment.core.port.PortOneWebhookVerifier;
+import com.stove.payment.core.port.PortOneWebhookReceipts;
 import com.stove.payment.core.service.ReadRefundDelays;
 import com.stove.payment.core.service.ReceiveRefundExecution;
 import com.stove.payment.core.service.RecordRefundCancellationPreparation;
@@ -87,10 +92,7 @@ class RefundDelayClosureIntegrationTest extends PaymentDatabaseIntegrationTestBa
     private static final Instant DELAY = BASE.plusSeconds(10800);
 
     @DynamicPropertySource static void portone(DynamicPropertyRegistry registry) {
-        registry.add("stove.payment.portone.base-url", () -> "http://127.0.0.1:9");
-        registry.add("stove.payment.portone.api-secret", () -> "fixture-api-secret");
         registry.add("stove.payment.portone.store-id", () -> STORE); registry.add("stove.payment.portone.channel-key", () -> CHANNEL);
-        registry.add("stove.payment.portone.webhook-secret", () -> SECRET);
         registry.add("stove.payment.portone.webhook-url", () -> "https://payment-test.example/api/v1/payments/webhooks/portone");
         registry.add("stove.payment.approval.order-base-url", () -> "http://127.0.0.1:9");
         registry.add("stove.payment.approval.order-service-key", () -> "fixture-order-service-key");
@@ -108,6 +110,13 @@ class RefundDelayClosureIntegrationTest extends PaymentDatabaseIntegrationTestBa
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @MockitoBean RefundPaymentLookup lookup;
+    // 결정 remove-pg-adapters: 아래 포트는 운영 구현이 없어 PORTONE_TEST 조립에 대역을 넣는다. 이 테스트는 호출하지 않는다.
+    @MockitoBean PgGateway pgGateway;
+    @MockitoBean PgPaymentApprovalGateway approvalGateway;
+    @MockitoBean PaymentAttemptLookup attemptLookup;
+    @MockitoBean RefundCancellationGateway cancellationGateway;
+    @MockitoBean PortOneWebhookVerifier webhookVerifier;
+    @MockitoBean PortOneWebhookReceipts webhookReceipts;
     @MockitoBean Clock clock;
     @LocalServerPort int port;
 

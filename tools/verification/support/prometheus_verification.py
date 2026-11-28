@@ -12,7 +12,7 @@ import yaml
 class PrometheusVerification:
     def __init__(self, root, output, services, ports, capture):
         self.root, self.output, self.capture = root, output, capture
-        self.apps = set(ports) - {"mock-pg"}
+        self.apps = set(ports)
         self.targets = {f"{name}:{ports[name]}" for name in self.apps}
         self.original_volumes = set(capture(["docker", "volume", "ls", "-q"]).splitlines())
         services["prometheus"] = {

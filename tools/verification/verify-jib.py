@@ -15,7 +15,6 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-import uuid
 import xml.etree.ElementTree as ET
 
 from support.ports import application_offset
@@ -28,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # web-bff is the only browser entrance (decision 224); the internal API gateway (8093) gets no host port.
 PORTS = {"auth": 8091, "web-bff": 8080, "gateway": 8093, "studio": 8085, "review": 8086,
          "catalog": 8081, "store": 8087, "order": 8082, "payment": 8083,
-         "license": 8084, "download": 8088, "settlement": 8089, "mock-pg": 8092}
+         "license": 8084, "download": 8088, "settlement": 8089}
 
 
 def capture(command, **kwargs):
@@ -122,11 +121,9 @@ def main():
     else:
         raise RuntimeError("No isolated MinIO port available")
     public = "http://127.0.0.1:" + str(PORTS["web-bff"] + offset)
-    keys = {name: secrets.token_urlsafe(32) for name in ["pg-db", "payment", "settlement", "control", "catalog", "download", "store", "order-catalog"]}
+    keys = {name: secrets.token_urlsafe(32) for name in ["catalog", "download", "store", "order-catalog"]}
     environment = os.environ.copy()
-    environment.update(MOCK_PG_DB_PASSWORD=keys["pg-db"], MOCK_PG_DB_ROOT_PASSWORD=keys["pg-db"],
-                       MOCK_PG_PAYMENT_KEY=keys["payment"], MOCK_PG_SETTLEMENT_KEY=keys["settlement"],
-                       MOCK_PG_CONTROL_KEY=keys["control"], CATALOG_SETTLEMENT_SERVICE_KEY=keys["catalog"],
+    environment.update(CATALOG_SETTLEMENT_SERVICE_KEY=keys["catalog"],
                        CATALOG_DOWNLOAD_SERVICE_KEY=keys["download"], CATALOG_STORE_SERVICE_KEY=keys["store"], CATALOG_ORDER_SERVICE_KEY=keys["order-catalog"])
     if args.prometheus_only:
         environment.update(DB_USER="stove", DB_PASSWORD="stove1234", BFF_CLIENT_SECRET=secrets.token_urlsafe(32),
@@ -135,7 +132,7 @@ def main():
                            STORAGE_ACCESS_KEY="stove", STORAGE_SECRET_KEY="stove1234")
     compose_options = ["--env-file", "/dev/null"] if args.prometheus_only else []
     base = json.loads(capture(["docker", "compose", *compose_options, "-f", "docker-compose.apps.yml", "config", "--format", "json"], env=environment))
-    schemas = [name for name in PORTS if name not in {"web-bff", "gateway", "download", "mock-pg"}]
+    schemas = [name for name in PORTS if name not in {"web-bff", "gateway", "download"}]
     init = output / "init.sql"
     init.write_text("\n".join("CREATE DATABASE stove_" + name + "; GRANT ALL PRIVILEGES ON stove_" + name + ".* TO 'stove'@'%';" for name in schemas)
                     + ("\n" + recovery.init_sql() if recovery else ""))
@@ -145,9 +142,6 @@ def main():
         "mysql": {"image": "mysql:8.0", "networks": ["app"],
                   "environment": {"MYSQL_ROOT_PASSWORD": "root1234", "MYSQL_USER": "stove", "MYSQL_PASSWORD": "stove1234"},
                   "volumes": [str(init) + ":/docker-entrypoint-initdb.d/01-schema.sql:ro"], "healthcheck": db_health},
-        "pg-mysql": {"image": "mysql:8.0", "networks": ["pg"],
-                     "environment": {"MYSQL_ROOT_PASSWORD": keys["pg-db"], "MYSQL_DATABASE": "mock_pg", "MYSQL_USER": "mock_pg", "MYSQL_PASSWORD": keys["pg-db"]},
-                     "healthcheck": db_health},
         "redis": {"image": "redis:7-alpine", "networks": ["app"]},
         "minio": {"image": minio_image, "networks": ["app"], "ports": ["127.0.0.1:" + str(minio_port) + ":9000"],
                   "environment": {"MINIO_ROOT_USER": "stove", "MINIO_ROOT_PASSWORD": "stove1234"},
@@ -171,9 +165,6 @@ def main():
         if "build" in configured:
             raise RuntimeError("Default Compose still builds " + name)
         app_env = dict(configured["environment"])
-        if args.prometheus_only:
-            app_env.update(PAYMENT_PG_PROVIDER="SIMULATED", SETTLEMENT_PG_PROVIDER="SIMULATED",
-                           SETTLEMENT_TOSSPAY_ENABLED="false")
         app_env.update(JWT_ISSUER_URI=public, TRACING_SAMPLE_RATE="1" if args.tracing else "0")
         if name in {"auth", "web-bff"}:
             app_env.update(BFF_PUBLIC_AUTH_BASE=public, BFF_REDIRECT_URI=public + "/login/oauth2/code/gateway-bff")
@@ -195,7 +186,7 @@ def main():
         services[name] = {"image": configured["image"], "environment": app_env,
                           "healthcheck": configured["healthcheck"], "stop_grace_period": configured["stop_grace_period"],
                           "ports": ["127.0.0.1:" + str(port + offset) + ":" + str(port)], "mem_limit": "768m",
-                          "networks": ["app", "pg"] if name == "mock-pg" else ["app"]}
+                          "networks": ["app"]}
         if name == "gateway":
             del services[name]["ports"]
     prometheus = None
@@ -207,7 +198,7 @@ def main():
         from support.tracing_verification import TracingVerification
         tracing = TracingVerification(ROOT, output, services, offset, run, capture, args.foundation_only)
     compose = output / "compose.json"
-    configuration = {"services": services, "networks": {"app": {}, "pg": {"internal": True}}}
+    configuration = {"services": services, "networks": {"app": {}}}
     if tracing:
         configuration["volumes"] = {"tempo-data": {}}
     compose.write_text(json.dumps(configuration, indent=2))
@@ -249,7 +240,7 @@ def main():
              "-p", project, "-f", str(compose), "--timeout", "30", *selected], "stack-status" + suffix)
 
     try:
-        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "pg-mysql", "redis", "kafka", "minio"],
+        run(docker + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "240", "mysql", "redis", "kafka", "minio"],
             "infra")
         provision_storage()
         denied = subprocess.run(mc + ["pipe", "reader/stove-builds/forbidden.zip"], input=b"forbidden", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -265,39 +256,37 @@ def main():
         for name in PORTS:
             container_id = capture(docker + ["ps", "-q", name])
             info = json.loads(capture(["docker", "inspect", container_id]))[0]
-            pg_credentials = {entry.split("=", 1)[0] for entry in info["Config"]["Env"] if entry.startswith("MOCK_PG_")}
-            allowed = {"mock-pg": {"MOCK_PG_DB_HOST", "MOCK_PG_DB_PORT", "MOCK_PG_DB_NAME", "MOCK_PG_DB_USER", "MOCK_PG_DB_PASSWORD",
-                                   "MOCK_PG_PAYMENT_KEY", "MOCK_PG_SETTLEMENT_KEY", "MOCK_PG_CONTROL_KEY"},
-                       "payment": {"MOCK_PG_URI", "MOCK_PG_PAYMENT_KEY"}, "settlement": {"MOCK_PG_URI", "MOCK_PG_SETTLEMENT_KEY"}}
-            if not pg_credentials.issubset(allowed.get(name, set())):
-                raise RuntimeError("PG credentials exceeded application role: " + name)
-            image_output = ROOT / ("simulators/mock-pg" if name == "mock-pg" else "apps/" + name) / "build"
+            # 결정 remove-pg-adapters: PG 어댑터가 없는 동안 어떤 앱도 PG 주소·비밀 값을 받지 않는다.
+            pg_settings = sorted(entry.split("=", 1)[0] for entry in info["Config"]["Env"]
+                                 if entry.startswith(("MOCK_PG_", "PORTONE_", "TOSSPAY_")))
+            if pg_settings:
+                raise RuntimeError("PG settings reached " + name + ": " + ", ".join(pg_settings))
+            image_output = ROOT / "apps" / name / "build"
             # Docker image stores expose either the config ID or the manifest digest.
             expected = {(image_output / filename).read_text().strip() for filename in ["jib-image.id", "jib-image.digest"]}
             if info["Image"] not in expected or info["State"]["Health"]["Status"] != "healthy" or info["RestartCount"] != 0:
                 raise RuntimeError("Jib image/health mismatch for " + name)
             if capture(docker + ["exec", "-T", name, "id", "-u"]) != "100" or capture(docker + ["exec", "-T", name, "id", "-g"]) != "101":
                 raise RuntimeError("Unexpected application user: " + name)
-            app_timezone = "UTC" if name == "mock-pg" else "Asia/Seoul"
+            app_timezone = "Asia/Seoul"
             command_line = capture(docker + ["exec", "-T", name, "sh", "-c", "tr '\\000' ' ' < /proc/1/cmdline"])
             if "java" not in command_line or "-Duser.timezone=" + app_timezone not in command_line or "-XX:MaxRAMPercentage=75" not in command_line:
                 raise RuntimeError("JVM is not PID 1 with expected options: " + name)
             result["applications"][name] = {"image_id": info["Image"], "healthy": True, "user": "100:101", "timezone": app_timezone, "restart_count": 0}
         print("PASS: " + str(len(PORTS)) + " Jib images, health, user, JVM options and PID 1", flush=True)
 
-        evidence = output / "settlement.json"
-        def phase(name):
-            run(["./gradlew", ":e2e:settlementE2eTest", "--no-daemon", "--console=plain",
-                 "-Dstove.e2e.port-offset=" + str(offset), "-Dstove.e2e.settlement-phase=" + name,
-                 "-Dstove.e2e.settlement-evidence=" + str(evidence)], name)
-            source = ROOT / "e2e/build/test-results/settlementE2eTest"
-            copied = output / ("junit-" + name)
+        def phase(name, label=None):
+            label = label or name
+            run(["./gradlew", ":e2e:purchaseE2eTest", "--no-daemon", "--console=plain",
+                 "-Dstove.e2e.port-offset=" + str(offset), "-Dstove.e2e.purchase-phase=" + name], label)
+            source = ROOT / "e2e/build/test-results/purchaseE2eTest"
+            copied = output / ("junit-" + label)
             shutil.copytree(source, copied)
             suites = [ET.parse(path).getroot() for path in copied.glob("TEST-*.xml")]
             if sum(int(suite.get("tests", 0)) for suite in suites) != 1 or any(int(suite.get(key, 0)) for suite in suites for key in ["failures", "errors", "skipped"]):
-                raise RuntimeError("Expected one executed E2E check: " + name)
-            result["phases"].append(name)
-            print("PASS: " + name, flush=True)
+                raise RuntimeError("Expected one executed E2E check: " + label)
+            result["phases"].append(label)
+            print("PASS: " + label, flush=True)
         if prometheus:
             prometheus.verify(docker, run, result)
         elif args.measure:
@@ -318,30 +307,24 @@ def main():
                 raise RuntimeError("Invalid measurement run: " + "; ".join(result["measurement"]["validity"]["reasons"]))
             print("PASS: messaging measurement " + json.dumps(result["measurement"], ensure_ascii=False), flush=True)
         elif tracing:
-            tracing.verify(result, list(PORTS), keys["pg-db"])
+            tracing.verify(result, list(PORTS))
         else:
             if recovery:
                 recovery.bind(docker, run, project)
                 recovery.start_copies()
-                # The dump holds schemas and seed accounts; every purchase, payment, license and
-                # settlement row below exists only in the streamed binlogs and the object mirror.
+                # The dump holds schemas and seed accounts; every purchase, payment and license
+                # row below exists only in the streamed binlogs and the object mirror.
                 recovery.full_backup()
-            phase("initialPurchasesAndDownloads")
-            phase("allocationAndOwnershipAreIsolated")
+            phase("purchasesAndDownloads")
             if recovery:
-                recovery.lose_and_restore([name for name in PORTS if name != "mock-pg"],
+                recovery.lose_and_restore(list(PORTS),
                                           lambda: provision_storage("-replacement"),
                                           lambda: start_applications("-after-restore"))
                 result["backup_restore"] = recovery.evidence
-            request = urllib.request.Request("http://127.0.0.1:" + str(PORTS["mock-pg"] + offset) + "/test-support/v1/settlement-runs",
-                                             data=json.dumps({"requestId": str(uuid.uuid4())}).encode(),
-                                             headers={"X-Pg-Api-Key": keys["control"], "Content-Type": "application/json"})
-            with urllib.request.urlopen(request, timeout=20) as response:
-                report = json.load(response)
-            state = json.loads(evidence.read_text())
-            state["activeReceiptId"] = report["providerSettlementId"]
-            evidence.write_text(json.dumps(state))
-            phase("collectsPayoutAndRetriesWithoutDuplicatingAmounts")
+                # 복구한 스택에서 새 구매·지급·다운로드가 이어지는지 본다.
+                phase("purchasesAndDownloads", "purchasesAndDownloads-after-restore")
+            # 결정 settlement-consumption-off: Settlement는 조회만 받고 매출을 기록하지 않는다.
+            phase("settlementServesReadsButRecordsNoSale")
         run(docker + ["stop", *PORTS], "stop")
         for name in PORTS:
             container_id = capture(docker + ["ps", "-aq", name])
@@ -383,9 +366,9 @@ def main():
         if missing:
             raise RuntimeError(result["error"])
     description = "real Prometheus collection and normal shutdown" if prometheus else (
-        "MySQL/MinIO loss, restore from continuous copies, continued settlement and normal shutdown" if recovery else (
+        "MySQL/MinIO loss, restore from continuous copies, continued purchase and normal shutdown" if recovery else (
         "common Tempo/Grafana, HTTP tracing and collector/sampling checks" if args.foundation_only else (
-        "durable Payment tracing, Tempo/Grafana and fault recovery" if tracing else "Jib deployment, purchase/download/settlement and normal shutdown")))
+        "durable Payment tracing, Tempo/Grafana and fault recovery" if tracing else "Jib deployment, purchase/download and normal shutdown")))
     print("PASS: " + description, flush=True)
 
 

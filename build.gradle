@@ -21,7 +21,7 @@ allprojects {
 //   stove.image                    Jib 이미지(앱·모의 PG)
 // 이 파일에는 여러 모듈이 함께 쓰는 값(이미지 registry·MinIO 이미지 선택)과 전체를 훑는 검증 태스크만 둔다.
 
-// 결정 135: 직접 만드는 이미지(앱·mock-pg·MinIO·mysql-client)의 registry는 여기서 한 번만 정한다.
+// 결정 135: 직접 만드는 이미지(앱·MinIO·mysql-client)의 registry는 여기서 한 번만 정한다.
 // registry 주소가 없는 이름(stove/...)은 Docker Hub의 다른 사람 계정(stove)을 가리키므로, 기본값은 Docker Hub로
 // 해석되지 않는 localhost/stove다. 배포는 STOVE_JIB_REGISTRY·-Pstove.jib.registry로 우리 registry를 지정한다.
 // Docker Hub의 stove를 가리키는 값은 받지 않고 거절한다. 같은 규칙: common/testcontainers의 LocalImageNames,

@@ -60,8 +60,8 @@ class LocalImageRegistryContractTest {
                         .as("%s 배포 registry", label).startsWith("ghcr.io/team/");
             }
         }
-        // 앱 11개 + mock-pg + MinIO
-        assertThat(selfBuilt).as("직접 만드는 이미지(결정 223으로 web-bff 추가)").hasSize(14);
+        // 앱 12개 + MinIO (mock-pg는 결정 remove-pg-adapters로 걷어냈다)
+        assertThat(selfBuilt).as("직접 만드는 이미지(결정 223으로 web-bff 추가)").hasSize(13);
     }
 
     private static List<Path> composeFiles() {

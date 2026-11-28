@@ -18,18 +18,8 @@ dependencies {
     implementation 'io.micrometer:micrometer-registry-prometheus'
 }
 
-// 공급자는 별도 프로세스다. classpath에 넣지 않고 실제 실행 파일 내용을 추적한다.
-// defectTest also runs integration-layer reproductions (D-050) against the same supplier process.
-tasks.matching { it.name in ['integrationTest', 'migrationTest', 'defectTest'] }.configureEach {
-    dependsOn ':simulators:mock-pg:bootJar'
-    def supplierJar = rootProject.file('simulators/mock-pg/build/libs/mock-pg-0.0.1-SNAPSHOT.jar')
-    inputs.file(supplierJar).withPropertyName('externalPgJar').withPathSensitivity(PathSensitivity.NONE)
-    systemProperty 'mock.pg.jar', supplierJar.absolutePath
-}
-
 tasks.named('migrationTest') {
-    inputs.files(rootProject.file('tools/migrations/payment/payment-transition.sql'),
-            rootProject.file('tools/migrations/mock-pg/migrate.py'))
+    inputs.files(rootProject.file('tools/migrations/payment/payment-transition.sql'))
             .withPropertyName('externalMigrationTools').withPathSensitivity(PathSensitivity.RELATIVE)
 }
 

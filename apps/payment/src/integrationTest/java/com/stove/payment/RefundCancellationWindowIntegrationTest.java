@@ -54,7 +54,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MySQLContainer;
 
-class RefundCancellationWindowIntegrationTest extends PaymentIntegrationTestBase {
+class RefundCancellationWindowIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     private static final Instant BASE = Payment.now();
     @Autowired ReceiveOrderPayment orderReceipt;
     @Autowired ReceiveRefundExecution receive;

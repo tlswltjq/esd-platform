@@ -70,7 +70,7 @@ import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.MySQLContainer;
 
 /** Real HTTP, JWT and MySQL. Supplier and License completion facts remain contract fixtures. */
-class RefundInvestigationIntegrationTest extends PaymentIntegrationTestBase {
+class RefundInvestigationIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     private static final String ROOT = "/api/v1/admin/refund-delays";
     private static final Instant BASE = Payment.now();
     private static final Instant DELAY = BASE.plusSeconds(10800);

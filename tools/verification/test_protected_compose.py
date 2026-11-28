@@ -116,8 +116,7 @@ class ExternalInjectionTest(unittest.TestCase):
         for name, expected in {
                 'CATALOG_ORDER_SERVICE_KEY': {'catalog', 'order'},
                 'PAYMENT_ORDER_SERVICE_KEY': {'payment', 'order'},
-                'BFF_CLIENT_SECRET': {'auth', 'web-bff'},
-                'MOCK_PG_CONTROL_KEY': {'mock-pg'}}.items():
+                'BFF_CLIENT_SECRET': {'auth', 'web-bff'}}.items():
             self.assertEqual(expected, {app for app, config in services.items()
                                        if name in config.get('environment', {})})
 

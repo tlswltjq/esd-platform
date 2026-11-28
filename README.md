@@ -4,7 +4,7 @@
 
 프로젝트가 처음이라면 **[도메인·모델 안내](docs/domain/model-guide.md)**부터 읽는다. 도메인별 모델의 속성, 생성·사용 시점과 게임 한 개가 출시되어 판매되는 흐름을 설명한다.
 
-열한 모듈(**Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download·Settlement**)의 MVP 재작성을 마쳤고, 지금은 이 기능들을 일반적인 사용 수준으로 올린 뒤 엣지 케이스·성능을 고도화하는 단계다([로드맵](docs/roadmap.md)). 결제·환불은 PortOne TEST 채널에서 실제 승인·자동/수동 전액 환불·이용권 정지/복구까지 검증했다([근거 색인](docs/evidence.md)).
+열한 모듈(**Auth·Gateway·Studio·Review·Catalog·Store·Order·Payment·License·Download·Settlement**)의 MVP 재작성을 마쳤고, 지금은 이 기능들을 일반적인 사용 수준으로 올린 뒤 엣지 케이스·성능을 고도화하는 단계다([로드맵](docs/roadmap.md)). 결제·환불은 PortOne TEST 채널에서 실제 승인·자동/수동 전액 환불·이용권 정지/복구까지 검증했다([근거 색인](docs/evidence.md)). 지금은 PG 어댑터와 모의 PG를 걷어내 Payment가 프로세스 안에서 바로 승인하고 Settlement는 매출을 기록하지 않는다([결정 remove-pg-adapters](docs/decisions.md#remove-pg-adapters)).
 
 ## 어떻게 만드는가
 
@@ -37,11 +37,10 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 | `apps/catalog` | 출시 요청 처리, 공개 상품·공개본 정본과 공개 조회 |
 | `apps/store` | MySQL 공개 상품 사본, 제목 검색·목록·상세와 초기 동기화 |
 | `apps/order` | 단일 상품 주문 스냅샷·청구액·내 주문 조회와 결제 결과 반영 |
-| `apps/payment` | 확정 주문 결제·PortOne TEST 결제창/웹훅·환불 실행/조회·미확정 재개 |
+| `apps/payment` | 확정 주문 결제·환불 실행/조회·미확정 재개의 코어. PG 어댑터는 없고 프로세스 안에서 바로 승인한다([결정 in-process-pg-approval](docs/decisions.md#in-process-pg-approval)) |
 | `apps/license` | 구매 출처·상품별 영구 보유권·내 라이브러리 |
 | `apps/download` | 보유권·현재 공개 빌드 확인·전체 ZIP 만료 URL |
-| `apps/settlement` | OrderPaid 매출·판매자 배분·월 마감·PG 지급 명세 수령 대사 |
-| `simulators/mock-pg` | 독립 프로세스·전용 DB·HTTP 결제 결정·비용·모의 지급 명세 |
+| `apps/settlement` | OrderPaid 매출·판매자 배분·월 마감·PG 지급 명세 수령 대사의 코어. PG가 없는 동안 이벤트 소비를 끄고 조회만 응답한다([결정 settlement-consumption-off](docs/decisions.md#settlement-consumption-off)) |
 | `apps/web-bff` | 브라우저의 유일한 입구: BFF 로그인·세션·토큰 보관·CSRF |
 | `apps/gateway` | 내부 API 게이트웨이: Bearer 검증·역할별 경로 규칙·라우팅 |
 | `common/` | 이벤트 계약, Outbox·Inbox, 웹·JPA·테스트 지원 |
@@ -56,7 +55,7 @@ Java 21, Spring Boot, Gradle 멀티 모듈을 사용한다. 업무 데이터와 
 
 ```bash
 export DOCKER_HOST="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
-python3 tools/verification/verify-settlement.py
+python3 tools/verification/verify-jib.py
 ```
 
 스택이 준비되면 [Swagger UI](http://127.0.0.1:18080/swagger-ui.html)를 연다. 로그인까지 같은 주소를 사용한다. 실행 조건, 상태·로그 확인, 종료와 원격 실행은 [개발 환경과 실행](docs/getting-started.md)을 따른다.

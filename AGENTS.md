@@ -83,7 +83,7 @@ Claude Code·Codex 등 이 저장소에서 일하는 모든 에이전트가 따�
 | [download](specs/download/) | 보유권·현재 공개 빌드 확인, ZIP 만료 URL |
 | [settlement](specs/settlement/) | 매출 배분·PG 비용·월 마감·환불 조정·PG 대사. Payment를 경유하지 않음 |
 
-외부 모의 PG(`simulators/mock-pg`)는 독립 공급자이며 업무 모듈 수에 포함하지 않는다.
+PG 어댑터와 외부 모의 PG(`simulators/mock-pg`)는 걷어냈다([결정 remove-pg-adapters](docs/decisions.md#remove-pg-adapters)). 그동안 payment는 프로세스 안에서 모든 결제를 바로 승인하고([결정 in-process-pg-approval](docs/decisions.md#in-process-pg-approval)), settlement는 떠 있되 PG 포트가 "제공 안 함"이고 이벤트 소비를 끈다([결정 settlement-consumption-off](docs/decisions.md#settlement-consumption-off)).
 
 ## 5. 실행·검증 환경
 

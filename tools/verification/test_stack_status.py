@@ -13,7 +13,7 @@ spec.loader.exec_module(status)
 
 class StackStatusTest(unittest.TestCase):
     def test_missing_service_is_not_success(self):
-        self.assertIsNotNone(status.service_problem("mock-pg", []))
+        self.assertIsNotNone(status.service_problem("payment", []))
 
     def test_unhealthy_or_stopped_replica_fails(self):
         healthy = {"State": {"Running": True, "Status": "running", "Health": {"Status": "healthy"}}}

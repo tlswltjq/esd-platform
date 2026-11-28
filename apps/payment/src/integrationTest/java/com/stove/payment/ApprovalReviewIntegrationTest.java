@@ -68,7 +68,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.client.RestClient;
 
 @AutoConfigureObservability
-class ApprovalReviewIntegrationTest extends PaymentIntegrationTestBase {
+class ApprovalReviewIntegrationTest extends PaymentDatabaseIntegrationTestBase {
     static final PausePoints POINTS = new PausePoints();
     @TestConfiguration static class Pausing {
         @Bean static BeanPostProcessor pausing() {

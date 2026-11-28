@@ -16,11 +16,11 @@
 |---|---|
 | 가입·로그인, 역할별 진입 | auth·gateway 통합 검증, `verify-gateway-ownership.py` |
 | 창작→심사→출시→검색, 업데이트·판매 중지/재개 | G4, `verify-g4-operations.py` |
-| 구매→지급→다운로드 | 야간 `stack E2E (verify-jib.py)` |
-| 결제 실패·이탈→재진입·종료 | G1, 야간 `fake PortOne approval expiry` (`verify-approval-journeys.py`·`verify-expiry-journeys.py`) |
-| 자동·수동 환불, 확정 실패→복구 | G2(PR #116), 야간 `fake PortOne refund settlement` (`verify-refund-settlement.py`) |
+| 구매→지급→다운로드 | 야간 `stack E2E (verify-jib.py)`(`:e2e:purchaseE2eTest`) |
 
-**동결 뒤 백로그(지금 진행하지 않음):** G2의 남은 구현(결정 127~134·148, PR #166), G3 공급자 중립화와 정산 종료 여정, G5 운영 API·역할별 단일 여정, G6, G7, 각 모듈 `tasks.md`의 `[결정 필요]`, 플랫폼 T40(T39에서 재지 않은 Kafka 기준선 항목, [결정 238](decisions.md#kafka-baseline-closure)). 정산은 MVP 계약(매출 배분·월 마감·환불 조정)까지만 완료로 본다. 백로그 항목은 M에 필요할 때만 꺼낸다. GitHub 이슈 #96·#97·#98·#100·#101(MVP 후속)도 이 백로그에 속한다.
+결제 실패·이탈→재진입·종료와 자동·수동 환불(확정 실패→복구) 여정은 PG 어댑터를 걷어내며 기준선에서 뺐다([결정 in-process-pg-approval](decisions.md#in-process-pg-approval)).
+
+**동결 뒤 백로그(지금 진행하지 않음):** G2의 남은 구현(결정 127~134·148, PR #166), G3 공급자 중립화와 정산 종료 여정, G5 운영 API·역할별 단일 여정, G6, G7, 각 모듈 `tasks.md`의 `[결정 필요]`, 플랫폼 T40(T39에서 재지 않은 Kafka 기준선 항목, [결정 238](decisions.md#kafka-baseline-closure)). 정산은 MVP 계약(매출 배분·월 마감·환불 조정)까지만 완료로 본다. PG가 없는 동안 Settlement는 이벤트 소비를 꺼 매출을 기록하지 않는다([결정 settlement-consumption-off](decisions.md#settlement-consumption-off)). 백로그 항목은 M에 필요할 때만 꺼낸다. GitHub 이슈 #96·#97·#98·#100·#101(MVP 후속)도 이 백로그에 속한다.
 
 **다음 단계 M — Kafka 기준선과 독립 구현 비교([결정 227](decisions.md#kafka-only-messaging)·[228](decisions.md#messaging-comparison-closure)):**
 1. 메시징을 Kafka 단일 구현으로 되돌린다. 업무 리스너는 `@KafkaListener`, 릴레이는 `KafkaTemplate`을 쓰고, 전달 보장(최소 1회, 소비자 그룹 팬아웃, 재시도 후 격리·키 정지, 같은 키의 발행 순서대로 한 번에 하나씩)은 Kafka 파티션과 `DefaultErrorHandler`로 낸다. 기본 기능 여정이 그대로 통과해야 한다.

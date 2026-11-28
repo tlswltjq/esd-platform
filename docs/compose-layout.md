@@ -11,7 +11,7 @@
 | 파일 | 역할 |
 |---|---|
 | `docker-compose.yml` | 인프라 서비스·네트워크·볼륨. 호스트 포트 없음 |
-| `docker-compose.apps.yml` | 업무 앱 12개(웹 BFF·Gateway 포함)·외부 모의 PG·전용 PG DB. 호스트 포트 없음 |
+| `docker-compose.apps.yml` | 업무 앱 12개(웹 BFF·Gateway 포함). 호스트 포트 없음 |
 | `docker-compose.local.yml` | 인프라의 `127.0.0.1` 포트 바인딩 |
 | `docker-compose.apps.local.yml` | 앱의 `127.0.0.1` 포트와 브라우저용 OAuth·업로드 주소 |
 
@@ -61,7 +61,7 @@ bash scripts/start-apps.sh -f docker-compose.apps.yml -f docker-compose.apps.loc
 | Prometheus / Grafana | `9090` / `3000` |
 | 보존 중인 Elasticsearch / MongoDB | `9200` / `27017` |
 
-MinIO의 중복 S3 포트 `9000`은 제거하고 서명 업로드·다운로드 주소와 같은 `19000`만 사용한다. Tempo 조회는 E2E와 같은 `13200`으로 통일했다. 외부 모의 PG와 전용 PG DB는 local 구성에서도 호스트 포트를 열지 않는다.
+MinIO의 중복 S3 포트 `9000`은 제거하고 서명 업로드·다운로드 주소와 같은 `19000`만 사용한다. Tempo 조회는 E2E와 같은 `13200`으로 통일했다.
 
 ## 검증 기록
 
