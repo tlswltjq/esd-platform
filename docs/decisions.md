@@ -2787,6 +2787,19 @@
 - 구분: 사용자 선택(추천 없음)
 - 결과: [PR #270](https://github.com/tlswltjq/esd-platform/pull/270)
 
+<a id="mvc-standard-exceptions"></a>
+## 표준 MVC 예외의 상태 코드는 `ResponseEntityExceptionHandler`에 맡긴다
+- 문제: `GlobalExceptionHandler`에 `@ExceptionHandler(Exception.class)`가 있어, 따로 받지 않은 Spring MVC 예외가 전부 500이 된다([D-015](defects.md#d-015)). 예외를 하나씩 나열해 400으로 돌려놓고 있었지만 405·415·406, `@Validated` 없는 컨트롤러의 파라미터 제약 위반 등은 빠져 있었다. `ErrorCode`에는 405·406·413·415에 맞는 값이 없다.
+- 선택지: A 그대로 두고 빠진 예외를 발견할 때마다 나열에 더한다 / B `ResponseEntityExceptionHandler`를 상속하고 새 상태는 `INVALID_REQUEST`로 묶는다 / C `ResponseEntityExceptionHandler`를 상속하고 `ErrorCode`에 값을 더한다 (추천: `ResponseEntityExceptionHandler` 도입 — 표준 예외 목록을 Spring이 유지하므로 새 예외가 500으로 새지 않는다. 코드를 묶을지 더할지는 추천 없이 물었다)
+- 내 의견: "1. ResponseEntityExceptionHandler를 도입하고 에러코드를 추가한다."
+- 선택: C — `ErrorCode`에 `METHOD_NOT_ALLOWED`(405)·`NOT_ACCEPTABLE`(406)·`PAYLOAD_TOO_LARGE`(413)·`UNSUPPORTED_MEDIA_TYPE`(415)를 더한다. 더할 코드의 범위와 아래 세부는 구현하며 정했다(AI 해석).
+  - 응답 코드의 HTTP 상태는 Spring이 정한 상태를 따르고, 코드가 없는 4xx는 `INVALID_REQUEST`(400)로 답한다.
+  - Spring이 5xx로 정한 표준 예외는 지금처럼 500 `INTERNAL_ERROR`와 고정 메시지로 답하고 스택 트레이스를 남긴다.
+  - 이미 받던 예외(본문 검증, 헤더·파라미터 누락, 타입 불일치, 깨진 본문)의 응답 메시지와 로그는 바꾸지 않았다. 새로 받는 예외는 코드의 기본 메시지로 답한다.
+  - 앱이 직접 받는 예외(Studio `UploadExceptionHandler`의 413·파트 누락)는 그대로 그 앱의 응답이 나간다.
+- 구분: 추천 수용(조건 추가)
+- 결과: [PR #271](https://github.com/tlswltjq/esd-platform/pull/271), 근거 색인 2026-11-28 표준 MVC 예외 행
+
 ---
 
 ## 검증하며 드러난 것
