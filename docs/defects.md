@@ -589,6 +589,7 @@
 - **수정** [결정 126](decisions.md#pre-admission-pending-expiry). `latestPgState`가 있는 접수 전 `REQUESTED` 승인은 만료로 닫기 전에 `ResolvePaymentApproval.expireAfterLookup`이 PG를 한 번 조회한다. PAID → `PAID_WITHOUT_ADMISSION` 보류, 전액 CANCELLED → `PG_CANCELLED` 보류(결정 115), PENDING → 새 사유 `PG_PENDING_AT_ORDER_EXPIRY` 보류, READY·FAILED → 기존처럼 `EXPIRED`. `latestPgState`가 없으면 R11.5대로 PG 호출 없이 닫는다. 보류 게이지 사유 목록(`ApprovalReviewReason`)과 경보 테스트(`infra/prometheus/tests/approval-review.yml`, warning)에 새 사유를 더했다. Red는 운영 분기를 잠깐 되돌려 3건 실패로 확인했다(결정 102).
 - **실제 PortOne에서 생기는가** 어댑터(`PortOnePaymentApprovalGateway`)는 `PAY_PENDING`을 `PENDING`으로 매핑하고, 접수 전에는 우리가 `confirm`을 보내지 않는다. 그러므로 이 상태는 PG가 우리 confirm 없이 승인 대기로 간 경우다. 실제 PortOne이 그런 응답을 주는지는 저장소에 근거가 없다(payment `tasks.md`의 `[외부 대기]` 항목과 같은 미확인).
 
+<a id="d-045"></a>
 ## D-045 뒤 월이 CLOSED인데 늦은 앞 월 매출·환불이 앞 월 OPEN 행을 만들어 판매자 과지급
 
 **상태** 수정됨(결정 42·130 적용) · **영향** 8월 마감 → 10월 마감 뒤 9/30 확인 환불(판매자 −8,100)이 11/3에 도착하면 행이 없던 9월에 OPEN 행이 생겨 환불이 9월(`CONFIRMED_MONTH`)에 붙는다. 그러면 11월 마감은 "이전 월 OPEN" 409로 멈추고, 9월을 먼저 마감해도 11월은 출처가 10월이라 9월 −8,100을 받지 못해 8,100원을 과지급한다. 늦은 앞 월 매출도 같은 9월 행을 만든다 · **위치** `RecordPaidSale.record`·`RecordConfirmedRefund.record`의 `lockMonth`(원래 월 행이 없으면 바로 OPEN 행 생성, 뒤 월 CLOSED 미확인), `CloseSellerMonth.close`의 앞 월 OPEN 검사(잠그지 않는 읽기, 월 행 하나만 잠금)
@@ -597,6 +598,7 @@
 - **원인** "원래 월이 CLOSED"만 마감 경계로 봤다. 결정 130은 행 없는 월을 건너뛰고 마감하므로, 뒤 월이 CLOSED라는 것은 그 앞 월을 이미 지나 마감했다는 뜻인데 반영 서비스는 이를 보지 않았다. 마감의 앞 월 OPEN 검사와 반영의 월 행 생성은 서로 다른 행을 잠가 커밋 전 행을 보지 못했다.
 - **수정** `RecordPaidSale`·`RecordConfirmedRefund`가 원래 월 행을 잠그거나 만들기 전에 `existsBySellerSubjectAndStatusAndSettlementMonthGreaterThan(seller,"CLOSED",month)`를 확인하고, 참이면 원래 월 행 없이 현재 KST 월로 넘긴다(`CLOSED_MONTH_ROLLOVER`, `saleMonth`·확인 월 보존). 판매자 잠금 행(V14 `settlement_seller_lock`, `SellerLockRepository.lock` `PESSIMISTIC_WRITE`)을 반영·마감이 가장 먼저 잠가 판정과 행 생성을 직렬화한다. 운영 분기를 되돌린 확인(결정 102): 뒤 월 판정 제거 시 환불 2건·매출 1건 단언 실패, 판매자 잠금의 `@Lock` 제거 시 경합 테스트 6건이 `stillInsideAfter` 단언 실패.
 
+<a id="d-046"></a>
 ## D-046 뒤 월 마감 뒤 앞 월 마감이 같은 출처 이월을 다시 받음
 
 **상태** 수정됨(결정 130 적용) · **영향** 10월 carriedOut −9,000을 12월 마감이 받은 뒤 행 없는 11월 마감을 요청하면 0원 CLOSED 11월 행이 생기고 출처 10월의 −9,000을 다시 받는다. 앞 월에 늦은 매출이 있었다면 같은 음수를 두 번 빼서 판매자에게 덜 지급한다 · **위치** `CloseSellerMonth.close`(뒤 월 CLOSED 미확인, 행 없는 대상 월 생성), `CloseSellerMonth.carry`(출처 사용 여부 미확인), V13 원장에 `source_month` 유일 제약 없음
@@ -721,6 +723,7 @@
 
 <a id="d-058"></a>
 
+<a id="d-058"></a>
 ## D-058 Redis Streams 옛 점유자가 다음 연장 전까지 같이 읽어 둔 항목을 처리·확인할 수 있음, 테스트는 이를 타이밍으로 가림
 
 **상태** 수정됨 · **영향** 같은 그룹 인스턴스가 여럿일 때 점유가 넘어간 직후 최대 연장 주기(기한의 1/3, 20초) 동안, 옛 점유자가 이미 읽어 둔 같은 키의 뒤 항목을 새 점유자와 동시에 처리하고 `XACK`할 수 있었다(결정 202 한 번에 하나 위반 가능, 업무 반영은 Inbox가 한 번으로 막음). 테스트는 PR #214 CI `build`에서 `RedisStreamsAdapterIntegrationTest.java:261`(미확인 건수 = 2)로 실패했다([run 44272835972](https://github.com/tlswltjq/esd-platform/actions/runs/44272835972/job/134693466164)), 로컬에서는 통과 · **위치** `RedisStreamsSubscriptions` 처리 반복, `RedisStreamsAdapterIntegrationTest`([PR #212](https://github.com/tlswltjq/esd-platform/pull/212)) · [PR #215](https://github.com/tlswltjq/esd-platform/pull/215) 교차 리뷰 R3
@@ -737,6 +740,7 @@
 
 <a id="d-059"></a>
 
+<a id="d-059"></a>
 ## D-059 소비 실패를 DB에 격리한 뒤 격리 경보가 없어 소비 실패가 조용히 쌓임
 
 **상태** 수정됨 · **영향** DB가 있는 7개 소비 앱에서 소비 실패가 사람에게 알려지지 않는다. 격리된 키는 뒤 메시지까지 멈추므로(결정 155) 그 주문·상품의 흐름이 재투입 전까지 서 있다. 예: License가 `OrderPaid` 처리에 실패하면 구매 근거가 생기지 않은 채 아무 경보도 없다. 결정 160은 "1건 즉시 경보"를 정했다.
@@ -750,6 +754,7 @@
 
 <a id="d-060"></a>
 
+<a id="d-060"></a>
 ## D-060 Outbox 릴레이가 브로커 확인을 기다리는 동안 간격 잠금을 쥐어 다른 주문의 Outbox 삽입이 막힘
 
 **상태** 수정됨(S7 재측정 남음) · **영향** 브로커가 응답하지 않는 동안 Outbox를 쓰는 모든 업무 트랜잭션(주문 생성 등)이 잠금을 기다리며 커넥션을 쥔다. 대기가 길면 Hikari 풀이 고갈되어 요청이 500으로 실패한다. S7(결정 210 브로커 재시작)에서 Kafka 중단 동안 주문 39·45건이 실패했다. RabbitMQ·Redis는 연결이 곧바로 거부돼 대기가 짧아 거의 드러나지 않았다.
@@ -762,6 +767,7 @@
 
 <a id="d-061"></a>
 
+<a id="d-061"></a>
 ## D-061 운영자 역할 변경이 회수 커밋 전 스냅샷의 요청자 역할로 통과함 (main CI 간헐 실패)
 
 **상태** 수정됨 · **영향** A가 B의 ADMIN을 회수하는 동안 B가 다른 계정의 역할·상태를 바꾸면, 회수 커밋 뒤에도 B의 변경이 성공할 수 있었다(R7.1 위반). subject가 무작위라 약 절반의 경우에 일어났다. main CI `infra-catalog` 조각에서 PR #244의 재현 테스트가 두 번 실패하고(`54ec0bbf`·`5fed9d91`, run 45581814237·45582810165) 재실행에서 통과했다.
@@ -772,6 +778,7 @@
 - **수정** `ManageAccount`의 세 변경 트랜잭션을 READ COMMITTED로 돌린다. 문장마다 최신 커밋을 읽어, 잠금을 얻은 뒤의 역할 조회가 회수를 본다. 조회·잠금 순서는 바꾸지 않았다. auth 통합 30개 3회 반복 통과.
 - **부류** 잠금 읽기와 잠그지 않는 읽기가 한 REPEATABLE READ 트랜잭션에 섞여, 잠금으로 직렬화한 줄 알았던 판정이 옛 스냅샷을 본다. [D-060](#d-060)과 같은 격리 수준 문제의 다른 얼굴이다.
 
+<a id="d-062"></a>
 ## D-062 교차 리뷰 확인이 U+2028이 든 리뷰 묶음을 "묶음 없음"으로 거절함
 
 **상태** 수정됨 · **영향** 리뷰 묶음에 U+2028(또는 U+2029·U+0085 등 유니코드 줄 구분자)이 들어 있으면, Codex가 실제로 그 묶음을 리뷰했어도 `cross_review.py`가 "세션의 사용자 입력에 이번 리뷰 묶음이 없다"·"세션이 리뷰 묶음보다 먼저 끝났다"로 실패하고 결과를 `.unverified`로 옮겼다. PR #259 첫 리뷰(세션 `01a220ac…`)에서 일어났다. 그 PR이 지운 `test_next_decision_number.py`에 U+2028 문자가 그대로 있었다.

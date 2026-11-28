@@ -18,4 +18,4 @@
 | [image-benchmark](image-benchmark/README.md) | 고정 과거 revision의 이미지 비교 재현 |
 | [remote](remote/README.md) | 기존 원격 환경 관리 |
 
-`scripts/`에는 `local-stack.sh`, `start-apps.sh`만 남긴다. 구형 주문·콜백·환불 기반 성능·장애 시나리오와 공유 Outbox를 초기화하는 릴레이 실험은 제거했다. 결과 문서는 과거 기록으로 보존한다. 현재 목적의 성능·장애 실험은 완료된 모듈 계약과 격리 환경을 기준으로 별도 정의한다.
+`scripts/`에는 로컬·원격 스택을 띄우는 `local-stack.sh`·`start-apps.sh`와 그 보호 장치(`check-image-names.sh`·`protected-compose.py`), 인증·역할 여정 검증(`verify-auth-session-journey.py`·`gateway_role_journey.py`)만 둔다. 구형 주문·콜백·환불 기반 성능·장애 시나리오와 공유 Outbox를 초기화하는 릴레이 실험은 제거했다. 결과 문서는 과거 기록으로 보존한다. 현재 목적의 성능·장애 실험은 완료된 모듈 계약과 격리 환경을 기준으로 별도 정의한다.
