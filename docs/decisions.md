@@ -2645,6 +2645,69 @@
 - 구분: 추천과 다른 선택
 - 결과: [PR #263](https://github.com/tlswltjq/esd-platform/pull/263), 근거 색인 2026-11-28 사용 안내 링크 행
 
+<a id="testing-doc-no-progress-log"></a>
+## `docs/testing.md`의 할 일 목록·TDD 일지·날짜 문단을 걷어 내고, 유효한 할 일만 `tasks.md`로 옮긴다
+- 문제: 테스트 안내가 1,117줄인데 절반 넘게가 기준이 아니라 경위였다. 6절은 2026-08의 할 일 목록, 7·8절과 마지막 절은 TDD 진행 일지, 날짜로 시작하는 문단이 61개였다. 기준 문서에 날짜별 진행 기록을 쌓지 않는다는 AGENTS 2절과 어긋났다.
+- 선택지: A 그대로 둔다 / B 6~8절·마지막 절·날짜 문단을 지운다 / C B와 같이 지우되 6절의 미완료 항목 중 유효한 것은 모듈 `tasks.md`로 옮긴다 (추천: C — 남은 작업은 `tasks.md`, 경위는 git·PR에 둔다는 문서 규칙에 맞고 유효한 할 일을 잃지 않는다)
+- 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
+- 선택: C — 6.1~6.5와 7·8절, "지급·지급 확인의 기존 이벤트 복구" 절, 날짜 문단을 지우고 6.6 "작업할 때"만 "6. 테스트를 쓸 때"로 남겼다. 6절 미완료 항목은 현재 코드와 대조했는데, 가리키는 클래스(`StoreService.featured`·`ElasticsearchIndexInitializer`·`CdnUrlSigner`·`ProductView`·`SettlementBatch`·`CatalogRestAdapterTest` 등)가 MVP 재작성으로 없어져 옮길 항목이 없었다. 비용: 지운 경위는 git 이력에서만 찾는다.
+- 구분: 추천 수용
+- 결과: [PR #264](https://github.com/tlswltjq/esd-platform/pull/264), 근거 색인 2026-11-28 기준 문서 진행 기록 행
+
+<a id="roadmap-no-status-column"></a>
+## 로드맵 단계 표의 "상태 (2026-11-07)" 열을 지운다
+- 문제: 로드맵은 머리말에서 진행 경위를 적지 않는다고 하는데, 단계 표의 상태 열이 PR 번호와 날짜가 든 서술이었고 범위 동결(2026-11-16)보다 앞선 내용이었다.
+- 선택지: A 그대로 둔다 / B 열을 지우고 진행 상태는 0절·모듈 `tasks.md`·근거 색인을 가리킨다 (추천: B — 로드맵은 단계의 정의·순서·완료 조건만 다룬다)
+- 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
+- 선택: B — 열을 지웠다. 상태 칸에만 있던 순서 제약(기준 시간 측정은 G7 완료 전, 결정 159)은 표 아래 한 줄로 남겼다.
+- 구분: 추천 수용
+- 결과: [PR #264](https://github.com/tlswltjq/esd-platform/pull/264), 근거 색인 2026-11-28 기준 문서 진행 기록 행
+
+<a id="experiments-raw-data-kept"></a>
+## `docs/experiments.d`의 E13 회차 요약 JSON은 저장소에 그대로 둔다
+- 문제: `docs/experiments.d/E13`에 추적 파일 356개(JSON 6.8MB, SVG 0.6MB)가 있어 저장소 작업 트리의 큰 부분을 차지한다.
+- 선택지: A 요약과 그래프만 남기고 시계열 JSON은 저장소 밖으로 옮긴다 / B 결정 233대로 유지한다 (추천: B — 회차 요약·그래프를 저장소에 두기로 이미 정했고, 메시지별 원본과 로그는 지금도 호스트에 둔다)
+- 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
+- 선택: B — 바꾸지 않는다. 보관 기준은 [결정 233](#benchmark-result-storage) 그대로다.
+- 구분: 추천 수용
+- 결과: 변경 없음
+
+<a id="build-logic-convention-plugins"></a>
+## 루트 `build.gradle`의 공통 빌드 로직을 `build-logic/` convention plugin으로 나눈다
+- 문제: 루트 `build.gradle` 536줄이 `subprojects {}` 한 덩어리로 모든 하위 프로젝트(묶음 프로젝트·infra 포함)에 java·통합 테스트·pitest를 적용하고, 모듈 종류를 경로 문자열로 가른다.
+- 선택지: A 그대로 둔다 / B `build-logic/` convention plugin으로 나눠 모듈이 필요한 것만 적용한다 (추천: B — 모듈이 자기 빌드 구성을 선언하고, 종류 판별이 경로 문자열에서 사라진다. 비용은 가장 큰 작업량과 빌드 동등성 확인)
+- 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
+- 선택: B
+- 구분: 추천 수용
+- 결과: 미착수. 착수한 PR에서 이 줄을 채운다
+
+<a id="version-catalog"></a>
+## 의존성·플러그인 버전을 버전 카탈로그로 모은다
+- 문제: 버전이 `gradle.properties`, 루트 `build.gradle`, `settings.gradle`, 모듈 빌드 스크립트에 흩어져 있다.
+- 선택지: A 그대로 둔다 / B `gradle/libs.versions.toml`로 모은다 / C B에 더해 dependabot을 켠다 (추천: B — 버전을 한 곳에서 본다. dependabot은 PR 수가 늘어 넣지 않는다)
+- 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
+- 선택: B
+- 구분: 추천 수용
+- 결과: 미착수. 착수한 PR에서 이 줄을 채운다
+
+<a id="e2e-task-table"></a>
+## `e2e/build.gradle`의 Test 태스크를 표 하나에서 만든다
+- 문제: `e2e/build.gradle`이 같은 모양의 Test 태스크를 태그별로 되풀이하고, `e2eTest`의 제외 목록을 태그마다 손으로 맞춰야 한다.
+- 선택지: A 그대로 둔다 / B 태그·기대 건수 등을 표로 두고 태스크와 제외 목록을 거기서 만든다 (추천: B — 새 태그를 더할 때 제외 목록을 빠뜨릴 수 없다)
+- 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
+- 선택: B
+- 구분: 추천 수용
+- 결과: 미착수. 착수한 PR에서 이 줄을 채운다
+
+<a id="infra-image-pinning"></a>
+## `latest`로 둔 인프라 이미지 태그를 버전으로 고정한다
+- 문제: `docker-compose.yml`의 `prom/prometheus`·`provectuslabs/kafka-ui`와 Prometheus 검증 도구가 `latest`를 쓴다. 같은 파일에 `latest`로 깨졌던 기록이 있다.
+- 선택지: A 그대로 둔다 / B 버전으로 고정한다 (추천: B — 받는 시점에 따라 검증 대상이 달라지지 않는다)
+- 내 의견: "모두 추천대로 하고 다음 작업을 하고싶어"
+- 선택: B — 고정할 태그의 존재를 레지스트리에서 확인한 뒤 넣는다.
+- 구분: 추천 수용
+- 결과: 미착수. 착수한 PR에서 이 줄을 채운다
+
 ---
 
 ## 검증하며 드러난 것
